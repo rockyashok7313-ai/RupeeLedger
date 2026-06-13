@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -8,14 +9,17 @@ import {
   ArrowDownLeft, 
   LayoutDashboard, 
   History, 
-  Settings,
+  Settings as SettingsIcon,
   FileText,
   Printer,
   Pencil,
   Trash2,
   MoreVertical,
   ChevronLeft,
-  CalendarDays
+  CalendarDays,
+  AlertTriangle,
+  Download,
+  Trash
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType } from "@/lib/types";
@@ -69,12 +73,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "settings">("dashboard");
   
   // Modals state
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
@@ -85,6 +90,7 @@ export default function RupeeLedger() {
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [isClearDataAlertOpen, setIsClearDataAlertOpen] = useState(false);
 
   // Load from local storage
   useEffect(() => {
@@ -96,8 +102,10 @@ export default function RupeeLedger() {
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem("rupee_ledger_accounts", JSON.stringify(accounts));
-    localStorage.setItem("rupee_ledger_transactions", JSON.stringify(transactions));
+    if (accounts.length > 0 || transactions.length > 0) {
+      localStorage.setItem("rupee_ledger_accounts", JSON.stringify(accounts));
+      localStorage.setItem("rupee_ledger_transactions", JSON.stringify(transactions));
+    }
   }, [accounts, transactions]);
 
   // Recalculate helper
@@ -124,6 +132,8 @@ export default function RupeeLedger() {
 
     setAccounts(finalAccounts);
     setTransactions(updatedTransactions);
+    localStorage.setItem("rupee_ledger_accounts", JSON.stringify(finalAccounts));
+    localStorage.setItem("rupee_ledger_transactions", JSON.stringify(updatedTransactions));
   };
 
   const handleAccountSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -175,7 +185,7 @@ export default function RupeeLedger() {
       amount: data.amount,
       description: data.description,
       date: Date.now(),
-      balanceAfter: 0, // Will be calculated
+      balanceAfter: 0,
     };
     recalculateData(accounts, [...transactions, newTx]);
     toast({ title: "Transaction recorded" });
@@ -203,6 +213,28 @@ export default function RupeeLedger() {
     recalculateData(accounts, updatedTransactions);
     setTransactionToDelete(null);
     toast({ title: "Transaction deleted" });
+  };
+
+  const handleClearAllData = () => {
+    setAccounts([]);
+    setTransactions([]);
+    setSelectedAccountId(null);
+    localStorage.removeItem("rupee_ledger_accounts");
+    localStorage.removeItem("rupee_ledger_transactions");
+    setActiveTab("dashboard");
+    setIsClearDataAlertOpen(false);
+    toast({ title: "All data cleared successfully" });
+  };
+
+  const handleExportData = () => {
+    const data = { accounts, transactions };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rupee-ledger-backup-${format(new Date(), "yyyy-MM-dd")}.json`;
+    link.click();
+    toast({ title: "Backup file downloaded" });
   };
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -251,7 +283,6 @@ export default function RupeeLedger() {
               variant={activeTab === "ledger" ? "secondary" : "ghost"} 
               className="w-full justify-start"
               onClick={() => setActiveTab("ledger")}
-              disabled={!selectedAccountId}
             >
               <History className="mr-2 h-4 w-4" /> Ledger View
             </Button>
@@ -262,6 +293,13 @@ export default function RupeeLedger() {
             >
               <CalendarDays className="mr-2 h-4 w-4" /> Daily Reports
             </Button>
+            <Button 
+              variant={activeTab === "settings" ? "secondary" : "ghost"} 
+              className="w-full justify-start"
+              onClick={() => setActiveTab("settings")}
+            >
+              <SettingsIcon className="mr-2 h-4 w-4" /> Settings
+            </Button>
           </nav>
 
           <div className="mt-auto pt-6 border-t border-primary-foreground/10">
@@ -271,14 +309,12 @@ export default function RupeeLedger() {
                 <CurrencyDisplay amount={totalBalance} />
               </div>
             </div>
-            <Button variant="outline" className="w-full text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10">
-              <Settings className="mr-2 h-4 w-4" /> Settings
-            </Button>
+            <p className="text-[10px] text-primary-foreground/40 text-center">v1.0.2 - Local Only</p>
           </div>
         </aside>
 
         <main className="flex-1 overflow-auto p-4 md:p-8">
-          {activeTab === "dashboard" ? (
+          {activeTab === "dashboard" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
@@ -375,136 +411,219 @@ export default function RupeeLedger() {
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {activeTab === "ledger" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500">
-               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Button variant="ghost" size="icon" onClick={() => setActiveTab("dashboard")} className="h-8 w-8">
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
+               {!selectedAccountId ? (
+                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                   <div className="bg-muted p-6 rounded-full">
+                     <History className="h-12 w-12 text-muted-foreground" />
+                   </div>
+                   <h2 className="text-2xl font-bold">Select an Account</h2>
+                   <p className="text-muted-foreground max-w-md">Choose an account from the dashboard or use the selector below to view its full transaction history and generate reports.</p>
+                   <div className="w-full max-w-xs pt-4">
+                    <Select onValueChange={(val) => setSelectedAccountId(val)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose Account..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map(a => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                   </div>
+                   <Button variant="outline" onClick={() => setActiveTab("dashboard")}>Go to Dashboard</Button>
+                 </div>
+               ) : (
+                 <>
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Button variant="ghost" size="icon" onClick={() => setActiveTab("dashboard")} className="h-8 w-8">
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
+                      </div>
+                      <p className="text-muted-foreground ml-10">Ledger Statement</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button variant="outline" onClick={() => setIsReportOpen(true)}>
+                        <Printer className="mr-2 h-4 w-4" /> Full Report
+                      </Button>
+                      <Select 
+                        value={selectedAccountId || ""} 
+                        onValueChange={(val) => setSelectedAccountId(val)}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Switch Account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map(a => (
+                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground ml-10">Ledger Statement</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" onClick={() => setIsReportOpen(true)}>
-                    <Printer className="mr-2 h-4 w-4" /> Full Report
-                  </Button>
-                  <Select 
-                    value={selectedAccountId || ""} 
-                    onValueChange={(val) => setSelectedAccountId(val)}
-                  >
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Switch Account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.map(a => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-card p-6 rounded-lg border shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
-                  <div className="text-2xl font-bold mt-1">
-                    <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-card p-6 rounded-lg border shadow-sm">
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
+                      <div className="text-2xl font-bold mt-1">
+                        <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
+                      </div>
+                    </div>
+                    <div className="bg-card p-6 rounded-lg border shadow-sm ring-1 ring-primary/10">
+                      <p className="text-xs text-primary uppercase font-bold tracking-wider">Current Balance</p>
+                      <div className="text-2xl font-bold mt-1 text-primary">
+                        <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
+                      </div>
+                    </div>
+                    <div className="bg-card p-6 rounded-lg border shadow-sm">
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Transactions</p>
+                      <div className="text-2xl font-bold mt-1">
+                        {accountTransactions.length}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-card p-6 rounded-lg border shadow-sm ring-1 ring-primary/10">
-                  <p className="text-xs text-primary uppercase font-bold tracking-wider">Current Balance</p>
-                  <div className="text-2xl font-bold mt-1 text-primary">
-                    <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
-                  </div>
-                </div>
-                <div className="bg-card p-6 rounded-lg border shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Transactions</p>
-                  <div className="text-2xl font-bold mt-1">
-                    {accountTransactions.length}
-                  </div>
-                </div>
-              </div>
 
-              <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Credit (In)</TableHead>
-                      <TableHead className="text-right">Debit (Out)</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {accountTransactions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
-                          No transactions recorded. Use the dashboard to add entries.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      accountTransactions.map((t) => (
-                        <TableRow key={t.id} className="group">
-                          <TableCell className="font-medium whitespace-nowrap">
-                            {format(t.date, "dd MMM yyyy")}
-                          </TableCell>
-                          <TableCell className="max-w-[300px] truncate" title={t.description}>
-                            {t.description}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {t.type === "Credit" ? (
-                              <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
-                            ) : "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {t.type === "Debit" ? (
-                              <span className="text-destructive font-semibold">-<CurrencyDisplay amount={t.amount} /></span>
-                            ) : "-"}
-                          </TableCell>
-                          <TableCell className="text-right font-bold">
-                            <CurrencyDisplay amount={t.balanceAfter} />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
-                                className="h-8 w-8 text-accent"
-                              >
-                                <FileText className="h-4 w-4" />
-                              </Button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setEditingTransaction(t)}>
-                                    <Pencil className="mr-2 h-4 w-4" /> Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => setTransactionToDelete(t.id)} 
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
+                  <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Date</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Credit (In)</TableHead>
+                          <TableHead className="text-right">Debit (Out)</TableHead>
+                          <TableHead className="text-right">Balance</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                      </TableHeader>
+                      <TableBody>
+                        {accountTransactions.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
+                              No transactions recorded. Use the dashboard to add entries.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          accountTransactions.map((t) => (
+                            <TableRow key={t.id} className="group">
+                              <TableCell className="font-medium whitespace-nowrap">
+                                {format(t.date, "dd MMM yyyy")}
+                              </TableCell>
+                              <TableCell className="max-w-[300px] truncate" title={t.description}>
+                                {t.description}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {t.type === "Credit" ? (
+                                  <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
+                                ) : "-"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {t.type === "Debit" ? (
+                                  <span className="text-destructive font-semibold">-<CurrencyDisplay amount={t.amount} /></span>
+                                ) : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-bold">
+                                <CurrencyDisplay amount={t.balanceAfter} />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
+                                    className="h-8 w-8 text-accent"
+                                  >
+                                    <FileText className="h-4 w-4" />
+                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-8 w-8">
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => setEditingTransaction(t)}>
+                                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => setTransactionToDelete(t.id)} 
+                                        className="text-destructive"
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                 </>
+               )}
+            </div>
+          )}
+
+          {activeTab === "settings" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500">
+               <div>
+                  <h2 className="text-3xl font-bold text-primary">Settings</h2>
+                  <p className="text-muted-foreground">Manage your application data and preferences</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Data Management</CardTitle>
+                      <CardDescription>Control your local database</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                        <div>
+                          <p className="font-semibold">Backup Data</p>
+                          <p className="text-sm text-muted-foreground">Download all accounts and transactions as JSON.</p>
+                        </div>
+                        <Button onClick={handleExportData}>
+                          <Download className="mr-2 h-4 w-4" /> Export
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 bg-destructive/5 rounded-lg border border-destructive/20">
+                        <div>
+                          <p className="font-semibold text-destructive">Clear All Data</p>
+                          <p className="text-sm text-muted-foreground">Permanently delete everything. This cannot be undone.</p>
+                        </div>
+                        <Button variant="destructive" onClick={() => setIsClearDataAlertOpen(true)}>
+                          <Trash className="mr-2 h-4 w-4" /> Clear All
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>App Information</CardTitle>
+                      <CardDescription>About RupeeLedger</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="space-y-2">
+                          <p className="text-sm"><strong>Version:</strong> 1.0.2 Stable</p>
+                          <p className="text-sm"><strong>Storage:</strong> Local Browser Storage (localStorage)</p>
+                          <p className="text-sm"><strong>Privacy:</strong> No data leaves your device. Everything is stored locally.</p>
+                       </div>
+                       <div className="pt-4 border-t">
+                          <p className="text-sm text-muted-foreground italic">Developed with Next.js, Tailwind, and ShadCN.</p>
+                       </div>
+                    </CardContent>
+                  </Card>
+                </div>
             </div>
           )}
         </main>
@@ -604,7 +723,7 @@ export default function RupeeLedger() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+      <Dialog open={isReportOpen} onOpenChange={isReportOpen}>
         <DialogContent className="max-w-4xl no-print">
           <DialogHeader>
             <DialogTitle>Account Statement</DialogTitle>
@@ -626,7 +745,7 @@ export default function RupeeLedger() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Alerts */}
+      {/* Alerts */}
       <AlertDialog open={!!accountToDelete} onOpenChange={(open) => !open && setAccountToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -656,6 +775,27 @@ export default function RupeeLedger() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={deleteTransaction} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isClearDataAlertOpen} onOpenChange={setIsClearDataAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+               <AlertTriangle className="h-5 w-5 text-destructive" />
+               Clear All Application Data?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will permanently remove all accounts, transactions, and settings from your browser. 
+              <strong> You cannot undo this.</strong> We recommend exporting a backup first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Yes, Clear Everything
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
