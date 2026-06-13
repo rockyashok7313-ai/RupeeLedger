@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Transaction, Account } from '@/lib/types';
 import { CurrencyDisplay } from './CurrencyDisplay';
-import { format, isSameDay } from 'date-fns';
+import { format, isSameDay, isBefore, startOfDay, addDays } from 'date-fns';
 import { Printer, Calendar as CalendarIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Calendar } from './ui/calendar';
@@ -14,6 +14,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table";
 
 export function DailyReport({ transactions, accounts }: { transactions: Transaction[]; accounts: Account[] }) {
@@ -31,6 +32,23 @@ export function DailyReport({ transactions, accounts }: { transactions: Transact
       return acc;
     }, { credit: 0, debit: 0 });
   }, [dailyTransactions]);
+
+  // Calculate the total worth of all accounts at the end of the selected day
+  const closingBalanceForDay = useMemo(() => {
+    const endOfSelectedDay = startOfDay(addDays(date, 1)).getTime();
+    
+    // Sum initial balances
+    const initialTotal = accounts.reduce((sum, acc) => sum + acc.initialBalance, 0);
+    
+    // Add net change from all transactions occurring before the end of the selected day
+    const netChange = transactions
+      .filter(t => t.date < endOfSelectedDay)
+      .reduce((sum, t) => {
+        return t.type === 'Credit' ? sum + t.amount : sum - t.amount;
+      }, 0);
+
+    return initialTotal + netChange;
+  }, [accounts, transactions, date]);
 
   const handlePrint = () => {
     window.print();
@@ -73,17 +91,23 @@ export function DailyReport({ transactions, accounts }: { transactions: Transact
           <p className="text-muted-foreground">{format(date, "EEEE, MMMM do, yyyy")}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-            <p className="text-xs uppercase font-bold text-green-600 mb-1">Total Incoming (Credit)</p>
-            <div className="text-2xl font-bold text-green-700">
+            <p className="text-[10px] uppercase font-bold text-green-600 mb-1">Incoming (Credit)</p>
+            <div className="text-xl font-bold text-green-700">
               <CurrencyDisplay amount={stats.credit} />
             </div>
           </div>
           <div className="p-4 bg-red-50 rounded-lg border border-red-100">
-            <p className="text-xs uppercase font-bold text-red-600 mb-1">Total Outgoing (Debit)</p>
-            <div className="text-2xl font-bold text-red-700">
+            <p className="text-[10px] uppercase font-bold text-red-600 mb-1">Outgoing (Debit)</p>
+            <div className="text-xl font-bold text-destructive">
               <CurrencyDisplay amount={stats.debit} />
+            </div>
+          </div>
+          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+            <p className="text-[10px] uppercase font-bold text-primary mb-1">Closing Net Worth</p>
+            <div className="text-xl font-bold text-primary">
+              <CurrencyDisplay amount={closingBalanceForDay} />
             </div>
           </div>
         </div>
@@ -93,9 +117,9 @@ export function DailyReport({ transactions, accounts }: { transactions: Transact
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead>Account</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
+                <TableHead>Description / Narration</TableHead>
+                <TableHead className="text-right">Credit (In)</TableHead>
+                <TableHead className="text-right">Debit (Out)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -123,16 +147,33 @@ export function DailyReport({ transactions, accounts }: { transactions: Transact
                 })
               )}
             </TableBody>
+            <TableFooter>
+              <TableRow className="bg-muted/30 font-bold">
+                <TableCell colSpan={2} className="text-right">DAY TOTALS:</TableCell>
+                <TableCell className="text-right text-green-700">
+                  <CurrencyDisplay amount={stats.credit} />
+                </TableCell>
+                <TableCell className="text-right text-destructive">
+                  <CurrencyDisplay amount={stats.debit} />
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         </div>
 
-        <div className="mt-8 flex justify-end">
-          <div className="w-full sm:w-64 space-y-2">
-            <div className="flex justify-between border-t pt-2">
-              <span className="font-semibold">Net Change:</span>
-              <CurrencyDisplay amount={stats.credit - stats.debit} showSign />
-            </div>
+        <div className="mt-8 flex flex-col items-end space-y-2">
+          <div className="flex justify-between w-64 border-t pt-2">
+            <span className="font-medium text-muted-foreground">Daily Net Change:</span>
+            <CurrencyDisplay amount={stats.credit - stats.debit} showSign />
           </div>
+          <div className="flex justify-between w-64 border-t-2 border-primary pt-2 font-bold text-primary text-lg">
+            <span>Closing Balance:</span>
+            <CurrencyDisplay amount={closingBalanceForDay} />
+          </div>
+        </div>
+
+        <div className="mt-12 text-center text-[10px] text-muted-foreground italic pt-4 border-t border-dashed">
+          Daily summary generated by RupeeLedger.
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table";
 
 export function ReportPrint({ account, transactions }: { account: Account; transactions: Transaction[] }) {
@@ -18,7 +19,14 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
     window.print();
   };
 
-  const sortedTransactions = [...transactions].sort((a, b) => b.date - a.date);
+  // Sort ascending (chronological) for professional statements
+  const sortedTransactions = [...transactions].sort((a, b) => a.date - b.date);
+
+  const totals = transactions.reduce((acc, t) => {
+    if (t.type === 'Credit') acc.credit += t.amount;
+    else acc.debit += t.amount;
+    return acc;
+  }, { credit: 0, debit: 0 });
 
   return (
     <div className="space-y-6">
@@ -44,16 +52,24 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-4 mb-8">
           <div className="p-4 bg-muted/30 rounded-lg">
             <p className="text-[10px] uppercase font-bold text-muted-foreground">Opening Balance</p>
             <div className="text-lg font-bold">
               <CurrencyDisplay amount={account.initialBalance} />
             </div>
           </div>
-          <div className="p-4 bg-muted/30 rounded-lg">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Transactions</p>
-            <div className="text-lg font-bold">{transactions.length}</div>
+          <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+            <p className="text-[10px] uppercase font-bold text-green-600">Total Credit (+)</p>
+            <div className="text-lg font-bold text-green-700">
+              <CurrencyDisplay amount={totals.credit} />
+            </div>
+          </div>
+          <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+            <p className="text-[10px] uppercase font-bold text-red-600">Total Debit (-)</p>
+            <div className="text-lg font-bold text-destructive">
+              <CurrencyDisplay amount={totals.debit} />
+            </div>
           </div>
           <div className="p-4 bg-primary text-primary-foreground rounded-lg">
             <p className="text-[10px] uppercase font-bold opacity-80">Closing Balance</p>
@@ -68,7 +84,7 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
             <TableHeader>
               <TableRow className="bg-muted/50 border-b">
                 <TableHead className="font-bold">Date</TableHead>
-                <TableHead className="font-bold">Description</TableHead>
+                <TableHead className="font-bold">Description / Narration</TableHead>
                 <TableHead className="text-right font-bold">Credit (In)</TableHead>
                 <TableHead className="text-right font-bold">Debit (Out)</TableHead>
                 <TableHead className="text-right font-bold">Balance</TableHead>
@@ -90,11 +106,11 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
                     <TableCell className="max-w-[200px] text-xs">
                       {t.description}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {t.type === "Credit" ? <CurrencyDisplay amount={t.amount} /> : "-"}
+                    <TableCell className="text-right">
+                      {t.type === "Credit" ? <span className="text-green-600"><CurrencyDisplay amount={t.amount} /></span> : "-"}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {t.type === "Debit" ? <CurrencyDisplay amount={t.amount} /> : "-"}
+                    <TableCell className="text-right">
+                      {t.type === "Debit" ? <span className="text-destructive"><CurrencyDisplay amount={t.amount} /></span> : "-"}
                     </TableCell>
                     <TableCell className="text-right font-bold">
                       <CurrencyDisplay amount={t.balanceAfter} />
@@ -103,6 +119,20 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
                 ))
               )}
             </TableBody>
+            <TableFooter>
+              <TableRow className="bg-muted/30 font-bold">
+                <TableCell colSpan={2} className="text-right font-bold">TOTALS / CLOSING:</TableCell>
+                <TableCell className="text-right text-green-700">
+                  <CurrencyDisplay amount={totals.credit} />
+                </TableCell>
+                <TableCell className="text-right text-destructive">
+                  <CurrencyDisplay amount={totals.debit} />
+                </TableCell>
+                <TableCell className="text-right text-primary text-lg">
+                  <CurrencyDisplay amount={account.currentBalance} />
+                </TableCell>
+              </TableRow>
+            </TableFooter>
           </Table>
         </div>
 
