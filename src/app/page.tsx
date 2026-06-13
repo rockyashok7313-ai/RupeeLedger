@@ -14,7 +14,8 @@ import {
   Pencil,
   Trash2,
   MoreVertical,
-  ChevronLeft
+  ChevronLeft,
+  CalendarDays
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType } from "@/lib/types";
@@ -46,11 +47,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { VoucherPrint } from "@/components/VoucherPrint";
 import { ReportPrint } from "@/components/ReportPrint";
+import { DailyReport } from "@/components/DailyReport";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +82,7 @@ export default function RupeeLedger() {
   const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<{t: Transaction, a: Account} | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
@@ -204,12 +207,23 @@ export default function RupeeLedger() {
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
   const totalBalance = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
+  
   const accountTransactions = useMemo(() => 
     transactions
       .filter(t => t.accountId === selectedAccountId)
       .sort((a, b) => b.date - a.date),
     [transactions, selectedAccountId]
   );
+
+  const todayStats = useMemo(() => {
+    return transactions
+      .filter(t => isSameDay(new Date(t.date), new Date()))
+      .reduce((acc, t) => {
+        if (t.type === 'Credit') acc.credit += t.amount;
+        else acc.debit += t.amount;
+        return acc;
+      }, { credit: 0, debit: 0 });
+  }, [transactions]);
 
   return (
     <div className="min-h-screen flex flex-col no-print bg-background">
@@ -241,6 +255,13 @@ export default function RupeeLedger() {
             >
               <History className="mr-2 h-4 w-4" /> Ledger View
             </Button>
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start"
+              onClick={() => setIsDailyReportOpen(true)}
+            >
+              <CalendarDays className="mr-2 h-4 w-4" /> Daily Reports
+            </Button>
           </nav>
 
           <div className="mt-auto pt-6 border-t border-primary-foreground/10">
@@ -259,15 +280,42 @@ export default function RupeeLedger() {
         <main className="flex-1 overflow-auto p-4 md:p-8">
           {activeTab === "dashboard" ? (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-3xl font-bold text-primary">Accounts</h2>
                   <p className="text-muted-foreground">Monitor your financial pulse</p>
                 </div>
                 
-                <Button onClick={() => setIsNewAccountOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                  <Plus className="mr-2 h-4 w-4" /> Create Account
-                </Button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button variant="outline" onClick={() => setIsDailyReportOpen(true)} className="flex-1 sm:flex-none">
+                    <CalendarDays className="mr-2 h-4 w-4" /> Daily Summary
+                  </Button>
+                  <Button onClick={() => setIsNewAccountOpen(true)} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90">
+                    <Plus className="mr-2 h-4 w-4" /> Create Account
+                  </Button>
+                </div>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="bg-card p-6 rounded-xl border shadow-sm">
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Inflow</p>
+                  <div className="text-2xl font-bold mt-1 text-green-600">
+                    <CurrencyDisplay amount={todayStats.credit} />
+                  </div>
+                </div>
+                <div className="bg-card p-6 rounded-xl border shadow-sm">
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Outflow</p>
+                  <div className="text-2xl font-bold mt-1 text-destructive">
+                    <CurrencyDisplay amount={todayStats.debit} />
+                  </div>
+                </div>
+                <div className="bg-card p-6 rounded-xl border shadow-sm hidden lg:block">
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Net</p>
+                  <div className="text-2xl font-bold mt-1">
+                    <CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign />
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -567,6 +615,17 @@ export default function RupeeLedger() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isDailyReportOpen} onOpenChange={setIsDailyReportOpen}>
+        <DialogContent className="max-w-4xl no-print">
+          <DialogHeader>
+            <DialogTitle>Daily Transaction Report</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto">
+            <DailyReport transactions={transactions} accounts={accounts} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Alerts */}
       <AlertDialog open={!!accountToDelete} onOpenChange={(open) => !open && setAccountToDelete(null)}>
         <AlertDialogContent>
@@ -606,6 +665,7 @@ export default function RupeeLedger() {
       <div className="print-only fixed inset-0 z-[9999] bg-white overflow-visible">
          {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
          {isReportOpen && selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} />}
+         {isDailyReportOpen && <DailyReport transactions={transactions} accounts={accounts} />}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import React from 'react';
 import { Transaction, Account } from '@/lib/types';
 import { CurrencyDisplay } from './CurrencyDisplay';
 import { format } from 'date-fns';
-import { Printer } from 'lucide-react';
+import { Printer, MessageCircle } from 'lucide-react';
 import { Button } from './ui/button';
 
 export function VoucherPrint({ transaction, account }: { transaction: Transaction; account: Account }) {
@@ -10,11 +10,25 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
     window.print();
   };
 
+  const shareToWhatsApp = () => {
+    const amount = new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+    }).format(transaction.amount);
+    
+    const text = `*RupeeLedger Voucher*%0A--------------------------%0A*Type:* ${transaction.type}%0A*Account:* ${account.name}%0A*Date:* ${format(transaction.date, 'PPP')}%0A*Amount:* ${amount}%0A*Narration:* ${transaction.description}%0A--------------------------%0A_Generated via RupeeLedger_`;
+    
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
   return (
     <div className="space-y-4">
-      <div className="no-print">
-        <Button onClick={handlePrint} className="w-full sm:w-auto">
+      <div className="no-print flex gap-2">
+        <Button onClick={handlePrint} className="flex-1">
           <Printer className="mr-2 h-4 w-4" /> Print Voucher
+        </Button>
+        <Button onClick={shareToWhatsApp} variant="secondary" className="flex-1 bg-[#25D366] text-white hover:bg-[#128C7E]">
+          <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp
         </Button>
       </div>
 
