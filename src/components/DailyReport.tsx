@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
@@ -19,8 +18,6 @@ import {
   TableRow,
   TableFooter,
 } from "@/components/ui/table";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { toast } from '@/hooks/use-toast';
 
 export function DailyReport({ transactions, accounts }: { transactions: Transaction[]; accounts: Account[] }) {
@@ -61,6 +58,10 @@ export function DailyReport({ transactions, accounts }: { transactions: Transact
     
     setIsExporting(true);
     try {
+      // Dynamically import to avoid SSR errors
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
       const element = reportRef.current;
       const canvas = await html2canvas(element, {
         scale: 2,

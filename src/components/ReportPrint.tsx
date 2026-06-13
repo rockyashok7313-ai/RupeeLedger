@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useRef, useState } from 'react';
@@ -16,8 +15,6 @@ import {
   TableRow,
   TableFooter,
 } from "@/components/ui/table";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { toast } from '@/hooks/use-toast';
 
 export function ReportPrint({ account, transactions }: { account: Account; transactions: Transaction[] }) {
@@ -33,6 +30,10 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
     
     setIsExporting(true);
     try {
+      // Dynamically import to avoid SSR errors
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
       const element = reportRef.current;
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -57,7 +58,6 @@ export function ReportPrint({ account, transactions }: { account: Account; trans
     }
   };
 
-  // Sort ascending (chronological) for professional statements
   const sortedTransactions = [...transactions].sort((a, b) => a.date - b.date);
 
   const totals = transactions.reduce((acc, t) => {
