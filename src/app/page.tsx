@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -176,11 +175,10 @@ export default function RupeeLedger() {
     toast({ title: "Account deleted" });
   };
 
-  const handleTransactionAdd = (data: { type: TransactionType; amount: number; description: string }) => {
-    if (!selectedAccountId) return;
+  const handleTransactionAdd = (data: { accountId: string; type: TransactionType; amount: number; description: string }) => {
     const newTx: Transaction = {
       id: Math.random().toString(36).substring(7),
-      accountId: selectedAccountId,
+      accountId: data.accountId,
       type: data.type,
       amount: data.amount,
       description: data.description,
@@ -188,7 +186,7 @@ export default function RupeeLedger() {
       balanceAfter: 0,
     };
     recalculateData(accounts, [...transactions, newTx]);
-    toast({ title: "Transaction recorded" });
+    toast({ title: `Recorded for ${accounts.find(a => a.id === data.accountId)?.name}` });
   };
 
   const handleTransactionEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -258,14 +256,14 @@ export default function RupeeLedger() {
   }, [transactions]);
 
   return (
-    <div className="min-h-screen flex flex-col no-print bg-background">
+    <div className="min-h-screen flex flex-col no-print bg-background text-foreground">
       <Toaster />
       
       <div className="flex flex-1">
         {/* Sidebar */}
         <aside className="hidden md:flex flex-col w-64 bg-primary text-primary-foreground p-6 shadow-xl border-r">
           <div className="flex items-center space-x-3 mb-12">
-            <div className="bg-accent p-2 rounded-lg">
+            <div className="bg-accent p-2 rounded-lg shadow-inner">
               <Wallet className="h-6 w-6 text-primary" />
             </div>
             <h1 className="text-xl font-bold tracking-tight">RupeeLedger</h1>
@@ -274,28 +272,28 @@ export default function RupeeLedger() {
           <nav className="space-y-2">
             <Button 
               variant={activeTab === "dashboard" ? "secondary" : "ghost"} 
-              className="w-full justify-start"
+              className="w-full justify-start font-medium"
               onClick={() => setActiveTab("dashboard")}
             >
               <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
             </Button>
             <Button 
               variant={activeTab === "ledger" ? "secondary" : "ghost"} 
-              className="w-full justify-start"
+              className="w-full justify-start font-medium"
               onClick={() => setActiveTab("ledger")}
             >
               <History className="mr-2 h-4 w-4" /> Ledger View
             </Button>
             <Button 
               variant="ghost" 
-              className="w-full justify-start"
+              className="w-full justify-start font-medium"
               onClick={() => setIsDailyReportOpen(true)}
             >
               <CalendarDays className="mr-2 h-4 w-4" /> Daily Reports
             </Button>
             <Button 
               variant={activeTab === "settings" ? "secondary" : "ghost"} 
-              className="w-full justify-start"
+              className="w-full justify-start font-medium"
               onClick={() => setActiveTab("settings")}
             >
               <SettingsIcon className="mr-2 h-4 w-4" /> Settings
@@ -309,7 +307,7 @@ export default function RupeeLedger() {
                 <CurrencyDisplay amount={totalBalance} />
               </div>
             </div>
-            <p className="text-[10px] text-primary-foreground/40 text-center">v1.0.2 - Local Only</p>
+            <p className="text-[10px] text-primary-foreground/40 text-center">v1.1.0 - Private Ledger</p>
           </div>
         </aside>
 
@@ -318,40 +316,46 @@ export default function RupeeLedger() {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-primary">Accounts</h2>
-                  <p className="text-muted-foreground">Monitor your financial pulse</p>
+                  <h2 className="text-3xl font-bold text-primary">Accounts Overview</h2>
+                  <p className="text-muted-foreground">Monitor and manage your diverse portfolios</p>
                 </div>
                 
                 <div className="flex gap-2 w-full sm:w-auto">
                   <Button variant="outline" onClick={() => setIsDailyReportOpen(true)} className="flex-1 sm:flex-none">
-                    <CalendarDays className="mr-2 h-4 w-4" /> Daily Summary
+                    <CalendarDays className="mr-2 h-4 w-4" /> Reports
                   </Button>
-                  <Button onClick={() => setIsNewAccountOpen(true)} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90">
-                    <Plus className="mr-2 h-4 w-4" /> Create Account
+                  <Button onClick={() => setIsNewAccountOpen(true)} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm">
+                    <Plus className="mr-2 h-4 w-4" /> Add Account
                   </Button>
                 </div>
               </div>
 
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-card p-6 rounded-xl border shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Inflow</p>
-                  <div className="text-2xl font-bold mt-1 text-green-600">
-                    <CurrencyDisplay amount={todayStats.credit} />
-                  </div>
-                </div>
-                <div className="bg-card p-6 rounded-xl border shadow-sm">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Outflow</p>
-                  <div className="text-2xl font-bold mt-1 text-destructive">
-                    <CurrencyDisplay amount={todayStats.debit} />
-                  </div>
-                </div>
-                <div className="bg-card p-6 rounded-xl border shadow-sm hidden lg:block">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Net</p>
-                  <div className="text-2xl font-bold mt-1">
-                    <CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign />
-                  </div>
-                </div>
+                <Card className="shadow-sm">
+                  <CardContent className="pt-6">
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Inflow</p>
+                    <div className="text-2xl font-bold mt-1 text-green-600">
+                      <CurrencyDisplay amount={todayStats.credit} />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm">
+                  <CardContent className="pt-6">
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Outflow</p>
+                    <div className="text-2xl font-bold mt-1 text-destructive">
+                      <CurrencyDisplay amount={todayStats.debit} />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-sm hidden lg:block border-primary/10">
+                  <CardContent className="pt-6">
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Net Change</p>
+                    <div className="text-2xl font-bold mt-1">
+                      <CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign />
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -377,35 +381,42 @@ export default function RupeeLedger() {
                 )}
               </div>
 
-              {selectedAccountId && selectedAccount && (
+              {accounts.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
                     <TransactionForm 
-                      account={selectedAccount} 
+                      accounts={accounts}
+                      defaultAccountId={selectedAccountId}
                       onSuccess={handleTransactionAdd} 
                     />
                   </div>
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-primary">Recent Activity</h3>
-                    <div className="bg-card p-6 rounded-lg shadow-sm border space-y-4">
-                      {accountTransactions.length === 0 ? (
+                    <h3 className="font-semibold text-primary">Global Recent Activity</h3>
+                    <div className="bg-card p-6 rounded-lg shadow-sm border border-primary/5 space-y-4">
+                      {transactions.length === 0 ? (
                         <p className="text-sm text-muted-foreground italic">No transactions recorded yet.</p>
                       ) : (
-                        accountTransactions.slice(0, 5).map(t => (
-                          <div key={t.id} className="flex justify-between items-center text-sm border-b pb-2 last:border-0">
-                            <div className="flex items-center min-w-0">
-                              {t.type === 'Credit' ? (
-                                <ArrowUpRight className="h-4 w-4 text-green-500 mr-2 shrink-0" />
-                              ) : (
-                                <ArrowDownLeft className="h-4 w-4 text-destructive mr-2 shrink-0" />
-                              )}
-                              <span className="truncate">{t.description}</span>
+                        transactions.sort((a,b) => b.date - a.date).slice(0, 5).map(t => {
+                          const acc = accounts.find(a => a.id === t.accountId);
+                          return (
+                            <div key={t.id} className="flex justify-between items-center text-sm border-b border-muted last:border-0 pb-2">
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-medium text-xs text-muted-foreground uppercase tracking-tighter truncate">{acc?.name}</span>
+                                <div className="flex items-center">
+                                  {t.type === 'Credit' ? (
+                                    <ArrowUpRight className="h-3 w-3 text-green-500 mr-1 shrink-0" />
+                                  ) : (
+                                    <ArrowDownLeft className="h-3 w-3 text-destructive mr-1 shrink-0" />
+                                  )}
+                                  <span className="truncate">{t.description}</span>
+                                </div>
+                              </div>
+                              <CurrencyDisplay amount={t.amount} className={t.type === 'Credit' ? 'text-green-600 ml-2' : 'text-destructive ml-2'} />
                             </div>
-                            <CurrencyDisplay amount={t.amount} className={t.type === 'Credit' ? 'text-green-600 ml-2' : 'text-destructive ml-2'} />
-                          </div>
-                        ))
+                          );
+                        })
                       )}
-                      <Button variant="link" onClick={() => setActiveTab("ledger")} className="w-full text-xs">View Full Ledger</Button>
+                      <Button variant="link" onClick={() => setActiveTab("ledger")} className="w-full text-xs">View Full Ledgers</Button>
                     </div>
                   </div>
                 </div>
@@ -421,7 +432,7 @@ export default function RupeeLedger() {
                      <History className="h-12 w-12 text-muted-foreground" />
                    </div>
                    <h2 className="text-2xl font-bold">Select an Account</h2>
-                   <p className="text-muted-foreground max-w-md">Choose an account from the dashboard or use the selector below to view its full transaction history and generate reports.</p>
+                   <p className="text-muted-foreground max-w-md">Choose an account to view its full transaction history, audit trails, and generate professional reports.</p>
                    <div className="w-full max-w-xs pt-4">
                     <Select onValueChange={(val) => setSelectedAccountId(val)}>
                       <SelectTrigger>
@@ -434,7 +445,7 @@ export default function RupeeLedger() {
                       </SelectContent>
                     </Select>
                    </div>
-                   <Button variant="outline" onClick={() => setActiveTab("dashboard")}>Go to Dashboard</Button>
+                   <Button variant="outline" onClick={() => setActiveTab("dashboard")}>Back to Dashboard</Button>
                  </div>
                ) : (
                  <>
@@ -446,7 +457,7 @@ export default function RupeeLedger() {
                         </Button>
                         <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
                       </div>
-                      <p className="text-muted-foreground ml-10">Ledger Statement</p>
+                      <p className="text-muted-foreground ml-10 italic">Detailed Transaction Ledger</p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Button variant="outline" onClick={() => setIsReportOpen(true)}>
@@ -469,35 +480,41 @@ export default function RupeeLedger() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-card p-6 rounded-lg border shadow-sm">
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
-                      <div className="text-2xl font-bold mt-1">
-                        <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
-                      </div>
-                    </div>
-                    <div className="bg-card p-6 rounded-lg border shadow-sm ring-1 ring-primary/10">
-                      <p className="text-xs text-primary uppercase font-bold tracking-wider">Current Balance</p>
-                      <div className="text-2xl font-bold mt-1 text-primary">
-                        <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
-                      </div>
-                    </div>
-                    <div className="bg-card p-6 rounded-lg border shadow-sm">
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Transactions</p>
-                      <div className="text-2xl font-bold mt-1">
-                        {accountTransactions.length}
-                      </div>
-                    </div>
+                    <Card className="bg-muted/10 shadow-sm">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
+                        <div className="text-2xl font-bold mt-1">
+                          <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="ring-1 ring-primary/20 border-primary shadow-md">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-primary uppercase font-bold tracking-wider">Net Balance</p>
+                        <div className="text-2xl font-bold mt-1 text-primary">
+                          <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-muted/10 shadow-sm">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Entries</p>
+                        <div className="text-2xl font-bold mt-1">
+                          {accountTransactions.length}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
 
-                  <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
+                  <div className="bg-card rounded-xl border border-primary/10 shadow-sm overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead>Date</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Credit (In)</TableHead>
-                          <TableHead className="text-right">Debit (Out)</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
+                          <TableHead className="font-bold">Date</TableHead>
+                          <TableHead className="font-bold">Description / Narration</TableHead>
+                          <TableHead className="text-right font-bold">Credit (In)</TableHead>
+                          <TableHead className="text-right font-bold">Debit (Out)</TableHead>
+                          <TableHead className="text-right font-bold">Running Balance</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -505,29 +522,29 @@ export default function RupeeLedger() {
                         {accountTransactions.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
-                              No transactions recorded. Use the dashboard to add entries.
+                              No transactions recorded for this account.
                             </TableCell>
                           </TableRow>
                         ) : (
                           accountTransactions.map((t) => (
-                            <TableRow key={t.id} className="group">
+                            <TableRow key={t.id} className="group hover:bg-muted/30 transition-colors">
                               <TableCell className="font-medium whitespace-nowrap">
                                 {format(t.date, "dd MMM yyyy")}
                               </TableCell>
-                              <TableCell className="max-w-[300px] truncate" title={t.description}>
+                              <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>
                                 {t.description}
                               </TableCell>
                               <TableCell className="text-right">
                                 {t.type === "Credit" ? (
                                   <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
-                                ) : "-"}
+                                ) : <span className="text-muted-foreground">-</span>}
                               </TableCell>
                               <TableCell className="text-right">
                                 {t.type === "Debit" ? (
                                   <span className="text-destructive font-semibold">-<CurrencyDisplay amount={t.amount} /></span>
-                                ) : "-"}
+                                ) : <span className="text-muted-foreground">-</span>}
                               </TableCell>
-                              <TableCell className="text-right font-bold">
+                              <TableCell className="text-right font-bold text-primary">
                                 <CurrencyDisplay amount={t.balanceAfter} />
                               </TableCell>
                               <TableCell className="text-right">
@@ -536,7 +553,7 @@ export default function RupeeLedger() {
                                     size="icon" 
                                     variant="ghost" 
                                     onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
-                                    className="h-8 w-8 text-accent"
+                                    className="h-8 w-8 text-accent hover:bg-accent/10"
                                   >
                                     <FileText className="h-4 w-4" />
                                   </Button>
@@ -552,7 +569,7 @@ export default function RupeeLedger() {
                                       </DropdownMenuItem>
                                       <DropdownMenuItem 
                                         onClick={() => setTransactionToDelete(t.id)} 
-                                        className="text-destructive"
+                                        className="text-destructive focus:text-destructive"
                                       >
                                         <Trash2 className="mr-2 h-4 w-4" /> Delete
                                       </DropdownMenuItem>
@@ -574,53 +591,62 @@ export default function RupeeLedger() {
           {activeTab === "settings" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500">
                <div>
-                  <h2 className="text-3xl font-bold text-primary">Settings</h2>
-                  <p className="text-muted-foreground">Manage your application data and preferences</p>
+                  <h2 className="text-3xl font-bold text-primary">System Settings</h2>
+                  <p className="text-muted-foreground">Manage data persistence and security</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <Card>
+                  <Card className="shadow-sm">
                     <CardHeader>
-                      <CardTitle>Data Management</CardTitle>
-                      <CardDescription>Control your local database</CardDescription>
+                      <CardTitle>Data & Backups</CardTitle>
+                      <CardDescription>Keep your financial data safe</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
                         <div>
-                          <p className="font-semibold">Backup Data</p>
-                          <p className="text-sm text-muted-foreground">Download all accounts and transactions as JSON.</p>
+                          <p className="font-semibold">Local Backup</p>
+                          <p className="text-sm text-muted-foreground">Download all accounts and history as JSON.</p>
                         </div>
-                        <Button onClick={handleExportData}>
+                        <Button onClick={handleExportData} size="sm">
                           <Download className="mr-2 h-4 w-4" /> Export
                         </Button>
                       </div>
 
-                      <div className="flex items-center justify-between p-4 bg-destructive/5 rounded-lg border border-destructive/20">
+                      <div className="flex items-center justify-between p-4 bg-destructive/5 rounded-lg border border-destructive/10">
                         <div>
-                          <p className="font-semibold text-destructive">Clear All Data</p>
-                          <p className="text-sm text-muted-foreground">Permanently delete everything. This cannot be undone.</p>
+                          <p className="font-semibold text-destructive">Factory Reset</p>
+                          <p className="text-sm text-muted-foreground">Wipe all local data. This action is irreversible.</p>
                         </div>
-                        <Button variant="destructive" onClick={() => setIsClearDataAlertOpen(true)}>
-                          <Trash className="mr-2 h-4 w-4" /> Clear All
+                        <Button variant="destructive" size="sm" onClick={() => setIsClearDataAlertOpen(true)}>
+                          <Trash className="mr-2 h-4 w-4" /> Reset
                         </Button>
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="shadow-sm">
                     <CardHeader>
-                      <CardTitle>App Information</CardTitle>
-                      <CardDescription>About RupeeLedger</CardDescription>
+                      <CardTitle>About RupeeLedger</CardTitle>
+                      <CardDescription>Application details</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                       <div className="space-y-2">
-                          <p className="text-sm"><strong>Version:</strong> 1.0.2 Stable</p>
-                          <p className="text-sm"><strong>Storage:</strong> Local Browser Storage (localStorage)</p>
-                          <p className="text-sm"><strong>Privacy:</strong> No data leaves your device. Everything is stored locally.</p>
+                       <div className="space-y-3">
+                          <div className="flex justify-between text-sm border-b pb-1">
+                            <span className="text-muted-foreground font-medium">Build Version</span>
+                            <span className="font-bold">1.1.0 Stable</span>
+                          </div>
+                          <div className="flex justify-between text-sm border-b pb-1">
+                            <span className="text-muted-foreground font-medium">Storage Engine</span>
+                            <span className="font-mono text-xs">browser.localStorage</span>
+                          </div>
+                          <div className="flex justify-between text-sm border-b pb-1">
+                            <span className="text-muted-foreground font-medium">Privacy Status</span>
+                            <span className="text-green-600 font-bold">Encapsulated</span>
+                          </div>
                        </div>
-                       <div className="pt-4 border-t">
-                          <p className="text-sm text-muted-foreground italic">Developed with Next.js, Tailwind, and ShadCN.</p>
-                       </div>
+                       <p className="text-xs text-muted-foreground mt-4 italic leading-relaxed">
+                         RupeeLedger is designed for absolute privacy. All computations and storage happen entirely within your local browser sandbox.
+                       </p>
                     </CardContent>
                   </Card>
                 </div>
@@ -639,36 +665,36 @@ export default function RupeeLedger() {
         <DialogContent>
           <form onSubmit={handleAccountSubmit}>
             <DialogHeader>
-              <DialogTitle>{editingAccount ? "Edit Account" : "New Account"}</DialogTitle>
+              <DialogTitle>{editingAccount ? "Modify Account" : "Establish New Account"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Account Name</Label>
-                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder="e.g. HDFC Bank, My Wallet" required />
+                <Label htmlFor="name">Display Name</Label>
+                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder="e.g. Personal Savings, Corporate ICICI" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">Account Type</Label>
+                <Label htmlFor="type">Account Classification</Label>
                 <Select name="type" defaultValue={editingAccount?.type || "Cash"}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select Type" />
+                    <SelectValue placeholder="Select Category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Cash">Cash</SelectItem>
-                    <SelectItem value="Bank">Bank</SelectItem>
-                    <SelectItem value="Savings">Savings</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                    <SelectItem value="Cash">Liquid Cash</SelectItem>
+                    <SelectItem value="Bank">Banking Institution</SelectItem>
+                    <SelectItem value="Savings">Savings Reserve</SelectItem>
+                    <SelectItem value="Business">Enterprise / Trade</SelectItem>
+                    <SelectItem value="Other">Miscellaneous</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="balance">Initial Balance (INR)</Label>
+                <Label htmlFor="balance">Initial Deposit (INR)</Label>
                 <Input id="balance" name="balance" type="number" step="0.01" defaultValue={editingAccount?.initialBalance} placeholder="0.00" />
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" className="w-full">
-                {editingAccount ? "Update Account" : "Create Account"}
+              <Button type="submit" className="w-full shadow-sm">
+                {editingAccount ? "Apply Changes" : "Initialize Account"}
               </Button>
             </DialogFooter>
           </form>
@@ -680,32 +706,32 @@ export default function RupeeLedger() {
         <DialogContent>
           <form onSubmit={handleTransactionEditSubmit}>
             <DialogHeader>
-              <DialogTitle>Edit Transaction</DialogTitle>
+              <DialogTitle>Update Entry Record</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>Entry Classification</Label>
                 <Select name="type" defaultValue={editingTransaction?.type}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Credit">Credit (Incoming)</SelectItem>
-                    <SelectItem value="Debit">Debit (Outgoing)</SelectItem>
+                    <SelectItem value="Credit">Credit (Incoming Funds)</SelectItem>
+                    <SelectItem value="Debit">Debit (Expenditure)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount (INR)</Label>
+                <Label htmlFor="amount">Transaction Amount (INR)</Label>
                 <Input id="amount" name="amount" type="number" step="0.01" defaultValue={editingTransaction?.amount} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Particulars / Narration</Label>
                 <Input id="description" name="description" defaultValue={editingTransaction?.description} required />
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" className="w-full">Save Changes</Button>
+              <Button type="submit" className="w-full">Confirm Updates</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -715,18 +741,18 @@ export default function RupeeLedger() {
       <Dialog open={!!selectedVoucher} onOpenChange={(open) => !open && setSelectedVoucher(null)}>
         <DialogContent className="max-w-3xl no-print">
           <DialogHeader>
-            <DialogTitle>Voucher Preview</DialogTitle>
+            <DialogTitle>Voucher Document</DialogTitle>
           </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[70vh] overflow-y-auto pt-2">
             {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isReportOpen} onOpenChange={isReportOpen}>
+      <Dialog open={isReportOpen} onOpenChange={(open) => setIsReportOpen(open)}>
         <DialogContent className="max-w-4xl no-print">
           <DialogHeader>
-            <DialogTitle>Account Statement</DialogTitle>
+            <DialogTitle>Account Audit Statement</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto">
             {selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} />}
@@ -737,7 +763,7 @@ export default function RupeeLedger() {
       <Dialog open={isDailyReportOpen} onOpenChange={setIsDailyReportOpen}>
         <DialogContent className="max-w-4xl no-print">
           <DialogHeader>
-            <DialogTitle>Daily Transaction Report</DialogTitle>
+            <DialogTitle>Chronological Daily Ledger</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto">
             <DailyReport transactions={transactions} accounts={accounts} />
@@ -749,15 +775,15 @@ export default function RupeeLedger() {
       <AlertDialog open={!!accountToDelete} onOpenChange={(open) => !open && setAccountToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
+            <AlertDialogTitle>Permanent Account Removal?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the account and ALL its transactions. This action cannot be undone.
+              This will purge the account and its entire transaction lineage. This action is terminal and cannot be recovered.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Abort</AlertDialogCancel>
             <AlertDialogAction onClick={deleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete Account
+              Execute Deletion
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -766,15 +792,15 @@ export default function RupeeLedger() {
       <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+            <AlertDialogTitle>Purge Entry?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove this transaction and recalculate the running balance for all subsequent entries.
+              Removing this entry will trigger an immediate recalibration of the running balance for all subsequent records in this ledger.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Abort</AlertDialogCancel>
             <AlertDialogAction onClick={deleteTransaction} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              Execute Purge
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -785,17 +811,17 @@ export default function RupeeLedger() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
                <AlertTriangle className="h-5 w-5 text-destructive" />
-               Clear All Application Data?
+               Complete Data Eradication?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action will permanently remove all accounts, transactions, and settings from your browser. 
-              <strong> You cannot undo this.</strong> We recommend exporting a backup first.
+              This protocol will permanently eliminate every account, entry, and preference from this device's memory. 
+              <strong> You have been warned.</strong> It is recommended to export a backup before proceeding.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Abort</AlertDialogCancel>
             <AlertDialogAction onClick={handleClearAllData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, Clear Everything
+              Confirm Eradication
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
