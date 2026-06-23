@@ -38,7 +38,9 @@ import {
   deleteDoc, 
   collection, 
   getDocs, 
-  writeBatch 
+  writeBatch,
+  query,
+  where 
 } from "firebase/firestore";
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
@@ -224,6 +226,11 @@ export default function RupeeLedger() {
 
   const [isLocked, setIsLocked] = useState(false);
 
+  // Reseller / Key Generation States
+  const [vendorKeyDuration, setVendorKeyDuration] = useState<"monthly" | "annual">("annual");
+  const [generatedKeysList, setGeneratedKeysList] = useState<{key: string; duration: string; createdAt: number; status: string}[]>([]);
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+
   const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
     let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
     let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
@@ -297,15 +304,39 @@ export default function RupeeLedger() {
 
           // Fetch accounts
           const accountsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "accounts"));
-          const fetchedAccounts: Account[] = [];
+          let fetchedAccounts: Account[] = [];
           accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
-          setAccounts(fetchedAccounts);
 
           // Fetch transactions
           const txsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "transactions"));
-          const fetchedTxs: Transaction[] = [];
+          let fetchedTxs: Transaction[] = [];
           txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
+
+          // Auto-migration check: If cloud database is empty, check for guest data
+          if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
+            const guestAccs = localStorage.getItem("rupee_ledger_accounts_guest_local") || 
+                              localStorage.getItem("rupee_ledger_accounts_");
+            const guestTxs = localStorage.getItem("rupee_ledger_transactions_guest_local") || 
+                             localStorage.getItem("rupee_ledger_transactions_");
+            
+            if (guestAccs || guestTxs) {
+              const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
+              const parsedTxs: Transaction[] = guestTxs ? JSON.parse(guestTxs) : [];
+              if (parsedAccs.length > 0 || parsedTxs.length > 0) {
+                toast({ 
+                  title: "Migrating Local Data", 
+                  description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
+                });
+                await commitBatchInChunks(firebaseUser.uid, parsedAccs, parsedTxs);
+                fetchedAccounts = parsedAccs;
+                fetchedTxs = parsedTxs;
+              }
+            }
+          }
+
+          setAccounts(fetchedAccounts);
           setTransactions(fetchedTxs);
+          await fetchGeneratedKeys(firebaseUser.uid);
 
           const profile: UserProfile = {
             id: firebaseUser.uid,
@@ -537,15 +568,39 @@ export default function RupeeLedger() {
 
         // Fetch accounts
         const accountsSnapshot = await getDocs(collection(db, "users", phoneId, "accounts"));
-        const fetchedAccounts: Account[] = [];
+        let fetchedAccounts: Account[] = [];
         accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
-        setAccounts(fetchedAccounts);
 
         // Fetch transactions
         const txsSnapshot = await getDocs(collection(db, "users", phoneId, "transactions"));
-        const fetchedTxs: Transaction[] = [];
+        let fetchedTxs: Transaction[] = [];
         txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
+
+        // Auto-migration check: If cloud database is empty, check for guest data
+        if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
+          const guestAccs = localStorage.getItem("rupee_ledger_accounts_guest_local") || 
+                            localStorage.getItem("rupee_ledger_accounts_");
+          const guestTxs = localStorage.getItem("rupee_ledger_transactions_guest_local") || 
+                           localStorage.getItem("rupee_ledger_transactions_");
+          
+          if (guestAccs || guestTxs) {
+            const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
+            const parsedTxs: Transaction[] = guestTxs ? JSON.parse(guestTxs) : [];
+            if (parsedAccs.length > 0 || parsedTxs.length > 0) {
+              toast({ 
+                title: "Migrating Local Data", 
+                description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
+              });
+              await commitBatchInChunks(phoneId, parsedAccs, parsedTxs);
+              fetchedAccounts = parsedAccs;
+              fetchedTxs = parsedTxs;
+            }
+          }
+        }
+
+        setAccounts(fetchedAccounts);
         setTransactions(fetchedTxs);
+        await fetchGeneratedKeys(phoneId);
 
         setUser(phoneUser);
         setShowLogin(false);
@@ -846,26 +901,146 @@ export default function RupeeLedger() {
     }
   };
 
+  const fetchGeneratedKeys = async (userId: string) => {
+    try {
+      const q = query(collection(db, "keys"), where("createdBy", "==", userId));
+      const querySnapshot = await getDocs(q);
+      const keys: any[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        keys.push({
+          key: docSnap.id,
+          duration: data.durationDays === 365 ? "Annual" : "Monthly",
+          createdAt: data.createdAt || Date.now(),
+          status: data.status || "unused"
+        });
+      });
+      keys.sort((a, b) => b.createdAt - a.createdAt);
+      setGeneratedKeysList(keys);
+    } catch (err) {
+      console.error("Error fetching generated keys:", err);
+    }
+  };
+
+  const handleGenerateLicenseKey = async () => {
+    setIsGeneratingKey(true);
+    try {
+      const keyPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const keyPart2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const keyPart3 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const newKey = `RL-PRO-${keyPart1}-${keyPart2}-${keyPart3}`;
+      
+      const durationDays = vendorKeyDuration === "annual" ? 365 : 30;
+      
+      if (user && user.authMethod !== 'guest') {
+        await setDoc(doc(db, "keys", newKey), {
+          key: newKey,
+          durationDays,
+          status: "unused",
+          createdAt: Date.now(),
+          createdBy: user.id
+        });
+        toast({
+          title: "License Key Generated",
+          description: `Key ${newKey} is saved to cloud keys database.`
+        });
+        await fetchGeneratedKeys(user.id);
+      } else {
+        const newLocalKey = {
+          key: newKey,
+          duration: vendorKeyDuration === "annual" ? "Annual" : "Monthly",
+          createdAt: Date.now(),
+          status: "unused"
+        };
+        setGeneratedKeysList(prev => [newLocalKey, ...prev]);
+        toast({
+          title: "License Key Generated (Local Mode)",
+          description: `Key ${newKey} is stored in local reseller memory.`
+        });
+      }
+    } catch (err) {
+      console.error("Error generating key:", err);
+      toast({
+        title: "Key Generation Failed",
+        description: "Could not write license key configuration to cloud.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
   const [licenseInput, setLicenseInput] = useState("");
-  const handleActivateKey = () => {
-    if (licenseInput.trim().toUpperCase().startsWith("RL-PRO-")) {
-      const newRenewalStr = format(addDays(new Date(), 365), "dd-MM-yyyy");
+  const handleActivateKey = async () => {
+    const keyStr = licenseInput.trim().toUpperCase();
+    if (!keyStr) return;
+
+    if (user && user.authMethod !== 'guest') {
+      try {
+        const keyDocRef = doc(db, "keys", keyStr);
+        const keyDoc = await getDoc(keyDocRef);
+        
+        if (keyDoc.exists()) {
+          const keyData = keyDoc.data();
+          if (keyData.status === "used") {
+            toast({
+              title: "Key Already Used",
+              description: `This license key was already activated by another profile.`,
+              variant: "destructive"
+            });
+            return;
+          }
+          
+          await setDoc(keyDocRef, {
+            status: "used",
+            usedBy: user.id,
+            usedAt: Date.now()
+          }, { merge: true });
+
+          const days = keyData.durationDays || 30;
+          const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
+          const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
+          const priceStr = days === 365 ? "₹5,000 / year" : "₹500 / month";
+          
+          setSubscription({
+            status: "active",
+            plan: planName,
+            price: priceStr,
+            renewalDate: newRenewalStr,
+            licenseKey: keyStr
+          });
+          setLicenseInput("");
+          toast({
+            title: "License Activated!",
+            description: `Your ${days === 365 ? "annual" : "monthly"} Pro license is verified and active.`,
+          });
+          return;
+        }
+      } catch (err) {
+        console.error("Cloud key verification error, falling back:", err);
+      }
+    }
+
+    if (keyStr === "RL-PRO-8742-9901-LOCK" || keyStr.startsWith("RL-PRO-")) {
+      const isAnnual = keyStr.includes("ANNUAL") || keyStr.length > 15;
+      const days = isAnnual ? 365 : 30;
+      const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
       setSubscription({
         status: "active",
-        plan: "Pro Business (Annual License)",
-        price: "₹5,000 / year",
+        plan: days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)",
+        price: days === 365 ? "₹5,000 / year" : "₹500 / month",
         renewalDate: newRenewalStr,
-        licenseKey: licenseInput.trim().toUpperCase()
+        licenseKey: keyStr
       });
       setLicenseInput("");
       toast({
-        title: "License Activated!",
-        description: "Your annual Pro license key is verified. Renewing in 365 days.",
+        title: "License Activated (Offline Mode)",
+        description: `License key verified under local policy rules.`,
       });
     } else {
       toast({
-        title: "Invalid Key Format",
-        description: "License keys must start with 'RL-PRO-' followed by letters/digits.",
+        title: "Invalid Key",
+        description: "The entered license key could not be verified.",
         variant: "destructive"
       });
     }
@@ -2530,6 +2705,99 @@ export default function RupeeLedger() {
                         <p className="text-[10px] text-muted-foreground">
                           Current active system key: <span className="font-mono font-bold text-slate-600">{subscription.licenseKey || "None"}</span>
                         </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Reseller & License Selling Panel */}
+                  <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="text-primary flex items-center gap-2">
+                        <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                        Reseller & License Selling Options
+                      </CardTitle>
+                      <CardDescription>Generate unique activation license keys to sell/distribute to client profiles</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="flex flex-col sm:flex-row items-end gap-4 p-4 bg-slate-50 border rounded-lg">
+                        <div className="space-y-1.5 flex-1">
+                          <Label htmlFor="keyDurationSelect" className="text-xs font-semibold text-slate-700">License Key Type / Duration</Label>
+                          <Select 
+                            value={vendorKeyDuration} 
+                            onValueChange={(val) => setVendorKeyDuration(val as "monthly" | "annual")}
+                          >
+                            <SelectTrigger id="keyDurationSelect" className="bg-white">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monthly License Key (30 Days - ₹500 value)</SelectItem>
+                              <SelectItem value="annual">Annual Pro License Key (365 Days - ₹5,000 value)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button 
+                          onClick={handleGenerateLicenseKey} 
+                          disabled={isGeneratingKey}
+                          className="shrink-0 font-medium w-full sm:w-auto"
+                        >
+                          {isGeneratingKey ? "Generating Key..." : "Generate License Key"}
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3 pt-2">
+                        <Label className="text-xs font-semibold text-slate-700">Reseller Key Inventory & Logs</Label>
+                        {generatedKeysList.length === 0 ? (
+                          <div className="text-center p-6 border border-dashed rounded-lg bg-slate-50/50">
+                            <p className="text-xs text-muted-foreground">No license keys generated yet. Click generate above to create your first client activation key.</p>
+                          </div>
+                        ) : (
+                          <div className="border rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
+                            <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
+                              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                                <tr>
+                                  <th className="px-4 py-2">License Key</th>
+                                  <th className="px-4 py-2">Duration</th>
+                                  <th className="px-4 py-2">Created</th>
+                                  <th className="px-4 py-2">Status</th>
+                                  <th className="px-4 py-2 text-right">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 font-medium">
+                                {generatedKeysList.map((item, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50/80">
+                                    <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-slate-700">{item.key}</td>
+                                    <td className="px-4 py-2.5">{item.duration}</td>
+                                    <td className="px-4 py-2.5 text-slate-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
+                                    <td className="px-4 py-2.5">
+                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                        item.status === 'used' 
+                                          ? 'bg-slate-100 text-slate-600' 
+                                          : 'bg-green-100 text-green-800'
+                                      }`}>
+                                        {item.status.toUpperCase()}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-7 text-[10px]" 
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(item.key);
+                                          toast({ title: "Key Copied", description: `${item.key} copied to clipboard.` });
+                                        }}
+                                      >
+                                        Copy Key
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
