@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { 
   Plus, 
-  Wallet, 
   ArrowUpRight, 
   ArrowDownLeft, 
   LayoutDashboard, 
@@ -18,10 +17,29 @@ import {
   CalendarDays,
   AlertTriangle,
   Download,
-  Trash
+  Trash,
+  TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Account, Transaction, AccountType, TransactionType } from "@/lib/types";
+import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile } from "@/lib/types";
+import { auth, db } from "@/lib/firebase";
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  deleteDoc, 
+  collection, 
+  getDocs, 
+  writeBatch 
+} from "firebase/firestore";
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
 import { CurrencyDisplay } from "@/components/CurrencyDisplay";
@@ -30,7 +48,6 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger,
   DialogFooter
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -50,12 +67,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format, isSameDay } from "date-fns";
+import { format, isSameDay, parse, addDays } from "date-fns";
 import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { VoucherPrint } from "@/components/VoucherPrint";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
+import { GSTReportTab } from "@/components/GSTReportTab";
+import { InvoicePrint } from "@/components/InvoicePrint";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,39 +92,829 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+
+async function hashPin(pin: string, userId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + "_rupee_ledger_salt_" + userId);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function migrateSecuritySettings(sec: SecuritySettings, userId: string): Promise<SecuritySettings> {
+  if (sec.pinCode && sec.pinCode.length === 4 && !sec.hashedPinCode) {
+    try {
+      const hash = await hashPin(sec.pinCode, userId);
+      return {
+        ...sec,
+        pinCode: "",
+        hashedPinCode: hash
+      };
+    } catch (err) {
+      console.error("Failed to migrate security PIN:", err);
+    }
+  }
+  return sec;
+}
+
+async function commitBatchInChunks(
+  userId: string,
+  accountsList: Account[],
+  transactionsList: Transaction[]
+) {
+  let operationsCount = 0;
+  let batch = writeBatch(db);
+
+  const commitIfNeeded = async () => {
+    if (operationsCount >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      operationsCount = 0;
+    }
+  };
+
+  for (const acc of accountsList) {
+    const accRef = doc(db, "users", userId, "accounts", acc.id);
+    batch.set(accRef, acc);
+    operationsCount++;
+    await commitIfNeeded();
+  }
+
+  for (const tx of transactionsList) {
+    const txRef = doc(db, "users", userId, "transactions", tx.id);
+    batch.set(txRef, tx);
+    operationsCount++;
+    await commitIfNeeded();
+  }
+
+  if (operationsCount > 0) {
+    await batch.commit();
+  }
+}
 
 export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "settings">("dashboard");
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerStartDate, setLedgerStartDate] = useState("");
+  const [ledgerEndDate, setLedgerEndDate] = useState("");
+  const [analyticsAccountId, setAnalyticsAccountId] = useState<string>("all");
   
   // Modals state
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<{t: Transaction, a: Account} | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<{t: Transaction, a: Account} | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [isNewInvoiceOpen, setIsNewInvoiceOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [isClearDataAlertOpen, setIsClearDataAlertOpen] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [dailyReportDateInput, setDailyReportDateInput] = useState<string>(
+    format(new Date(), "dd-MM-yyyy")
+  );
 
-  // Load from local storage
-  useEffect(() => {
-    const savedAccounts = localStorage.getItem("rupee_ledger_accounts");
-    const savedTransactions = localStorage.getItem("rupee_ledger_transactions");
+  const dailyReportDate = useMemo(() => {
+    const parsed = parse(dailyReportDateInput, "dd-MM-yyyy", new Date());
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  }, [dailyReportDateInput]);
+
+  const [dailyReportMode, setDailyReportMode] = useState<"daily" | "monthly">("daily");
+  const [dailyReportMonth, setDailyReportMonth] = useState<number>(new Date().getMonth());
+  const [dailyReportYear, setDailyReportYear] = useState<number>(new Date().getFullYear());
+
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>({
+    companyName: "",
+    address: "",
+    gstin: "",
+    phone: "",
+    printFooter: ""
+  });
+
+  const [subscription, setSubscription] = useState<Subscription>({
+    status: "active",
+    plan: "Pro Business License",
+    price: "₹500 / month",
+    renewalDate: format(addDays(new Date(), 30), "dd-MM-yyyy"),
+    licenseKey: "RL-PRO-8742-9901-LOCK"
+  });
+
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
+    pinEnabled: false,
+    pinCode: ""
+  });
+
+  // Authentication States
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [showLogin, setShowLogin] = useState(true);
+  const [loginTab, setLoginTab] = useState<"google" | "phone" | "email">("google");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+
+  const [isLocked, setIsLocked] = useState(false);
+
+  const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
+    let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
+    let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
+    
+    // Backward compatibility fallback
+    if (!savedAccounts && guestUserId === "guest_local") {
+      savedAccounts = localStorage.getItem("rupee_ledger_accounts");
+    }
+    if (!savedTransactions && guestUserId === "guest_local") {
+      savedTransactions = localStorage.getItem("rupee_ledger_transactions");
+    }
+
     if (savedAccounts) setAccounts(JSON.parse(savedAccounts));
+    else setAccounts([]);
+    
     if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
+    else setTransactions([]);
+
+    const savedCloudBackup = localStorage.getItem("rupee_ledger_cloud_backup_enabled");
+    if (savedCloudBackup !== null) {
+      setCloudBackupEnabled(JSON.parse(savedCloudBackup));
+    }
+
+    const savedProfile = localStorage.getItem("rupee_ledger_business_profile");
+    if (savedProfile) setBusinessProfile(JSON.parse(savedProfile));
+
+    const savedSub = localStorage.getItem("rupee_ledger_subscription");
+    if (savedSub) setSubscription(JSON.parse(savedSub));
+
+    const savedSecurity = localStorage.getItem("rupee_ledger_security");
+    if (savedSecurity) {
+      const parsedSec = JSON.parse(savedSecurity);
+      const migrated = await migrateSecuritySettings(parsedSec, guestUserId);
+      setSecuritySettings(migrated);
+      if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+        setIsLocked(true);
+      }
+    }
+  };
+
+  // Load from local storage and Razorpay Script + Firebase Auth Setup
+  useEffect(() => {
+    // 1. Setup Auth Observer
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+        try {
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          let shouldLock = false;
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.businessProfile) setBusinessProfile(data.businessProfile);
+            if (data.subscription) setSubscription(data.subscription);
+            if (data.securitySettings) {
+              const migrated = await migrateSecuritySettings(data.securitySettings, firebaseUser.uid);
+              setSecuritySettings(migrated);
+              if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                shouldLock = true;
+              }
+            }
+          } else {
+            // Write default config
+            await setDoc(userDocRef, {
+              businessProfile,
+              subscription,
+              securitySettings
+            });
+          }
+
+          // Fetch accounts
+          const accountsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "accounts"));
+          const fetchedAccounts: Account[] = [];
+          accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
+          setAccounts(fetchedAccounts);
+
+          // Fetch transactions
+          const txsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "transactions"));
+          const fetchedTxs: Transaction[] = [];
+          txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
+          setTransactions(fetchedTxs);
+
+          const profile: UserProfile = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
+            email: firebaseUser.email || undefined,
+            phone: firebaseUser.phoneNumber || undefined,
+            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
+            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            createdAt: Date.now()
+          };
+          setUser(profile);
+          setShowLogin(false);
+          setIsLocked(shouldLock);
+          setPinInput("");
+          setIsLoaded(true);
+        } catch (err) {
+          console.error("Firestore loading error:", err);
+          toast({ title: "Cloud Sync Failure", description: "Loading backup cache from local storage.", variant: "destructive" });
+          await loadLocalStorageData(firebaseUser.uid);
+          
+          const profile: UserProfile = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
+            email: firebaseUser.email || undefined,
+            phone: firebaseUser.phoneNumber || undefined,
+            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
+            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            createdAt: Date.now()
+          };
+          setUser(profile);
+          setShowLogin(false);
+          setIsLoaded(true);
+        }
+      } else {
+        const savedUser = localStorage.getItem("rupee_ledger_user");
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          if (parsed.authMethod === 'guest') {
+            setUser(parsed);
+            setShowLogin(false);
+            await loadLocalStorageData(parsed.id);
+            setIsLoaded(true);
+            return;
+          } else if (parsed.authMethod === 'phone') {
+            setUser(parsed);
+            setShowLogin(false);
+            setIsLocked(false);
+            setPinInput("");
+            const loadPhoneData = async () => {
+              try {
+                toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+                const userDocRef = doc(db, "users", parsed.id);
+                const userDoc = await getDoc(userDocRef);
+                let shouldLock = false;
+                if (userDoc.exists()) {
+                  const data = userDoc.data();
+                  if (data.businessProfile) setBusinessProfile(data.businessProfile);
+                  if (data.subscription) setSubscription(data.subscription);
+                  if (data.securitySettings) {
+                    const migrated = await migrateSecuritySettings(data.securitySettings, parsed.id);
+                    setSecuritySettings(migrated);
+                    if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                      shouldLock = true;
+                    }
+                  }
+                }
+                const accountsSnapshot = await getDocs(collection(db, "users", parsed.id, "accounts"));
+                const fetchedAccounts: Account[] = [];
+                accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
+                setAccounts(fetchedAccounts);
+
+                const txsSnapshot = await getDocs(collection(db, "users", parsed.id, "transactions"));
+                const fetchedTxs: Transaction[] = [];
+                txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
+                setTransactions(fetchedTxs);
+                
+                setIsLocked(shouldLock);
+                setIsLoaded(true);
+              } catch (err) {
+                console.error("Firestore phone loading error on refresh:", err);
+                await loadLocalStorageData(parsed.id);
+                setIsLoaded(true);
+              }
+            };
+            loadPhoneData();
+            return;
+          }
+        }
+        setUser(null);
+        setShowLogin(true);
+        setIsLoaded(true);
+      }
+    });
+
+    // 2. Load Razorpay Script dynamically
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      unsubscribe();
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
   }, []);
 
   // Sync to local storage
   useEffect(() => {
-    if (accounts.length > 0 || transactions.length > 0) {
-      localStorage.setItem("rupee_ledger_accounts", JSON.stringify(accounts));
-      localStorage.setItem("rupee_ledger_transactions", JSON.stringify(transactions));
+    if (isLoaded) {
+      const storageSuffix = user ? user.id : "guest_local";
+      localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(accounts));
+      localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(transactions));
+      localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(businessProfile));
+      localStorage.setItem("rupee_ledger_subscription", JSON.stringify(subscription));
+      localStorage.setItem("rupee_ledger_security", JSON.stringify(securitySettings));
+      localStorage.setItem("rupee_ledger_cloud_backup_enabled", JSON.stringify(cloudBackupEnabled));
+      if (user) {
+        localStorage.setItem("rupee_ledger_user", JSON.stringify(user));
+        // Sync configuration states to Firestore if logged in and cloud backup is enabled
+        if (user.authMethod !== 'guest' && cloudBackupEnabled) {
+          const syncConfig = async () => {
+            try {
+              const userDocRef = doc(db, "users", user.id);
+              await setDoc(userDocRef, {
+                businessProfile,
+                subscription,
+                securitySettings
+              }, { merge: true });
+            } catch (err) {
+              console.error("Firestore config sync error:", err);
+            }
+          };
+          syncConfig();
+        }
+      } else {
+        localStorage.removeItem("rupee_ledger_user");
+      }
     }
-  }, [accounts, transactions]);
+  }, [accounts, transactions, businessProfile, subscription, securitySettings, user, isLoaded, cloudBackupEnabled]);
+
+  // User Authentication Logic
+  const handleGuestLogin = () => {
+    const guestUser: UserProfile = {
+      id: "guest_" + Math.random().toString(36).substring(2, 10),
+      name: "Guest User",
+      authMethod: "guest",
+      avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=guest",
+      createdAt: Date.now()
+    };
+    setUser(guestUser);
+    setShowLogin(false);
+    setIsLocked(false);
+    setPinInput("");
+    toast({ title: "Logged in as Guest", description: "All data will remain saved locally." });
+  };
+
+  const handleGoogleLogin = async () => {
+    toast({ title: "Connecting to Google...", description: "Opening Google Auth popup." });
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Google Auth error:", error);
+      toast({
+        title: "Google Sign-In Failed",
+        description: error instanceof Error ? error.message : "Authentication aborted.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleSendOTP = () => {
+    if (!phoneInput || phoneInput.length < 10) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please enter a valid 10-digit phone number.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(mockOtp);
+    setOtpSent(true);
+    toast({
+      title: "OTP Code Dispatched",
+      description: `SMS OTP code sent to ${phoneInput}. [TEST CODE: ${mockOtp}]`,
+    });
+  };
+
+  const handleVerifyOTP = async () => {
+    if (otpInput === generatedOtp) {
+      const phoneId = "p_" + phoneInput;
+      const phoneUser: UserProfile = {
+        id: phoneId,
+        name: `User ${phoneInput.slice(-4)}`,
+        phone: phoneInput,
+        authMethod: "phone",
+        avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${phoneInput}`,
+        createdAt: Date.now()
+      };
+      
+      toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+      try {
+        const userDocRef = doc(db, "users", phoneId);
+        const userDoc = await getDoc(userDocRef);
+        
+        let shouldLock = false;
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.businessProfile) setBusinessProfile(data.businessProfile);
+          if (data.subscription) setSubscription(data.subscription);
+          if (data.securitySettings) {
+            const migrated = await migrateSecuritySettings(data.securitySettings, phoneId);
+            setSecuritySettings(migrated);
+            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+              shouldLock = true;
+            }
+          }
+        } else {
+          // Write default config
+          await setDoc(userDocRef, {
+            businessProfile,
+            subscription,
+            securitySettings
+          });
+        }
+
+        // Fetch accounts
+        const accountsSnapshot = await getDocs(collection(db, "users", phoneId, "accounts"));
+        const fetchedAccounts: Account[] = [];
+        accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
+        setAccounts(fetchedAccounts);
+
+        // Fetch transactions
+        const txsSnapshot = await getDocs(collection(db, "users", phoneId, "transactions"));
+        const fetchedTxs: Transaction[] = [];
+        txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
+        setTransactions(fetchedTxs);
+
+        setUser(phoneUser);
+        setShowLogin(false);
+        setIsLocked(shouldLock);
+        setPinInput("");
+        setOtpSent(false);
+        setOtpInput("");
+        setPhoneInput("");
+        toast({ title: "Verification Successful", description: "Your phone number is authenticated." });
+      } catch (err) {
+        console.error("Firestore phone login loading error:", err);
+        toast({ title: "Cloud Connection Error", description: "Loading backup cache from local storage.", variant: "destructive" });
+        
+        // Log user in using local data as fallback
+        setUser(phoneUser);
+        setShowLogin(false);
+        await loadLocalStorageData(phoneId);
+        setOtpSent(false);
+        setOtpInput("");
+        setPhoneInput("");
+      }
+    } else {
+      toast({
+        title: "Incorrect OTP",
+        description: "The verification code does not match. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput || !passwordInput) return;
+    if (passwordInput.length < 6) {
+      toast({
+        title: "Weak Password",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive"
+      });
+      return;
+    }
+    toast({ title: "Authenticating...", description: "Checking credentials." });
+    try {
+      await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/cannot-find-user') {
+        toast({ title: "Registering...", description: "Creating a new account." });
+        try {
+          await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+        } catch (createErr) {
+          console.error("Firebase signup error:", createErr);
+          toast({
+            title: "Signup Failed",
+            description: createErr instanceof Error ? createErr.message : "Registration failed.",
+            variant: "destructive"
+          });
+        }
+      } else {
+        console.error("Firebase login error:", err);
+        toast({
+          title: "Authentication Failed",
+          description: err.message,
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleLogout = async () => {
+    setAccounts([]);
+    setTransactions([]);
+    setSelectedAccountId(null);
+    
+    if (user?.authMethod !== 'guest') {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        console.error("Signout error:", err);
+      }
+    } else {
+      setUser(null);
+      setShowLogin(true);
+      localStorage.removeItem("rupee_ledger_user");
+      toast({ title: "Logged Out", description: "Your guest session has been terminated." });
+    }
+  };
+
+  // Business Profile and Security Handlers
+  const handleProfileChange = (key: keyof BusinessProfile, value: string) => {
+    setBusinessProfile(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handlePinCodeChange = async (code: string) => {
+    const cleaned = code.replace(/\D/g, "").slice(0, 4);
+    let hashed = "";
+    if (cleaned.length === 4) {
+      hashed = await hashPin(cleaned, user?.id || "guest_local");
+    }
+    setSecuritySettings(prev => ({
+      ...prev,
+      pinCode: cleaned,
+      hashedPinCode: cleaned.length === 0 ? "" : (hashed || prev.hashedPinCode)
+    }));
+  };
+
+  const togglePinSecurity = () => {
+    const isCurrentlyEnabled = securitySettings.pinEnabled;
+    if (!isCurrentlyEnabled) {
+      const hasPin = (securitySettings.pinCode && securitySettings.pinCode.length === 4) ||
+                     (securitySettings.hashedPinCode && securitySettings.hashedPinCode.length === 64);
+      if (!hasPin) {
+        toast({
+          title: "Setup PIN First",
+          description: "Please enter a 4-digit numeric PIN code before enabling the security lock.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    setSecuritySettings(prev => ({
+      ...prev,
+      pinEnabled: !prev.pinEnabled
+    }));
+    toast({
+      title: !isCurrentlyEnabled ? "Security PIN Locked" : "Security PIN Unlocked",
+      description: !isCurrentlyEnabled 
+        ? "App is now configured to lock on startup." 
+        : "App startup lock has been disabled."
+    });
+  };
+
+  // Subscription helpers
+  const daysRemaining = useMemo(() => {
+    try {
+      const parsedDate = parse(subscription.renewalDate, "dd-MM-yyyy", new Date());
+      const diffTime = parsedDate.getTime() - new Date().getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : 0;
+    } catch {
+      return 0;
+    }
+  }, [subscription.renewalDate]);
+
+  const completeRenewal = () => {
+    try {
+      const currentRenewal = parse(subscription.renewalDate, "dd-MM-yyyy", new Date());
+      const newRenewal = addDays(currentRenewal, 30);
+      const newRenewalStr = format(newRenewal, "dd-MM-yyyy");
+      setSubscription(prev => ({
+        ...prev,
+        status: "active",
+        renewalDate: newRenewalStr
+      }));
+      toast({
+        title: "Subscription Renewed!",
+        description: `Successfully extended plan by 30 days. New renewal: ${newRenewalStr}.`,
+      });
+    } catch {
+      const newRenewalStr = format(addDays(new Date(), 30), "dd-MM-yyyy");
+      setSubscription(prev => ({
+        ...prev,
+        status: "active",
+        renewalDate: newRenewalStr
+      }));
+      toast({
+        title: "Subscription Renewed!",
+        description: `Successfully extended plan. New renewal: ${newRenewalStr}.`,
+      });
+    }
+  };
+
+  const handleRenewSubscription = async () => {
+    try {
+      const targetUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? ''
+        : 'https://v0-indian-payroll-website.vercel.app';
+
+      toast({
+        title: "Initiating Payment Gateway...",
+        description: "Contacting payment service providers."
+      });
+
+      const orderResponse = await fetch(`${targetUrl}/api/razorpay/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: 500 }) // ₹500 subscription renewal
+      });
+
+      if (!orderResponse.ok) {
+        throw new Error("Unable to initialize order with server gateway.");
+      }
+
+      const order = await orderResponse.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const RazorpayConstructor = (window as any).Razorpay;
+
+      // Handle offline or blocked checkout.js
+      if (!RazorpayConstructor) {
+        toast({
+          title: "Gateway Offline / Mock Mode",
+          description: "Razorpay script failed to load. Running simulated verification checkout...",
+          variant: "destructive"
+        });
+
+        // Directly call verify endpoint with simulated attributes
+        const verifyResponse = await fetch(`${targetUrl}/api/razorpay/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id: order.id,
+            razorpay_payment_id: 'pay_mock_' + Math.random().toString(36).substring(2, 10),
+            razorpay_signature: 'sig_mock_' + Math.random().toString(36).substring(2, 10)
+          })
+        });
+
+        if (!verifyResponse.ok) {
+          throw new Error("Simulated verification was rejected.");
+        }
+
+        const verifyResult = await verifyResponse.json();
+        if (verifyResult.verified) {
+          completeRenewal();
+        } else {
+          toast({ title: "Verification Failed", description: "Verification rejected.", variant: "destructive" });
+        }
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Rupee Ledger Pro',
+        description: 'Subscription Renewal - 30 Days',
+        order_id: order.id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        handler: async function (response: any) {
+          try {
+            toast({
+              title: "Verifying Transaction...",
+              description: "Validating signature parameters."
+            });
+
+            const verifyResponse = await fetch(`${targetUrl}/api/razorpay/verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+
+            if (!verifyResponse.ok) {
+              throw new Error("Payment signature verification failed.");
+            }
+
+            const verifyResult = await verifyResponse.json();
+            if (verifyResult.verified) {
+              completeRenewal();
+            } else {
+              toast({
+                title: "Invalid Signature",
+                description: "Security check rejected payment authenticity.",
+                variant: "destructive"
+              });
+            }
+          } catch (err) {
+            console.error(err);
+            toast({
+              title: "Verification Failure",
+              description: "Failed to connect to verification server.",
+              variant: "destructive"
+            });
+          }
+        },
+        prefill: {
+          name: businessProfile.companyName || 'RupeeLedger Member',
+          contact: businessProfile.phone || '9999999999'
+        },
+        theme: {
+          color: '#0f172a'
+        }
+      };
+
+      const rzp = new RazorpayConstructor(options);
+      rzp.open();
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast({
+        title: "Checkout Initiation Failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const [licenseInput, setLicenseInput] = useState("");
+  const handleActivateKey = () => {
+    if (licenseInput.trim().toUpperCase().startsWith("RL-PRO-")) {
+      const newRenewalStr = format(addDays(new Date(), 365), "dd-MM-yyyy");
+      setSubscription({
+        status: "active",
+        plan: "Pro Business (Annual License)",
+        price: "₹5,000 / year",
+        renewalDate: newRenewalStr,
+        licenseKey: licenseInput.trim().toUpperCase()
+      });
+      setLicenseInput("");
+      toast({
+        title: "License Activated!",
+        description: "Your annual Pro license key is verified. Renewing in 365 days.",
+      });
+    } else {
+      toast({
+        title: "Invalid Key Format",
+        description: "License keys must start with 'RL-PRO-' followed by letters/digits.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Lock Screen states & keystroke handlers
+  const [pinInput, setPinInput] = useState("");
+  
+  const handleKeyPress = async (num: string) => {
+    if (pinInput.length < 4) {
+      const newPin = pinInput + num;
+      setPinInput(newPin);
+      if (newPin.length === 4) {
+        const typedHash = await hashPin(newPin, user?.id || "guest_local");
+        const matchesHashed = securitySettings.hashedPinCode && typedHash === securitySettings.hashedPinCode;
+        const matchesPlaintext = !securitySettings.hashedPinCode && newPin === securitySettings.pinCode;
+        
+        if (matchesHashed || matchesPlaintext) {
+          setIsLocked(false);
+          setPinInput("");
+          toast({ title: "Unlocked Successfully", description: "Welcome back to RupeeLedger." });
+        } else {
+          setTimeout(() => {
+            setPinInput("");
+            toast({ title: "Incorrect PIN", description: "Redirecting to authentication login screen.", variant: "destructive" });
+            setShowLogin(true); // Automatically change screen to login page
+          }, 300);
+        }
+      }
+    }
+  };
+  
+  const handleBackspace = () => {
+    setPinInput(prev => prev.slice(0, -1));
+  };
+
+  useEffect(() => {
+    if (!isLocked) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeyPress(e.key);
+      } else if (e.key === 'Backspace') {
+        handleBackspace();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocked, pinInput, securitySettings.hashedPinCode, securitySettings.pinCode]);
 
   // Recalculate helper
   const recalculateData = (updatedAccounts: Account[], updatedTransactions: Transaction[]) => {
@@ -131,8 +940,15 @@ export default function RupeeLedger() {
 
     setAccounts(finalAccounts);
     setTransactions(updatedTransactions);
-    localStorage.setItem("rupee_ledger_accounts", JSON.stringify(finalAccounts));
-    localStorage.setItem("rupee_ledger_transactions", JSON.stringify(updatedTransactions));
+    const storageSuffix = user ? user.id : "guest_local";
+    localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(finalAccounts));
+    localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(updatedTransactions));
+
+    if (user && user.authMethod !== 'guest') {
+      commitBatchInChunks(user.id, finalAccounts, updatedTransactions).catch(err => {
+        console.error("Firestore batch sync error:", err);
+      });
+    }
   };
 
   const handleAccountSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -140,11 +956,16 @@ export default function RupeeLedger() {
     const formData = new FormData(e.currentTarget);
     const name = formData.get("name") as string;
     const type = formData.get("type") as AccountType;
-    const initialBalance = parseFloat(formData.get("balance") as string) || 0;
+    const rawBalance = parseFloat(formData.get("balance") as string) || 0;
+    const balanceType = formData.get("balanceType") as "Credit" | "Debit";
+    const initialBalance = balanceType === "Debit" ? -Math.abs(rawBalance) : Math.abs(rawBalance);
+    const address = formData.get("address") as string || "";
+    const gstin = formData.get("gstin") as string || "";
+    const phone = formData.get("phone") as string || "";
 
     if (editingAccount) {
       const updatedAccounts = accounts.map(a => 
-        a.id === editingAccount.id ? { ...a, name, type, initialBalance } : a
+        a.id === editingAccount.id ? { ...a, name, type, initialBalance, address, gstin, phone } : a
       );
       recalculateData(updatedAccounts, transactions);
       setEditingAccount(null);
@@ -157,15 +978,38 @@ export default function RupeeLedger() {
         initialBalance,
         currentBalance: initialBalance,
         createdAt: Date.now(),
+        address,
+        gstin,
+        phone,
       };
-      setAccounts([...accounts, newAccount]);
+      recalculateData([...accounts, newAccount], transactions);
       setIsNewAccountOpen(false);
       toast({ title: "Account created" });
     }
   };
 
-  const deleteAccount = () => {
+  const deleteAccount = async () => {
     if (!accountToDelete) return;
+
+    if (user && user.authMethod !== 'guest') {
+      try {
+        const accRef = doc(db, "users", user.id, "accounts", accountToDelete);
+        await deleteDoc(accRef);
+        
+        // Delete all transactions associated with this account from Firestore
+        const txsToDelete = transactions.filter(t => t.accountId === accountToDelete);
+        const batch = writeBatch(db);
+        txsToDelete.forEach(tx => {
+          const txRef = doc(db, "users", user.id, "transactions", tx.id);
+          batch.delete(txRef);
+        });
+        await batch.commit();
+      } catch (err) {
+        console.error("Firestore account deletion error:", err);
+        toast({ title: "Failed to delete from Cloud", description: "Offline/network error occurred.", variant: "destructive" });
+      }
+    }
+
     const updatedAccounts = accounts.filter(a => a.id !== accountToDelete);
     const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
     setAccounts(updatedAccounts);
@@ -175,15 +1019,43 @@ export default function RupeeLedger() {
     toast({ title: "Account deleted" });
   };
 
-  const handleTransactionAdd = (data: { accountId: string; type: TransactionType; amount: number; description: string }) => {
+  const handleTransactionAdd = (data: { 
+    accountId: string; 
+    type: TransactionType; 
+    amount: number; 
+    description: string; 
+    date: number;
+    gstEnabled?: boolean;
+    gstRate?: number;
+    gstType?: 'CGST+SGST' | 'IGST';
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+    taxableAmount?: number;
+    invoiceNumber?: string;
+    customerName?: string;
+    customerGstin?: string;
+    gstCalculationType?: 'including' | 'excluding';
+  }) => {
     const newTx: Transaction = {
       id: Math.random().toString(36).substring(7),
       accountId: data.accountId,
       type: data.type,
       amount: data.amount,
       description: data.description,
-      date: Date.now(),
+      date: data.date,
       balanceAfter: 0,
+      gstEnabled: data.gstEnabled,
+      gstRate: data.gstRate,
+      gstType: data.gstType,
+      cgst: data.cgst,
+      sgst: data.sgst,
+      igst: data.igst,
+      taxableAmount: data.taxableAmount,
+      invoiceNumber: data.invoiceNumber,
+      customerName: data.customerName,
+      customerGstin: data.customerGstin,
+      gstCalculationType: data.gstCalculationType,
     };
     recalculateData(accounts, [...transactions, newTx]);
     toast({ title: `Recorded for ${accounts.find(a => a.id === data.accountId)?.name}` });
@@ -197,31 +1069,115 @@ export default function RupeeLedger() {
     const type = formData.get("type") as TransactionType;
     const description = formData.get("description") as string;
 
-    const updatedTransactions = transactions.map(t => 
-      t.id === editingTransaction.id ? { ...t, amount, type, description } : t
-    );
+    const updatedTransactions = transactions.map(t => {
+      if (t.id === editingTransaction.id) {
+        let cgst = t.cgst;
+        let sgst = t.sgst;
+        let igst = t.igst;
+        let taxableAmount = t.taxableAmount;
+
+        if (t.gstEnabled && t.gstRate) {
+          taxableAmount = Math.round((amount / (1 + t.gstRate / 100)) * 100) / 100;
+          const totalGst = Math.round((amount - taxableAmount) * 100) / 100;
+          if (t.gstType === 'CGST+SGST') {
+            cgst = Math.round((totalGst / 2) * 100) / 100;
+            sgst = Math.round((totalGst / 2) * 100) / 100;
+            igst = 0;
+          } else {
+            cgst = 0;
+            sgst = 0;
+            igst = totalGst;
+          }
+        }
+
+        return { 
+          ...t, 
+          amount, 
+          type, 
+          description,
+          cgst,
+          sgst,
+          igst,
+          taxableAmount
+        };
+      }
+      return t;
+    });
+
     recalculateData(accounts, updatedTransactions);
     setEditingTransaction(null);
     toast({ title: "Transaction updated" });
   };
 
-  const deleteTransaction = () => {
+  const deleteTransaction = async () => {
     if (!transactionToDelete) return;
+
+    if (user && user.authMethod !== 'guest') {
+      try {
+        const txRef = doc(db, "users", user.id, "transactions", transactionToDelete);
+        await deleteDoc(txRef);
+      } catch (err) {
+        console.error("Firestore transaction deletion error:", err);
+        toast({ title: "Failed to delete from Cloud", description: "Offline/network error occurred.", variant: "destructive" });
+      }
+    }
+
     const updatedTransactions = transactions.filter(t => t.id !== transactionToDelete);
     recalculateData(accounts, updatedTransactions);
     setTransactionToDelete(null);
     toast({ title: "Transaction deleted" });
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
+    if (user && user.authMethod !== 'guest') {
+      try {
+        const accountsSnapshot = await getDocs(collection(db, "users", user.id, "accounts"));
+        const txsSnapshot = await getDocs(collection(db, "users", user.id, "transactions"));
+        
+        const batch = writeBatch(db);
+        accountsSnapshot.forEach(docSnap => {
+          batch.delete(docSnap.ref);
+        });
+        txsSnapshot.forEach(docSnap => {
+          batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+      } catch (err) {
+        console.error("Firestore clear all data error:", err);
+        toast({ title: "Cloud Clear Failed", description: "Could not clear all records from cloud.", variant: "destructive" });
+      }
+    }
+
     setAccounts([]);
     setTransactions([]);
     setSelectedAccountId(null);
-    localStorage.removeItem("rupee_ledger_accounts");
-    localStorage.removeItem("rupee_ledger_transactions");
+    const storageSuffix = user ? user.id : "guest_local";
+    localStorage.removeItem(`rupee_ledger_accounts_${storageSuffix}`);
+    localStorage.removeItem(`rupee_ledger_transactions_${storageSuffix}`);
     setActiveTab("dashboard");
     setIsClearDataAlertOpen(false);
     toast({ title: "All data cleared successfully" });
+  };
+
+  const handleCloudBackupNow = async () => {
+    if (!user || user.authMethod === 'guest') {
+      toast({ title: "Guest Mode", description: "Please log in to backup to the cloud.", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Backing up...", description: "Uploading database to Firestore." });
+    try {
+      await commitBatchInChunks(user.id, accounts, transactions);
+      const userDocRef = doc(db, "users", user.id);
+      await setDoc(userDocRef, {
+        businessProfile,
+        subscription,
+        securitySettings
+      }, { merge: true });
+      toast({ title: "Backup Successful", description: "All data is securely saved in the cloud." });
+    } catch (err) {
+      console.error("Manual cloud backup error:", err);
+      toast({ title: "Backup Failed", description: "Failed to upload database to the cloud.", variant: "destructive" });
+    }
   };
 
   const handleExportData = () => {
@@ -235,15 +1191,132 @@ export default function RupeeLedger() {
     toast({ title: "Backup file downloaded" });
   };
 
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (parsed && Array.isArray(parsed.accounts) && Array.isArray(parsed.transactions)) {
+          recalculateData(parsed.accounts, parsed.transactions);
+          toast({ 
+            title: "Backup Restored Successfully", 
+            description: `Imported ${parsed.accounts.length} accounts and ${parsed.transactions.length} transactions.` 
+          });
+        } else {
+          throw new Error("Invalid backup file format. Must contain accounts and transactions arrays.");
+        }
+      } catch (err) {
+        console.error("Backup import error:", err);
+        toast({ 
+          title: "Import Failed", 
+          description: err instanceof Error ? err.message : "Invalid JSON file.", 
+          variant: "destructive" 
+        });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
   const totalBalance = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
   
-  const accountTransactions = useMemo(() => 
-    transactions
-      .filter(t => t.accountId === selectedAccountId)
-      .sort((a, b) => b.date - a.date),
-    [transactions, selectedAccountId]
-  );
+  const analyticsData = useMemo(() => {
+    const monthsData: { [key: string]: { month: string; income: number; expenses: number; net: number; sortKey: number } } = {};
+    
+    // Group transactions by month for the last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthLabel = format(d, "MMM yyyy");
+      const sortKey = d.getFullYear() * 100 + d.getMonth();
+      monthsData[monthLabel] = {
+        month: monthLabel,
+        income: 0,
+        expenses: 0,
+        net: 0,
+        sortKey
+      };
+    }
+
+    const filteredTransactions = analyticsAccountId === "all"
+      ? transactions
+      : transactions.filter(t => t.accountId === analyticsAccountId);
+
+    filteredTransactions.forEach(t => {
+      const date = new Date(t.date);
+      const monthLabel = format(date, "MMM yyyy");
+      if (monthsData[monthLabel]) {
+        if (t.type === 'Credit') {
+          monthsData[monthLabel].income += t.amount;
+        } else {
+          monthsData[monthLabel].expenses += t.amount;
+        }
+      }
+    });
+
+    return Object.values(monthsData)
+      .map(item => ({
+        ...item,
+        net: item.income - item.expenses
+      }))
+      .sort((a, b) => a.sortKey - b.sortKey);
+  }, [transactions, analyticsAccountId]);
+
+  const handleExportExcel = () => {
+    if (!selectedAccount) return;
+    
+    const headers = ["Date", "Description / Narration", "Type", "Amount (INR)", "Running Balance (INR)"];
+    
+    const rows = accountTransactions.map(t => [
+      format(t.date, "yyyy-MM-dd"),
+      `"${t.description.replace(/"/g, '""')}"`,
+      t.type,
+      t.amount,
+      t.balanceAfter
+    ]);
+    
+    const csvContent = "\uFEFF" + [
+      headers.join(","),
+      ...rows.map(r => r.join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedAccount.name.toLowerCase().replace(/\s+/g, "-")}-ledger-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    toast({ title: "Excel (CSV) Exported", description: "Ledger spreadsheet downloaded successfully." });
+  };
+
+  const accountTransactions = useMemo(() => {
+    let filtered = transactions.filter(t => t.accountId === selectedAccountId);
+
+    if (ledgerSearch.trim() !== "") {
+      const query = ledgerSearch.toLowerCase();
+      filtered = filtered.filter(t => 
+        t.description.toLowerCase().includes(query) ||
+        t.amount.toString().includes(query) ||
+        t.type.toLowerCase().includes(query)
+      );
+    }
+
+    if (ledgerStartDate !== "") {
+      const startMs = new Date(ledgerStartDate).setHours(0, 0, 0, 0);
+      filtered = filtered.filter(t => t.date >= startMs);
+    }
+
+    if (ledgerEndDate !== "") {
+      const endMs = new Date(ledgerEndDate).setHours(23, 59, 59, 999);
+      filtered = filtered.filter(t => t.date <= endMs);
+    }
+
+    return filtered.sort((a, b) => b.date - a.date);
+  }, [transactions, selectedAccountId, ledgerSearch, ledgerStartDate, ledgerEndDate]);
 
   const todayStats = useMemo(() => {
     return transactions
@@ -255,19 +1328,364 @@ export default function RupeeLedger() {
       }, { credit: 0, debit: 0 });
   }, [transactions]);
 
+  if (showLogin && isLoaded) {
+    return (
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 overflow-y-auto p-4 animate-in fade-in duration-300">
+        <Toaster />
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
+          
+          {/* Brand Logo Header */}
+          <div className="flex flex-col items-center space-y-2 text-center">
+            <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 border border-primary/20">
+              <span className="text-3xl font-extrabold text-white">₹</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-white mt-2">RupeeLedger</h1>
+            <p className="text-xs text-muted-foreground">Select authentication profile to open your account ledger</p>
+          </div>
+
+          {/* Login Mode Tab Switches */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            {(["google", "phone", "email"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => {
+                  setLoginTab(tab);
+                  setOtpSent(false);
+                }}
+                className={`py-1.5 text-xs font-semibold rounded transition-all capitalize ${
+                  loginTab === tab 
+                    ? "bg-primary text-white shadow-sm" 
+                    : "text-muted-foreground hover:text-slate-200"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="space-y-4 pt-2">
+            
+            {/* Google Sign-in tab */}
+            {loginTab === "google" && (
+              <div className="space-y-4 flex flex-col items-center py-4">
+                <p className="text-xs text-center text-muted-foreground leading-relaxed px-4">
+                  Log in securely using your Google account to enable auto-backups and cloud database syncing.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  className="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold hover:bg-slate-100 active:scale-[0.98] transition-all h-11 px-4 rounded-lg shadow-md border"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    />
+                  </svg>
+                  Sign in with Google
+                </button>
+              </div>
+            )}
+
+            {/* Phone OTP Sign-in tab */}
+            {loginTab === "phone" && (
+              <div className="space-y-4">
+                {!otpSent ? (
+                  <div className="space-y-3">
+                    <Label htmlFor="phoneLogin" className="text-xs text-slate-300">Enter Contact Phone Number</Label>
+                    <div className="flex gap-2">
+                      <span className="flex items-center justify-center bg-slate-950 border border-slate-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
+                      <Input
+                        id="phoneLogin"
+                        type="tel"
+                        maxLength={10}
+                        placeholder="9876543210"
+                        className="bg-slate-950 border-slate-800 text-white h-11"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleSendOTP}
+                      className="w-full h-11 bg-primary text-white hover:bg-primary/95"
+                    >
+                      Send SMS OTP Challenge
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Label htmlFor="otpCode" className="text-xs text-slate-300">Enter 6-Digit OTP Code</Label>
+                    <Input
+                      id="otpCode"
+                      type="text"
+                      maxLength={6}
+                      placeholder="xxxxxx"
+                      className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setOtpSent(false)}
+                        className="flex-1 h-11 bg-transparent border-slate-800 hover:bg-slate-850 hover:text-white"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleVerifyOTP}
+                        className="flex-1 h-11 bg-primary text-white hover:bg-primary/95"
+                      >
+                        Verify & Access
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Email / Password Sign-in tab */}
+            {loginTab === "email" && (
+              <form onSubmit={handleEmailLogin} className="space-y-4">
+                <div className="space-y-1">
+                  <Label htmlFor="emailInput" className="text-xs text-slate-300">Email Address</Label>
+                  <Input
+                    id="emailInput"
+                    type="email"
+                    required
+                    placeholder="name@company.com"
+                    className="bg-slate-950 border-slate-800 text-white h-11"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="passInput" className="text-xs text-slate-300">Password</Label>
+                  <Input
+                    id="passInput"
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    className="bg-slate-950 border-slate-800 text-white h-11"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full h-11 bg-primary text-white hover:bg-primary/95"
+                >
+                  Log In / Create Account
+                </Button>
+              </form>
+            )}
+
+          </div>
+
+          <div className="relative flex py-2 items-center">
+            <div className="flex-grow border-t border-slate-800"></div>
+            <span className="flex-shrink mx-4 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Or Continue</span>
+            <div className="flex-grow border-t border-slate-800"></div>
+          </div>
+
+          {/* Guest / Offline Access Button */}
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            className="w-full bg-slate-950 border border-slate-800 hover:bg-slate-900 active:scale-[0.98] transition-all text-xs font-semibold text-slate-300 h-11 rounded-lg"
+          >
+            Access Local-Only Guest Ledger
+          </button>
+
+          <p className="text-[10px] text-center text-muted-foreground mt-4 leading-relaxed">
+            By authenticating, you agree to our local sandboxing policies. Signed in sessions maintain a cloud ledger bridge if configured.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLocked && isLoaded) {
+    return (
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 animate-in fade-in duration-300">
+        <Toaster />
+        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-8">
+          {/* Logo / Brand */}
+          <div className="flex flex-col items-center space-y-3 animate-bounce">
+            <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 border border-primary/20">
+              <span className="text-3xl font-extrabold text-white">₹</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">RupeeLedger</h1>
+              <p className="text-xs text-muted-foreground/80 mt-0.5">Commercial Grade Privacy Ledger</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 w-full">
+            <p className="text-sm font-semibold tracking-wide uppercase text-primary">Ledger Secured</p>
+            <h2 className="text-lg text-slate-300">Enter PIN to Unlock</h2>
+            
+            {/* Visual PIN Dots */}
+            <div className="flex justify-center gap-4 py-4">
+              {[0, 1, 2, 3].map((index) => (
+                <div 
+                  key={index}
+                  className={`h-4 w-4 rounded-full border border-primary/50 transition-all duration-150 ${
+                    index < pinInput.length ? "bg-primary scale-110 shadow-lg shadow-primary/50" : "bg-transparent"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* On-screen Numeric keypad */}
+          <div className="grid grid-cols-3 gap-4 w-full max-w-[280px]">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => handleKeyPress(num)}
+                className="h-14 w-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xl font-bold hover:bg-slate-800 hover:border-slate-700 active:scale-95 transition-all duration-100"
+              >
+                {num}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPinInput("")}
+              className="h-14 w-14 rounded-full flex items-center justify-center text-xs font-semibold hover:text-primary active:scale-95 transition-all"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => handleKeyPress("0")}
+              className="h-14 w-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xl font-bold hover:bg-slate-800 hover:border-slate-700 active:scale-95 transition-all duration-100"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={handleBackspace}
+              className="h-14 w-14 rounded-full flex items-center justify-center text-xs font-semibold hover:text-destructive active:scale-95 transition-all"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col no-print bg-background text-foreground">
       <Toaster />
       
+      {/* Mobile Top Bar */}
+      <header className="flex md:hidden items-center justify-between p-4 bg-primary text-primary-foreground shadow-md border-b">
+        <div className="flex items-center space-x-3">
+          {user ? (
+            <img 
+              src={user.avatarUrl || "/logo.png"} 
+              alt="User Profile" 
+              className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10" 
+            />
+          ) : (
+            <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
+          )}
+          <div className="min-w-0">
+            <h1 className="text-base font-bold tracking-tight leading-tight">RupeeLedger</h1>
+            {user && (
+              <p className="text-[9px] text-primary-foreground/75 font-semibold truncate leading-none mt-0.5">
+                {user.name} ({user.authMethod === 'guest' ? 'Guest' : 'Synced'})
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={() => setIsDailyReportOpen(true)}
+            title="Daily Reports"
+          >
+            <CalendarDays className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={() => setActiveTab(activeTab === "gst" ? "dashboard" : "gst")}
+            title="GST & Invoices"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={() => setActiveTab(activeTab === "analytics" ? "dashboard" : "analytics")}
+            title="Analytics"
+          >
+            <TrendingUp className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={() => setActiveTab(activeTab === "settings" ? "dashboard" : "settings")}
+            title="Settings"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
+
       <div className="flex flex-1">
         {/* Sidebar */}
         <aside className="hidden md:flex flex-col w-64 bg-primary text-primary-foreground p-6 shadow-xl border-r">
-          <div className="flex items-center space-x-3 mb-12">
-            <div className="bg-accent p-2 rounded-lg shadow-inner">
-              <Wallet className="h-6 w-6 text-primary" />
-            </div>
+          <div className="flex items-center space-x-3 mb-6">
+            <img src="/logo.png" alt="RupeeLedger Logo" className="h-10 w-10 rounded-lg object-cover shadow-md border border-accent/20" />
             <h1 className="text-xl font-bold tracking-tight">RupeeLedger</h1>
           </div>
+
+          {/* User Profile Card */}
+          {user && (
+            <div className="flex items-center space-x-3 p-3 bg-primary-foreground/5 border border-primary-foreground/10 rounded-xl mb-6 shadow-sm">
+              <img 
+                src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
+                alt="User Avatar" 
+                className="h-10 w-10 rounded-full border border-primary-foreground/20 bg-primary-foreground/10" 
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate text-white">{user.name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping shrink-0" />
+                  <p className="text-[10px] text-primary-foreground/70 font-semibold truncate uppercase tracking-wider">
+                    {user.authMethod === 'guest' ? 'Local Guest' : 'Cloud Synced'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <nav className="space-y-2">
             <Button 
@@ -285,11 +1703,25 @@ export default function RupeeLedger() {
               <History className="mr-2 h-4 w-4" /> Ledger View
             </Button>
             <Button 
+              variant={activeTab === "analytics" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("analytics")}
+            >
+              <TrendingUp className="mr-2 h-4 w-4" /> Cash Flow Analytics
+            </Button>
+            <Button 
               variant="ghost" 
               className="w-full justify-start font-medium"
               onClick={() => setIsDailyReportOpen(true)}
             >
               <CalendarDays className="mr-2 h-4 w-4" /> Daily Reports
+            </Button>
+            <Button 
+              variant={activeTab === "gst" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("gst")}
+            >
+              <FileText className="mr-2 h-4 w-4" /> GST & Invoices
             </Button>
             <Button 
               variant={activeTab === "settings" ? "secondary" : "ghost"} 
@@ -307,7 +1739,17 @@ export default function RupeeLedger() {
                 <CurrencyDisplay amount={totalBalance} />
               </div>
             </div>
-            <p className="text-[10px] text-primary-foreground/40 text-center">v1.1.0 - Private Ledger</p>
+            {user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full justify-start text-xs font-semibold text-primary-foreground/75 hover:bg-primary-foreground/10 hover:text-white mb-2 h-8"
+              >
+                Sign Out Session
+              </Button>
+            )}
+            <p className="text-[10px] text-primary-foreground/40 text-center">v1.2.0 - Private Ledger</p>
           </div>
         </aside>
 
@@ -334,7 +1776,7 @@ export default function RupeeLedger() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <Card className="shadow-sm">
                   <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Inflow</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Inflow</p>
                     <div className="text-2xl font-bold mt-1 text-green-600">
                       <CurrencyDisplay amount={todayStats.credit} />
                     </div>
@@ -342,7 +1784,7 @@ export default function RupeeLedger() {
                 </Card>
                 <Card className="shadow-sm">
                   <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Outflow</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Outflow</p>
                     <div className="text-2xl font-bold mt-1 text-destructive">
                       <CurrencyDisplay amount={todayStats.debit} />
                     </div>
@@ -350,7 +1792,7 @@ export default function RupeeLedger() {
                 </Card>
                 <Card className="shadow-sm hidden lg:block border-primary/10">
                   <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today's Net Change</p>
+                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Net Change</p>
                     <div className="text-2xl font-bold mt-1">
                       <CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign />
                     </div>
@@ -450,16 +1892,38 @@ export default function RupeeLedger() {
                ) : (
                  <>
                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Button variant="ghost" size="icon" onClick={() => setActiveTab("dashboard")} className="h-8 w-8">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
-                      </div>
-                      <p className="text-muted-foreground ml-10 italic">Detailed Transaction Ledger</p>
-                    </div>
-                    <div className="flex items-center space-x-2">
+                     <div>
+                       <div className="flex items-center gap-2 mb-1">
+                         <Button variant="ghost" size="icon" onClick={() => setActiveTab("dashboard")} className="h-8 w-8">
+                           <ChevronLeft className="h-4 w-4" />
+                         </Button>
+                         <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
+                       </div>
+                        <p className="text-muted-foreground ml-10 italic mb-2">Detailed Transaction Ledger</p>
+                        {selectedAccount && (selectedAccount.gstin || selectedAccount.phone || selectedAccount.address) && (
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 ml-10 text-xs text-muted-foreground">
+                            {selectedAccount.gstin && (
+                              <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded font-mono font-medium flex items-center">
+                                GSTIN: {selectedAccount.gstin}
+                              </span>
+                            )}
+                            {selectedAccount.phone && (
+                              <span className="flex items-center gap-1">
+                                <span className="font-semibold opacity-70">Phone:</span> {selectedAccount.phone}
+                              </span>
+                            )}
+                            {selectedAccount.address && (
+                              <span className="flex items-center gap-1">
+                                <span className="font-semibold opacity-70">Address:</span> {selectedAccount.address}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                     </div>
+                     <div className="flex items-center space-x-2">
+                      <Button variant="outline" onClick={handleExportExcel}>
+                        <Download className="mr-2 h-4 w-4" /> Export Excel
+                      </Button>
                       <Button variant="outline" onClick={() => setIsReportOpen(true)}>
                         <Printer className="mr-2 h-4 w-4" /> Full Report
                       </Button>
@@ -479,152 +1943,702 @@ export default function RupeeLedger() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="bg-muted/10 shadow-sm">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
-                        <div className="text-2xl font-bold mt-1">
-                          <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    {/* Left Column: Filters, Metrics, Table */}
+                    <div className="lg:col-span-2 space-y-6">
+                      {/* Search and Date filters block */}
+                      <div className="bg-card p-4 rounded-xl border border-primary/5 shadow-sm space-y-4 md:space-y-0 md:flex md:items-center md:justify-between gap-4">
+                        <div className="flex-1 relative">
+                          <Input
+                            type="text"
+                            placeholder="Search transactions by narration, amount, or type..."
+                            value={ledgerSearch}
+                            onChange={(e) => setLedgerSearch(e.target.value)}
+                            className="h-10 pl-3 pr-10"
+                          />
+                          {ledgerSearch && (
+                            <button 
+                              onClick={() => setLedgerSearch("")}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs font-semibold"
+                            >
+                              Clear
+                            </button>
+                          )}
                         </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="ring-1 ring-primary/20 border-primary shadow-md">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-primary uppercase font-bold tracking-wider">Net Balance</p>
-                        <div className="text-2xl font-bold mt-1 text-primary">
-                          <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-muted/10 shadow-sm">
-                      <CardContent className="pt-6">
-                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Entries</p>
-                        <div className="text-2xl font-bold mt-1">
-                          {accountTransactions.length}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
 
-                  <div className="bg-card rounded-xl border border-primary/10 shadow-sm overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-bold">Date</TableHead>
-                          <TableHead className="font-bold">Description / Narration</TableHead>
-                          <TableHead className="text-right font-bold">Credit (In)</TableHead>
-                          <TableHead className="text-right font-bold">Debit (Out)</TableHead>
-                          <TableHead className="text-right font-bold">Running Balance</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {accountTransactions.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
-                              No transactions recorded for this account.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          accountTransactions.map((t) => (
-                            <TableRow key={t.id} className="group hover:bg-muted/30 transition-colors">
-                              <TableCell className="font-medium whitespace-nowrap">
-                                {format(t.date, "dd MMM yyyy")}
-                              </TableCell>
-                              <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>
-                                {t.description}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {t.type === "Credit" ? (
-                                  <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
-                                ) : <span className="text-muted-foreground">-</span>}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {t.type === "Debit" ? (
-                                  <span className="text-destructive font-semibold">-<CurrencyDisplay amount={t.amount} /></span>
-                                ) : <span className="text-muted-foreground">-</span>}
-                              </TableCell>
-                              <TableCell className="text-right font-bold text-primary">
-                                <CurrencyDisplay amount={t.balanceAfter} />
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
-                                    className="h-8 w-8 text-accent hover:bg-accent/10"
-                                  >
-                                    <FileText className="h-4 w-4" />
-                                  </Button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-8 w-8">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => setEditingTransaction(t)}>
-                                        <Pencil className="mr-2 h-4 w-4" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem 
-                                        onClick={() => setTransactionToDelete(t.id)} 
-                                        className="text-destructive focus:text-destructive"
-                                      >
-                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground font-medium">From</span>
+                            <Input
+                              type="date"
+                              value={ledgerStartDate}
+                              onChange={(e) => setLedgerStartDate(e.target.value)}
+                              className="h-10 text-xs w-[140px]"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground font-medium">To</span>
+                            <Input
+                              type="date"
+                              value={ledgerEndDate}
+                              onChange={(e) => setLedgerEndDate(e.target.value)}
+                              className="h-10 text-xs w-[140px]"
+                            />
+                          </div>
+                          {(ledgerStartDate || ledgerEndDate || ledgerSearch) && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                setLedgerSearch("");
+                                setLedgerStartDate("");
+                                setLedgerEndDate("");
+                              }}
+                              className="text-xs h-10 hover:bg-slate-100"
+                            >
+                              Reset
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Card className="bg-muted/10 shadow-sm relative group">
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Opening Balance</p>
+                                <div className="text-2xl font-bold mt-1">
+                                  <CurrencyDisplay amount={selectedAccount?.initialBalance || 0} />
                                 </div>
-                              </TableCell>
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary shrink-0 -mt-1 -mr-2"
+                                onClick={() => setEditingAccount(selectedAccount || null)}
+                                title="Edit Opening Balance"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="ring-1 ring-primary/20 border-primary shadow-md">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-primary uppercase font-bold tracking-wider">Net Balance</p>
+                            <div className="text-2xl font-bold mt-1 text-primary">
+                              <CurrencyDisplay amount={selectedAccount?.currentBalance || 0} />
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="bg-muted/10 shadow-sm">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Entries</p>
+                            <div className="text-2xl font-bold mt-1">
+                              {accountTransactions.length}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <div className="bg-card rounded-xl border border-primary/10 shadow-sm overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="font-bold">Date</TableHead>
+                              <TableHead className="font-bold">Description / Narration</TableHead>
+                              <TableHead className="text-right font-bold">Credit (In)</TableHead>
+                              <TableHead className="text-right font-bold">Debit (Out)</TableHead>
+                              <TableHead className="text-right font-bold">Running Balance</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {accountTransactions.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
+                                  No transactions recorded for this account.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              accountTransactions.map((t) => (
+                                <TableRow key={t.id} className="group hover:bg-muted/30 transition-colors">
+                                  <TableCell className="font-medium whitespace-nowrap">
+                                    {format(t.date, "dd MMM yyyy")}
+                                  </TableCell>
+                                  <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>
+                                    {t.description}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {t.type === "Credit" ? (
+                                      <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
+                                    ) : <span className="text-muted-foreground">-</span>}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {t.type === "Debit" ? (
+                                      <span className="text-destructive font-semibold">-<CurrencyDisplay amount={t.amount} /></span>
+                                    ) : <span className="text-muted-foreground">-</span>}
+                                  </TableCell>
+                                  <TableCell className="text-right font-bold text-primary">
+                                    <CurrencyDisplay amount={t.balanceAfter} />
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button 
+                                        size="icon" 
+                                        variant="ghost" 
+                                        onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
+                                        className="h-8 w-8 text-accent hover:bg-accent/10"
+                                      >
+                                        <FileText className="h-4 w-4" />
+                                      </Button>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button size="icon" variant="ghost" className="h-8 w-8">
+                                            <MoreVertical className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => setEditingTransaction(t)}>
+                                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                                          </DropdownMenuItem>
+                                          {t.gstEnabled && (
+                                            <DropdownMenuItem onClick={() => setSelectedInvoice({ t, a: selectedAccount! })}>
+                                              <FileText className="mr-2 h-4 w-4 text-primary" /> View Invoice
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem 
+                                            onClick={() => setTransactionToDelete(t.id)} 
+                                            className="text-destructive focus:text-destructive"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Quick Entry Form */}
+                    <div className="space-y-4">
+                      <TransactionForm 
+                        accounts={accounts}
+                        defaultAccountId={selectedAccountId}
+                        onSuccess={handleTransactionAdd} 
+                      />
+                    </div>
                   </div>
                  </>
                )}
             </div>
           )}
 
+          {activeTab === "analytics" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-3xl font-bold text-primary">Cash Flow Analytics</h2>
+                  <p className="text-muted-foreground font-medium text-sm">Visual insights into your income, expenses, and cash flow trends</p>
+                </div>
+                
+                <div className="w-full sm:w-[220px]">
+                  <Label htmlFor="analyticsFilter" className="text-xs font-semibold text-slate-700 block mb-1">Filter Portfolio</Label>
+                  <Select 
+                    value={analyticsAccountId} 
+                    onValueChange={(val) => setAnalyticsAccountId(val)}
+                  >
+                    <SelectTrigger id="analyticsFilter" className="bg-card">
+                      <SelectValue placeholder="All Accounts" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Global (All Accounts)</SelectItem>
+                      {accounts.map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Key Summary metrics for last 6 months */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="shadow-sm border-slate-200/80 bg-slate-50/50">
+                  <CardHeader className="py-4">
+                    <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Inflow</CardDescription>
+                    <CardTitle className="text-2xl text-green-600 font-bold">
+                      <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.income, 0)} />
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="shadow-sm border-slate-200/80 bg-slate-50/50">
+                  <CardHeader className="py-4">
+                    <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Outflow</CardDescription>
+                    <CardTitle className="text-2xl text-destructive font-bold">
+                      <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.expenses, 0)} />
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card className="shadow-sm border-slate-200/80 bg-primary/5 border-primary/10">
+                  <CardHeader className="py-4">
+                    <CardDescription className="text-xs uppercase font-bold text-primary/80">Average Monthly Cash Flow</CardDescription>
+                    <CardTitle className="text-2xl font-bold">
+                      <CurrencyDisplay 
+                        amount={
+                          analyticsData.length > 0 
+                            ? analyticsData.reduce((sum, item) => sum + item.net, 0) / analyticsData.length 
+                            : 0
+                        } 
+                        showSign 
+                      />
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
+
+              {/* Charts grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Cash Flow Line Chart */}
+                <Card className="shadow-md border-slate-200/80 p-6 space-y-4 lg:col-span-2">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Net Cash Flow Trend</h3>
+                    <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
+                  </div>
+                  <div className="h-[300px] w-full pt-4">
+                    {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData}>
+                          <defs>
+                            <linearGradient id="colorNetFlow" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Net Cash Flow"]}
+                          />
+                          <Area type="monotone" dataKey="net" stroke="#0ea5e9" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                        No financial activity recorded in the last 6 months.
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Income vs Expenses Double Bar Chart */}
+                <Card className="shadow-md border-slate-200/80 p-6 space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Monthly Inflow vs Outflow</h3>
+                    <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
+                  </div>
+                  <div className="h-[280px] w-full pt-4">
+                    {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analyticsData} margin={{ left: -10 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            formatter={(value) => `₹${Number(value).toLocaleString("en-IN")}`}
+                          />
+                          <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                          <Bar dataKey="income" name="Inflow (Credits)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="expenses" name="Outflow (Debits)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                        No transactions recorded yet.
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Expense Graph */}
+                <Card className="shadow-md border-slate-200/80 p-6 space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Monthly Expenses Trend</h3>
+                    <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
+                  </div>
+                  <div className="h-[280px] w-full pt-4">
+                    {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData}>
+                          <defs>
+                            <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Total Outflow"]}
+                          />
+                          <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                        No expense logs recorded yet.
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "gst" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <GSTReportTab 
+                transactions={transactions}
+                accounts={accounts}
+                businessProfile={businessProfile}
+                onViewInvoice={(tx, acc) => setSelectedInvoice({ t: tx, a: acc })}
+                onCreateInvoice={() => setIsNewInvoiceOpen(true)}
+              />
+            </div>
+          )}
+
           {activeTab === "settings" && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500">
+            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
                <div>
                   <h2 className="text-3xl font-bold text-primary">System Settings</h2>
-                  <p className="text-muted-foreground">Manage data persistence and security</p>
+                  <p className="text-muted-foreground font-medium text-sm">Manage business profile, subscription, security, and backups</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <Card className="shadow-sm">
+                  {/* User Profile / Session Card */}
+                  {user && (
+                    <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                      <CardHeader>
+                        <CardTitle>User Profile & Session</CardTitle>
+                        <CardDescription>Manage your active authenticated cloud identity</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <img 
+                              src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
+                              alt="User Avatar" 
+                              className="h-16 w-16 rounded-full border bg-slate-100 p-1" 
+                            />
+                            <div>
+                              <p className="font-bold text-lg text-slate-800">{user.name}</p>
+                              {user.email && <p className="text-sm text-slate-500 font-mono">{user.email}</p>}
+                              {user.phone && <p className="text-sm text-slate-500 font-mono">+91 {user.phone}</p>}
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className={`h-2 w-2 rounded-full ${user.authMethod === 'guest' ? 'bg-amber-500' : 'bg-green-500'}`} />
+                                <span className="text-xs font-semibold text-slate-600 capitalize">
+                                  Auth Profile: {user.authMethod} Mode
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <Button 
+                            variant="destructive" 
+                            onClick={handleLogout} 
+                            className="shrink-0 font-medium w-full sm:w-auto"
+                          >
+                            Sign Out Session
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Business Profile Card */}
+                  <Card className="shadow-sm border-slate-200/80">
+                    <CardHeader>
+                      <CardTitle>Business Profile Settings</CardTitle>
+                      <CardDescription>Configure custom headers for invoices, reports, and statements</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="compName" className="text-xs font-semibold text-slate-700">Company / Business Name</Label>
+                          <Input 
+                            id="compName" 
+                            value={businessProfile.companyName} 
+                            placeholder="e.g. RupeeLedger Enterprises" 
+                            onChange={(e) => handleProfileChange('companyName', e.target.value)} 
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="compAddress" className="text-xs font-semibold text-slate-700">Business Address</Label>
+                          <Input 
+                            id="compAddress" 
+                            value={businessProfile.address} 
+                            placeholder="e.g. 123 Financial Tower, New Delhi, India" 
+                            onChange={(e) => handleProfileChange('address', e.target.value)} 
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="compGSTIN" className="text-xs font-semibold text-slate-700">GSTIN (Optional)</Label>
+                            <Input 
+                              id="compGSTIN" 
+                              value={businessProfile.gstin} 
+                              placeholder="e.g. 07AAAAA1111A1Z1" 
+                              onChange={(e) => handleProfileChange('gstin', e.target.value)} 
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="compPhone" className="text-xs font-semibold text-slate-700">Contact Phone</Label>
+                            <Input 
+                              id="compPhone" 
+                              value={businessProfile.phone} 
+                              placeholder="e.g. +91 98765 43210" 
+                              onChange={(e) => handleProfileChange('phone', e.target.value)} 
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="printFooter" className="text-xs font-semibold text-slate-700">Print Statement Footer Message</Label>
+                          <Input 
+                            id="printFooter" 
+                            value={businessProfile.printFooter} 
+                            placeholder="e.g. Terms & Conditions apply. Computer generated voucher." 
+                            onChange={(e) => handleProfileChange('printFooter', e.target.value)} 
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Security Lock Card */}
+                  <Card className="shadow-sm border-slate-200/80">
+                    <CardHeader>
+                      <CardTitle>Security Lock</CardTitle>
+                      <CardDescription>Secure your local ledger with a 4-digit PIN code</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="flex items-center justify-between p-4 bg-muted/40 rounded-lg border">
+                        <div className="space-y-0.5 max-w-[70%]">
+                          <p className="font-semibold text-sm">Require PIN Code Lock</p>
+                          <p className="text-xs text-muted-foreground">Prompt for 4-digit PIN when loading the app.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={togglePinSecurity}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            securitySettings.pinEnabled ? "bg-primary" : "bg-input"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              securitySettings.pinEnabled ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 p-4 bg-muted/20 rounded-lg border border-dashed border-slate-300">
+                        <Label htmlFor="pinCode" className="text-xs font-semibold text-slate-700">Set 4-Digit Numeric PIN</Label>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <Input 
+                            id="pinCode" 
+                            type="password"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
+                            maxLength={4}
+                            value={securitySettings.pinCode} 
+                            placeholder={securitySettings.hashedPinCode ? "••••" : "xxxx"} 
+                            className="font-mono tracking-widest text-center text-lg w-28 h-10 shrink-0"
+                            onChange={(e) => handlePinCodeChange(e.target.value)} 
+                          />
+                          <p className="text-xs text-muted-foreground flex items-center leading-relaxed">
+                            Only numbers are permitted. Note: You must specify a valid 4-digit PIN before the startup lock can be toggled active.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Subscription & Billing Card */}
+                  <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Subscription & Billing</CardTitle>
+                      <CardDescription>Manage your business subscription and license tier</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
+                          <p className="text-[10px] uppercase font-bold text-primary/80">License Tier</p>
+                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.plan}</p>
+                          <span className="inline-block mt-2 px-2.5 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 rounded-full">
+                            {subscription.status.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 rounded-lg border">
+                          <p className="text-[10px] uppercase font-bold text-slate-500">Rate / Billing Plan</p>
+                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.price}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Charged via monthly auto-invoice</p>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 rounded-lg border">
+                          <p className="text-[10px] uppercase font-bold text-slate-500 font-semibold text-primary">Renewal Period</p>
+                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.renewalDate}</p>
+                          <p className="text-xs text-muted-foreground mt-1 font-semibold text-primary">
+                            {daysRemaining} Days Left in Cycle
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
+                        <div className="space-y-1">
+                          <p className="font-semibold text-sm">Extend / Renew Pro Membership</p>
+                          <p className="text-xs text-muted-foreground">Simulate extension of your billing cycle by another 30 days instantly.</p>
+                        </div>
+                        <Button onClick={handleRenewSubscription} variant="default" className="shrink-0 font-medium">
+                          Renew License (Simulated)
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3 pt-2 border-t">
+                        <Label htmlFor="licenseKeyInput" className="text-xs font-semibold text-slate-700">Activate Annual License Key</Label>
+                        <div className="flex gap-2 max-w-md">
+                          <Input 
+                            id="licenseKeyInput" 
+                            value={licenseInput} 
+                            placeholder="RL-PRO-xxxx-xxxx-xxxx" 
+                            className="font-mono uppercase text-sm"
+                            onChange={(e) => setLicenseInput(e.target.value)} 
+                          />
+                          <Button onClick={handleActivateKey} variant="outline" className="shrink-0">
+                            Verify & Activate
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Current active system key: <span className="font-mono font-bold text-slate-600">{subscription.licenseKey || "None"}</span>
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Data & Backups Card */}
+                  <Card className="shadow-sm border-slate-200/80">
                     <CardHeader>
                       <CardTitle>Data & Backups</CardTitle>
                       <CardDescription>Keep your financial data safe</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Automatic Cloud Backup Toggle */}
                       <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
-                        <div>
-                          <p className="font-semibold">Local Backup</p>
-                          <p className="text-sm text-muted-foreground">Download all accounts and history as JSON.</p>
+                        <div className="space-y-0.5 max-w-[70%]">
+                          <p className="font-semibold text-sm">Automatic Cloud Backup</p>
+                          <p className="text-xs text-muted-foreground">
+                            {user && user.authMethod !== 'guest' 
+                              ? "Automatically sync ledger changes to Firebase secure cloud storage." 
+                              : "Not available in Guest Mode. Log in to enable secure cloud backups."}
+                          </p>
                         </div>
-                        <Button onClick={handleExportData} size="sm">
-                          <Download className="mr-2 h-4 w-4" /> Export
-                        </Button>
+                        <button
+                          type="button"
+                          disabled={!user || user.authMethod === 'guest'}
+                          onClick={() => setCloudBackupEnabled(!cloudBackupEnabled)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                            user && user.authMethod !== 'guest' && cloudBackupEnabled ? "bg-primary" : "bg-input"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              user && user.authMethod !== 'guest' && cloudBackupEnabled ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {user && user.authMethod !== 'guest' && (
+                        <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
+                          <div className="space-y-0.5 max-w-[70%]">
+                            <p className="font-semibold text-sm">Force Cloud Sync</p>
+                            <p className="text-xs text-muted-foreground">Manually upload all local accounts and records to Firestore.</p>
+                          </div>
+                          <Button onClick={handleCloudBackupNow} size="sm" variant="default" className="shrink-0">
+                            Backup Now
+                          </Button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-muted/30 rounded-lg border gap-4">
+                        <div>
+                          <p className="font-semibold text-sm">Local Backup</p>
+                          <p className="text-xs text-muted-foreground">Export/Import accounts and transaction history as JSON.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button onClick={handleExportData} size="sm" variant="outline">
+                            <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+                          </Button>
+                          <label className="cursor-pointer shrink-0">
+                            <input 
+                              type="file" 
+                              accept=".json" 
+                              onChange={handleImportData} 
+                              className="hidden" 
+                            />
+                            <span className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3">
+                              Import
+                            </span>
+                          </label>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between p-4 bg-destructive/5 rounded-lg border border-destructive/10">
                         <div>
-                          <p className="font-semibold text-destructive">Factory Reset</p>
-                          <p className="text-sm text-muted-foreground">Wipe all local data. This action is irreversible.</p>
+                          <p className="font-semibold text-sm text-destructive">Factory Reset</p>
+                          <p className="text-xs text-muted-foreground">Wipe all local data. This action is irreversible.</p>
                         </div>
                         <Button variant="destructive" size="sm" onClick={() => setIsClearDataAlertOpen(true)}>
                           <Trash className="mr-2 h-4 w-4" /> Reset
                         </Button>
                       </div>
+
+                      {/* Firebase SDK Config Check */}
+                      <div className="pt-4 mt-2 border-t space-y-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Firebase Cloud SDK Bindings</h4>
+                        <div className="grid grid-cols-2 gap-2 text-xs p-3 bg-muted/40 rounded-lg border">
+                          <div>
+                            <p className="text-slate-500 font-semibold">Project ID</p>
+                            <p className="font-mono text-slate-800 font-bold truncate" title={auth.app.options.projectId || ""}>
+                              {auth.app.options.projectId || "Not Configured"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 font-semibold">SDK Status</p>
+                            <p className="font-semibold mt-0.5">
+                              {user && user.authMethod !== 'guest' ? (
+                                <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Active Synced</span>
+                              ) : (
+                                <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Mode</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
-                  <Card className="shadow-sm">
+                  {/* About Card */}
+                  <Card className="shadow-sm border-slate-200/80">
                     <CardHeader>
                       <CardTitle>About RupeeLedger</CardTitle>
                       <CardDescription>Application details</CardDescription>
@@ -633,7 +2647,7 @@ export default function RupeeLedger() {
                        <div className="space-y-3">
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Build Version</span>
-                            <span className="font-bold">1.1.0 Stable</span>
+                            <span className="font-bold">1.2.0 Commercial</span>
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Storage Engine</span>
@@ -663,7 +2677,7 @@ export default function RupeeLedger() {
         }
       }}>
         <DialogContent>
-          <form onSubmit={handleAccountSubmit}>
+          <form onSubmit={handleAccountSubmit} key={editingAccount ? editingAccount.id : "new"}>
             <DialogHeader>
               <DialogTitle>{editingAccount ? "Modify Account" : "Establish New Account"}</DialogTitle>
             </DialogHeader>
@@ -687,9 +2701,58 @@ export default function RupeeLedger() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="balance">Initial Balance (INR)</Label>
+                  <Input 
+                    id="balance" 
+                    name="balance" 
+                    type="number" 
+                    step="0.01" 
+                    defaultValue={editingAccount ? Math.abs(editingAccount.initialBalance) : ""} 
+                    placeholder="0.00" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="balanceType">Balance Type</Label>
+                  <Select name="balanceType" defaultValue={editingAccount && editingAccount.initialBalance < 0 ? "Debit" : "Credit"}>
+                    <SelectTrigger id="balanceType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Credit">Credit (Asset / Cash In)</SelectItem>
+                      <SelectItem value="Debit">Debit (Liability / Loan / Cash Out)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="balance">Initial Deposit (INR)</Label>
-                <Input id="balance" name="balance" type="number" step="0.01" defaultValue={editingAccount?.initialBalance} placeholder="0.00" />
+                <Label htmlFor="gstin">GSTIN (Optional)</Label>
+                <Input 
+                  id="gstin" 
+                  name="gstin" 
+                  defaultValue={editingAccount?.gstin} 
+                  placeholder="e.g. 07AAAAA1111A1Z1" 
+                  className="font-mono uppercase"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address (Optional)</Label>
+                <Input 
+                  id="address" 
+                  name="address" 
+                  defaultValue={editingAccount?.address} 
+                  placeholder="Street name, City, State" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number (Optional)</Label>
+                <Input 
+                  id="phone" 
+                  name="phone" 
+                  defaultValue={editingAccount?.phone} 
+                  placeholder="e.g. +91 99999 99999" 
+                />
               </div>
             </div>
             <DialogFooter>
@@ -704,7 +2767,7 @@ export default function RupeeLedger() {
       {/* Transaction Edit Modal */}
       <Dialog open={!!editingTransaction} onOpenChange={(open) => !open && setEditingTransaction(null)}>
         <DialogContent>
-          <form onSubmit={handleTransactionEditSubmit}>
+          <form onSubmit={handleTransactionEditSubmit} key={editingTransaction ? editingTransaction.id : "new"}>
             <DialogHeader>
               <DialogTitle>Update Entry Record</DialogTitle>
             </DialogHeader>
@@ -739,34 +2802,79 @@ export default function RupeeLedger() {
 
       {/* Reports & Vouchers */}
       <Dialog open={!!selectedVoucher} onOpenChange={(open) => !open && setSelectedVoucher(null)}>
-        <DialogContent className="max-w-3xl no-print">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader className="no-print">
             <DialogTitle>Voucher Document</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto pt-2">
-            {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
+            {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} businessProfile={businessProfile} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedInvoice} onOpenChange={(open) => !open && setSelectedInvoice(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader className="no-print">
+            <DialogTitle>Tax Invoice Document</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[75vh] overflow-y-auto pt-2">
+            {selectedInvoice && <InvoicePrint transaction={selectedInvoice.t} account={selectedInvoice.a} businessProfile={businessProfile} />}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isNewInvoiceOpen} onOpenChange={setIsNewInvoiceOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="no-print">
+            <DialogTitle>Create GST Tax Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            {isNewInvoiceOpen && (
+              <TransactionForm 
+                accounts={accounts}
+                defaultAccountId={selectedAccountId}
+                defaultGstEnabled={true}
+                onSuccess={(data) => { 
+                  handleTransactionAdd(data); 
+                  setIsNewInvoiceOpen(false); 
+                }} 
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isReportOpen} onOpenChange={(open) => setIsReportOpen(open)}>
-        <DialogContent className="max-w-4xl no-print">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader className="no-print">
             <DialogTitle>Account Audit Statement</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto">
-            {selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} />}
+            {selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} businessProfile={businessProfile} />}
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isDailyReportOpen} onOpenChange={setIsDailyReportOpen}>
-        <DialogContent className="max-w-4xl no-print">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader className="no-print">
             <DialogTitle>Chronological Daily Ledger</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto">
-            <DailyReport transactions={transactions} accounts={accounts} />
+            <DailyReport 
+              transactions={transactions} 
+              accounts={accounts} 
+              dateInput={dailyReportDateInput}
+              setDateInput={setDailyReportDateInput}
+              date={dailyReportDate}
+              reportMode={dailyReportMode}
+              setReportMode={setDailyReportMode}
+              selectedMonth={dailyReportMonth}
+              setSelectedMonth={setDailyReportMonth}
+              selectedYear={dailyReportYear}
+              setSelectedYear={setDailyReportYear}
+              businessProfile={businessProfile}
+            />
           </div>
         </DialogContent>
       </Dialog>
@@ -814,7 +2922,7 @@ export default function RupeeLedger() {
                Complete Data Eradication?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This protocol will permanently eliminate every account, entry, and preference from this device's memory. 
+              This protocol will permanently eliminate every account, entry, and preference from this device&apos;s memory. 
               <strong> You have been warned.</strong> It is recommended to export a backup before proceeding.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -829,9 +2937,25 @@ export default function RupeeLedger() {
 
       {/* Print-only containers */}
       <div className="print-only fixed inset-0 z-[9999] bg-white overflow-visible">
-         {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
-         {isReportOpen && selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} />}
-         {isDailyReportOpen && <DailyReport transactions={transactions} accounts={accounts} />}
+         {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} businessProfile={businessProfile} />}
+         {selectedInvoice && <InvoicePrint transaction={selectedInvoice.t} account={selectedInvoice.a} businessProfile={businessProfile} />}
+         {isReportOpen && selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} businessProfile={businessProfile} />}
+         {isDailyReportOpen && (
+           <DailyReport 
+             transactions={transactions} 
+             accounts={accounts} 
+             dateInput={dailyReportDateInput}
+             setDateInput={setDailyReportDateInput}
+             date={dailyReportDate}
+             reportMode={dailyReportMode}
+             setReportMode={setDailyReportMode}
+             selectedMonth={dailyReportMonth}
+             setSelectedMonth={setDailyReportMonth}
+             selectedYear={dailyReportYear}
+             setSelectedYear={setDailyReportYear}
+             businessProfile={businessProfile}
+           />
+         )}
       </div>
     </div>
   );

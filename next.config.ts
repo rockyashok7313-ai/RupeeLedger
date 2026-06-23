@@ -1,6 +1,9 @@
 import type {NextConfig} from 'next';
 
+const isStatic = process.env.IS_STATIC === 'true';
+
 const nextConfig: NextConfig = {
+  output: isStatic ? 'export' : undefined,
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
@@ -9,6 +12,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',

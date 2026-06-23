@@ -65,9 +65,30 @@ export function AccountCard({ account, onClick, onEdit, onDelete, isActive }: Ac
         <div className="text-2xl font-bold">
           <CurrencyDisplay amount={account.currentBalance} />
         </div>
-        <Badge variant="outline" className="mt-2 font-normal">
-          {account.type}
-        </Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+          <Badge variant="outline" className="font-normal">
+            {account.type}
+          </Badge>
+          {account.gstin && (
+            <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+              GST: {account.gstin}
+            </span>
+          )}
+        </div>
+        {(account.phone || account.address) && (
+          <div className="mt-3 pt-2 border-t border-muted/50 text-[11px] text-muted-foreground space-y-0.5">
+            {account.phone && (
+              <div className="truncate flex items-center gap-1">
+                <span className="font-semibold opacity-75">Phone:</span> {account.phone}
+              </div>
+            )}
+            {account.address && (
+              <div className="truncate flex items-center gap-1" title={account.address}>
+                <span className="font-semibold opacity-75">Addr:</span> {account.address}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

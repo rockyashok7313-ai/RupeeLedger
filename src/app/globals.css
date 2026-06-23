@@ -4,47 +4,47 @@
 
 @layer base {
   :root {
-    --background: 204 20% 96%;
-    --foreground: 216 66% 15%;
+    --background: 220 33% 97%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 216 66% 15%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 216 66% 15%;
-    --primary: 216 66% 22%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 222 47% 11%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 186 78% 58%;
-    --secondary-foreground: 216 66% 22%;
-    --muted: 204 10% 90%;
-    --muted-foreground: 216 20% 40%;
-    --accent: 186 78% 58%;
-    --accent-foreground: 216 66% 22%;
+    --secondary: 142 70% 36%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 12% 92%;
+    --muted-foreground: 220 15% 45%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 216 20% 85%;
-    --input: 216 20% 85%;
-    --ring: 216 66% 22%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 222 47% 11%;
     --radius: 0.75rem;
   }
   .dark {
-    --background: 216 66% 10%;
-    --foreground: 204 20% 96%;
-    --card: 216 66% 12%;
-    --card-foreground: 204 20% 96%;
-    --popover: 216 66% 12%;
-    --popover-foreground: 204 20% 96%;
-    --primary: 204 20% 96%;
-    --primary-foreground: 216 66% 22%;
-    --secondary: 186 78% 40%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 216 30% 20%;
-    --muted-foreground: 216 20% 70%;
-    --accent: 186 78% 40%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 62% 30%;
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 142 70% 45%;
+    --secondary-foreground: 222 47% 6%;
+    --muted: 222 25% 18%;
+    --muted-foreground: 220 15% 70%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 62% 35%;
     --destructive-foreground: 0 0% 98%;
-    --border: 216 30% 25%;
-    --input: 216 30% 25%;
-    --ring: 186 78% 58%;
+    --border: 222 25% 22%;
+    --input: 222 25% 22%;
+    --ring: 38 92% 50%;
   }
 }
 
@@ -57,15 +57,60 @@
   }
 }
 
+@page {
+  size: A4;
+  margin: 1.27cm;
+}
+
 @media print {
-  .no-print {
+  .no-print,
+  div[class*="bg-black/80"],
+  div[class*="backdrop-blur"],
+  [data-radix-pointer-down-outside],
+  button[aria-label="Close"],
+  div[role="dialog"] button {
     display: none !important;
   }
+  
   .print-only {
     display: block !important;
   }
+  
   body {
     background: white !important;
+    color: black !important;
+  }
+  
+  /* Reset Dialog Content styling to be clean for printing */
+  div[role="dialog"] {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    transform: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Remove scrollbars from the wrapper inside Dialog Content on print */
+  div[role="dialog"] .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  
+  /* Hide the semi-transparent dialog overlay backdrop */
+  div[data-state="open"] {
+    background-color: transparent !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
   }
 }
 

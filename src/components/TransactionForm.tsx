@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Account, TransactionType } from "@/lib/types";
-import { suggestNarration } from "@/ai/flows/ai-narration-suggester-flow";
+import { format, parse } from "date-fns";
 import { Sparkles, Loader2, PlusCircle, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { toast } from "@/hooks/use-toast";
@@ -22,15 +22,43 @@ import {
 interface TransactionFormProps {
   accounts: Account[];
   defaultAccountId?: string | null;
-  onSuccess: (data: { accountId: string; type: TransactionType; amount: number; description: string }) => void;
+  defaultGstEnabled?: boolean;
+  onSuccess: (data: { 
+    accountId: string; 
+    type: TransactionType; 
+    amount: number; 
+    description: string; 
+    date: number;
+    gstEnabled?: boolean;
+    gstRate?: number;
+    gstType?: 'CGST+SGST' | 'IGST';
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+    taxableAmount?: number;
+    invoiceNumber?: string;
+    customerName?: string;
+    customerGstin?: string;
+    gstCalculationType?: 'including' | 'excluding';
+  }) => void;
 }
 
-export function TransactionForm({ accounts, defaultAccountId, onSuccess }: TransactionFormProps) {
+export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled, onSuccess }: TransactionFormProps) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [type, setType] = useState<TransactionType>("Debit");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [dateInput, setDateInput] = useState<string>(format(new Date(), "dd-MM-yyyy"));
+
+  // GST State Extensions
+  const [gstEnabled, setGstEnabled] = useState(defaultGstEnabled ?? false);
+  const [gstRate, setGstRate] = useState("18");
+  const [gstType, setGstType] = useState<'CGST+SGST' | 'IGST'>("CGST+SGST");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerGstin, setCustomerGstin] = useState("");
+  const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>("including");
 
   // Sync selected account when default changes
   useEffect(() => {
@@ -39,7 +67,20 @@ export function TransactionForm({ accounts, defaultAccountId, onSuccess }: Trans
     } else if (accounts.length > 0 && !selectedAccountId) {
       setSelectedAccountId(accounts[0].id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultAccountId, accounts]);
+
+  // Auto-prefill customer details when selectedAccountId changes
+  useEffect(() => {
+    const activeAcc = accounts.find(a => a.id === selectedAccountId);
+    if (activeAcc) {
+      setCustomerName(activeAcc.name || "");
+      setCustomerGstin(activeAcc.gstin || "");
+    } else {
+      setCustomerName("");
+      setCustomerGstin("");
+    }
+  }, [selectedAccountId, accounts]);
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
@@ -56,14 +97,35 @@ export function TransactionForm({ accounts, defaultAccountId, onSuccess }: Trans
 
     setIsSuggesting(true);
     try {
-      const suggestion = await suggestNarration({
-        transactionType: type,
-        amount: numAmount,
-        accountName: selectedAccount.name,
-        descriptionHint: description || undefined,
+      const isMobile = typeof window !== 'undefined' && window.location.origin.startsWith('capacitor://');
+      const apiEndpoint = isMobile 
+        ? 'https://v0-indian-payroll-website.vercel.app/api/suggest-narration' 
+        : '/api/suggest-narration';
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transactionType: type,
+          amount: numAmount,
+          accountName: selectedAccount.name,
+          descriptionHint: description || undefined,
+        }),
       });
-      setDescription(suggestion);
-    } catch (error) {
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+      if (data.suggestion) {
+        setDescription(data.suggestion);
+      } else {
+        throw new Error('No suggestion returned');
+      }
+    } catch {
       toast({ title: "Failed to suggest narration", variant: "destructive" });
     } finally {
       setIsSuggesting(false);
@@ -80,14 +142,67 @@ export function TransactionForm({ accounts, defaultAccountId, onSuccess }: Trans
     if (!numAmount || numAmount <= 0) return;
     if (!description.trim()) return;
 
+    // Parse manual date
+    const parsedDate = parse(dateInput, "dd-MM-yyyy", new Date());
+    if (isNaN(parsedDate.getTime())) {
+      toast({ title: "Please enter a valid date in DD-MM-YYYY format", variant: "destructive" });
+      return;
+    }
+
+    // Dynamic GST Splits Calculation
+    const rate = parseFloat(gstRate);
+    let cgst = 0, sgst = 0, igst = 0, taxableAmount = numAmount, recordedAmount = numAmount;
+    if (gstEnabled && rate > 0) {
+      if (gstCalculationType === 'excluding') {
+        taxableAmount = numAmount;
+        const totalGst = Math.round((numAmount * (rate / 100)) * 100) / 100;
+        recordedAmount = Math.round((numAmount + totalGst) * 100) / 100;
+        if (gstType === 'CGST+SGST') {
+          cgst = Math.round((totalGst / 2) * 100) / 100;
+          sgst = Math.round((totalGst / 2) * 100) / 100;
+        } else {
+          igst = totalGst;
+        }
+      } else {
+        taxableAmount = Math.round((numAmount / (1 + rate / 100)) * 100) / 100;
+        const totalGst = Math.round((numAmount - taxableAmount) * 100) / 100;
+        recordedAmount = numAmount;
+        if (gstType === 'CGST+SGST') {
+          cgst = Math.round((totalGst / 2) * 100) / 100;
+          sgst = Math.round((totalGst / 2) * 100) / 100;
+        } else {
+          igst = totalGst;
+        }
+      }
+    }
+
     onSuccess({
       accountId: selectedAccountId,
       type,
-      amount: numAmount,
+      amount: recordedAmount,
       description,
+      date: parsedDate.getTime(),
+      gstEnabled,
+      gstRate: gstEnabled ? rate : undefined,
+      gstType: gstEnabled ? gstType : undefined,
+      cgst: gstEnabled ? cgst : undefined,
+      sgst: gstEnabled ? sgst : undefined,
+      igst: gstEnabled ? igst : undefined,
+      taxableAmount: gstEnabled ? taxableAmount : undefined,
+      invoiceNumber: gstEnabled ? invoiceNumber : undefined,
+      customerName: gstEnabled ? customerName : undefined,
+      customerGstin: gstEnabled ? customerGstin : undefined,
+      gstCalculationType: gstEnabled ? gstCalculationType : undefined,
     });
+
     setAmount("");
     setDescription("");
+    setDateInput(format(new Date(), "dd-MM-yyyy"));
+    setGstEnabled(defaultGstEnabled ?? false);
+    setInvoiceNumber("");
+    setCustomerName("");
+    setCustomerGstin("");
+    setGstCalculationType("including");
   };
 
   if (accounts.length === 0) return null;
@@ -140,6 +255,18 @@ export function TransactionForm({ accounts, defaultAccountId, onSuccess }: Trans
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="date">Transaction Date (DD-MM-YYYY)</Label>
+            <Input
+              id="date"
+              type="text"
+              placeholder="e.g. 16-06-2026"
+              value={dateInput}
+              onChange={(e) => setDateInput(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="amount">Amount (INR)</Label>
             <Input
               id="amount"
@@ -179,6 +306,118 @@ export function TransactionForm({ accounts, defaultAccountId, onSuccess }: Trans
               className="min-h-[80px]"
             />
           </div>
+
+          {/* GST and Invoice Checkbox Toggle */}
+          <div className="flex items-center space-x-2 pt-2 border-t">
+            <input 
+              id="gst-enabled" 
+              type="checkbox" 
+              checked={gstEnabled} 
+              onChange={(e) => setGstEnabled(e.target.checked)} 
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+            />
+            <Label htmlFor="gst-enabled" className="font-semibold cursor-pointer text-sm">Create GST Tax Invoice</Label>
+          </div>
+
+          {gstEnabled && (
+            <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg animate-in slide-in-from-top-2 duration-300">
+              <div className="space-y-1 pb-1 border-b border-slate-200">
+                <Label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">GST Calculation Mode</Label>
+                <div className="relative flex items-center bg-slate-200/60 p-0.5 rounded-full border border-slate-300/40 w-full h-8 select-none">
+                  {/* Sliding indicator */}
+                  <div 
+                    className="absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] bg-white rounded-full shadow-sm transition-all duration-300 ease-out"
+                    style={{
+                      left: gstCalculationType === 'including' ? '2px' : 'calc(50%)'
+                    }}
+                  />
+                  
+                  {/* Tab 1 */}
+                  <button
+                    type="button"
+                    onClick={() => setGstCalculationType('including')}
+                    className={`flex-1 text-center text-[10px] font-bold z-10 transition-colors duration-200 ${gstCalculationType === 'including' ? 'text-primary' : 'text-slate-500'}`}
+                  >
+                    Including GST (Inclusive)
+                  </button>
+                  
+                  {/* Tab 2 */}
+                  <button
+                    type="button"
+                    onClick={() => setGstCalculationType('excluding')}
+                    className={`flex-1 text-center text-[10px] font-bold z-10 transition-colors duration-200 ${gstCalculationType === 'excluding' ? 'text-primary' : 'text-slate-500'}`}
+                  >
+                    Excluding GST (Exclusive)
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="invoice-no" className="text-xs">Invoice Number</Label>
+                  <Input 
+                    id="invoice-no" 
+                    value={invoiceNumber} 
+                    onChange={(e) => setInvoiceNumber(e.target.value)} 
+                    placeholder="e.g. INV-102" 
+                    className="h-8 text-xs bg-white"
+                    required={gstEnabled}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="gst-rate" className="text-xs">GST Rate (%)</Label>
+                  <Select value={gstRate} onValueChange={setGstRate}>
+                    <SelectTrigger id="gst-rate" className="h-8 text-xs bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5% GST</SelectItem>
+                      <SelectItem value="12">12% GST</SelectItem>
+                      <SelectItem value="18">18% GST</SelectItem>
+                      <SelectItem value="28">28% GST</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="cust-name" className="text-xs">Customer Name</Label>
+                <Input 
+                  id="cust-name" 
+                  value={customerName} 
+                  onChange={(e) => setCustomerName(e.target.value)} 
+                  placeholder="e.g. Acme Corp" 
+                  className="h-8 text-xs bg-white"
+                  required={gstEnabled}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="cust-gstin" className="text-xs">Customer GSTIN</Label>
+                  <Input 
+                    id="cust-gstin" 
+                    value={customerGstin} 
+                    onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())} 
+                    placeholder="e.g. 07AAAAA1111A1Z1" 
+                    className="h-8 text-xs font-mono uppercase bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="gst-type" className="text-xs">Tax Treatment</Label>
+                  <Select value={gstType} onValueChange={(val) => setGstType(val as 'CGST+SGST' | 'IGST')}>
+                    <SelectTrigger id="gst-type" className="h-8 text-xs bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CGST+SGST">Intra-State (CGST+SGST)</SelectItem>
+                      <SelectItem value="IGST">Inter-State (IGST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Button type="submit" className="w-full bg-primary hover:bg-primary/90 shadow-md">
             Record Transaction

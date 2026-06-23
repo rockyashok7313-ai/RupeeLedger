@@ -1,4 +1,3 @@
-'use server';
 /**
  * @fileOverview An AI tool that suggests concise and relevant narrations for financial transactions.
  *

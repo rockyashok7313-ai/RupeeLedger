@@ -7,6 +7,9 @@ export interface Account {
   initialBalance: number;
   currentBalance: number;
   createdAt: number;
+  address?: string;
+  gstin?: string;
+  phone?: string;
 }
 
 export type TransactionType = 'Credit' | 'Debit';
@@ -19,4 +22,49 @@ export interface Transaction {
   description: string;
   date: number;
   balanceAfter: number;
+  // GST & Invoice extensions
+  gstEnabled?: boolean;
+  gstRate?: number;
+  gstType?: 'CGST+SGST' | 'IGST';
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  taxableAmount?: number;
+  invoiceNumber?: string;
+  customerName?: string;
+  customerGstin?: string;
+  gstCalculationType?: 'including' | 'excluding';
 }
+
+export interface BusinessProfile {
+  companyName: string;
+  address: string;
+  gstin: string;
+  phone: string;
+  printFooter: string;
+}
+
+export interface Subscription {
+  status: 'active' | 'expired';
+  plan: string;
+  price: string;
+  renewalDate: string;
+  licenseKey: string;
+}
+
+export interface SecuritySettings {
+  pinEnabled: boolean;
+  pinCode: string;
+  hashedPinCode?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  avatarUrl?: string;
+  authMethod: 'google' | 'phone' | 'email' | 'guest';
+  createdAt: number;
+}
+

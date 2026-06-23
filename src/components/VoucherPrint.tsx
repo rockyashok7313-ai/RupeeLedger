@@ -1,11 +1,27 @@
 import React from 'react';
-import { Transaction, Account } from '@/lib/types';
+import { Transaction, Account, BusinessProfile } from '@/lib/types';
 import { CurrencyDisplay } from './CurrencyDisplay';
 import { format } from 'date-fns';
 import { Printer, MessageCircle } from 'lucide-react';
 import { Button } from './ui/button';
 
-export function VoucherPrint({ transaction, account }: { transaction: Transaction; account: Account }) {
+export function VoucherPrint({ 
+  transaction, 
+  account, 
+  businessProfile 
+}: { 
+  transaction: Transaction; 
+  account: Account; 
+  businessProfile?: BusinessProfile;
+}) {
+  const profile = businessProfile || {
+    companyName: "RupeeLedger",
+    address: "",
+    gstin: "",
+    phone: "",
+    printFooter: ""
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -16,7 +32,8 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
       currency: 'INR',
     }).format(transaction.amount);
     
-    const text = `*RupeeLedger Voucher*%0A--------------------------%0A*Type:* ${transaction.type}%0A*Account:* ${account.name}%0A*Date:* ${format(transaction.date, 'PPP')}%0A*Amount:* ${amount}%0A*Narration:* ${transaction.description}%0A--------------------------%0A_Generated via RupeeLedger_`;
+    const company = profile.companyName || "RupeeLedger";
+    const text = `*${company} Voucher*%0A--------------------------%0A*Type:* ${transaction.type}%0A*Account:* ${account.name}%0A*Date:* ${format(transaction.date, 'PPP')}%0A*Amount:* ${amount}%0A*Narration:* ${transaction.description}%0A--------------------------%0A_Generated via ${company}_`;
     
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
@@ -32,11 +49,22 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
         </Button>
       </div>
 
-      <div className="print-only border-2 border-primary p-8 bg-white max-w-2xl mx-auto rounded-lg shadow-sm">
+      <div className="border-2 border-primary p-8 bg-white max-w-2xl mx-auto rounded-lg shadow-sm">
         <div className="flex justify-between items-start border-b-2 border-primary pb-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-primary">RupeeLedger</h1>
-            <p className="text-sm text-muted-foreground">Professional Financial Voucher</p>
+            <h1 className="text-3xl font-bold text-primary">
+              {profile.companyName || "RupeeLedger"}
+            </h1>
+            {profile.address && (
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm">{profile.address}</p>
+            )}
+            {profile.gstin && (
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">GSTIN: {profile.gstin}</p>
+            )}
+            {profile.phone && (
+              <p className="text-xs text-muted-foreground mt-0.5">Contact: {profile.phone}</p>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-2 font-semibold">Professional Financial Voucher</p>
           </div>
           <div className="text-right">
             <h2 className="text-xl font-bold uppercase">{transaction.type} VOUCHER</h2>
@@ -58,7 +86,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
 
         <div className="bg-muted/30 p-4 rounded-md mb-8">
           <p className="text-xs uppercase font-semibold text-muted-foreground mb-2">Description / Particulars</p>
-          <p className="text-lg italic">"{transaction.description}"</p>
+          <p className="text-lg italic">&ldquo;{transaction.description}&rdquo;</p>
         </div>
 
         <div className="flex justify-end items-center mb-12">
@@ -77,12 +105,17 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
           </div>
           <div className="text-center">
             <div className="border-b border-primary w-full h-8 mb-2"></div>
-            <p className="text-xs uppercase font-bold">Receiver's Signature</p>
+            <p className="text-xs uppercase font-bold">Receiver&apos;s Signature</p>
           </div>
         </div>
         
-        <div className="mt-12 text-center text-[10px] text-muted-foreground italic">
-          This is a computer-generated voucher from RupeeLedger.
+        <div className="mt-12 text-center text-[10px] text-muted-foreground italic border-t border-dashed pt-4 space-y-1">
+          {profile.printFooter && (
+            <p className="font-semibold text-muted-foreground mb-1">{profile.printFooter}</p>
+          )}
+          <p>
+            This is a computer-generated voucher from {profile.companyName || "RupeeLedger"}.
+          </p>
         </div>
       </div>
     </div>
