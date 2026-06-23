@@ -1,0 +1,24 @@
+mutation CreateSeedData @transaction {
+  facility_insertMany(data: [
+    {
+      facilityId: "F-001",
+      name: "Sector Alpha",
+      locationCode: "LOC-A",
+      maxCapacity: 10
+    },
+    {
+      facilityId: "F-002",
+      name: "Sector Beta",
+      locationCode: "LOC-B",
+      maxCapacity: 5
+    }
+  ])
+  chamber_insertMany(data: [
+    {
+      chamberId: "C-001",
+      chamberName: "A-01",
+      status: "Active",
+      facility: { id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" }
+    }
+  ])
+}

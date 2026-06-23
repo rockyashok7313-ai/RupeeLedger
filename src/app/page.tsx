@@ -657,8 +657,9 @@ export default function RupeeLedger() {
     toast({ title: "Authenticating...", description: "Checking credentials." });
     try {
       await signInWithEmailAndPassword(auth, emailInput, passwordInput);
-    } catch (err: any) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/cannot-find-user') {
+    } catch (err: unknown) {
+      const authErr = err as { code?: string; message?: string };
+      if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/cannot-find-user') {
         toast({ title: "Registering...", description: "Creating a new account." });
         try {
           await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
@@ -674,7 +675,7 @@ export default function RupeeLedger() {
         console.error("Firebase login error:", err);
         toast({
           title: "Authentication Failed",
-          description: err.message,
+          description: authErr.message || "An unexpected error occurred.",
           variant: "destructive"
         });
       }
@@ -812,12 +813,14 @@ export default function RupeeLedger() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const RazorpayConstructor = (window as any).Razorpay;
 
-      // Handle offline or blocked checkout.js
-      if (!RazorpayConstructor) {
+      // Handle offline or mock orders (missing API keys on server side)
+      if (!RazorpayConstructor || order.isMock) {
         toast({
-          title: "Gateway Offline / Mock Mode",
-          description: "Razorpay script failed to load. Running simulated verification checkout...",
-          variant: "destructive"
+          title: order.isMock ? "Gateway Mock Mode" : "Gateway Offline / Mock Mode",
+          description: order.isMock 
+            ? "Server keys missing. Running simulated verification checkout..." 
+            : "Razorpay script failed to load. Running simulated verification checkout...",
+          variant: order.isMock ? "default" : "destructive"
         });
 
         // Directly call verify endpoint with simulated attributes
@@ -845,7 +848,7 @@ export default function RupeeLedger() {
       }
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID',
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T57Ggju7ZB2ceT',
         amount: order.amount,
         currency: order.currency,
         name: 'Rupee Ledger Pro',
@@ -918,7 +921,13 @@ export default function RupeeLedger() {
     try {
       const q = query(collection(db, "keys"), where("createdBy", "==", userId));
       const querySnapshot = await getDocs(q);
-      const keys: any[] = [];
+      interface ResellerKey {
+        key: string;
+        duration: string;
+        createdAt: number;
+        status: string;
+      }
+      const keys: ResellerKey[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
         keys.push({

@@ -10,6 +10,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    ignores: ["src/dataconnect-generated/**/*", "functions/**/*"]
+  },
   ...compat.extends("next/core-web-vitals"),
   ...compat.extends("next/typescript"),
 ];

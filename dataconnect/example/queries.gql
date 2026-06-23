@@ -1,0 +1,35 @@
+mutation CreateUser($name: String!, $clearanceLevel: Int!, $userId: String!) @auth(level: USER) {
+  user_insert(data: {
+    name: $name,
+    clearanceLevel: $clearanceLevel,
+    userId: $userId
+  })
+}
+
+mutation CreateCheckIn($chamberId: UUID!, $userId: UUID!, $checkInId: String!, $startTime: Timestamp!) @auth(level: USER) {
+  checkIn_insert(data: {
+    chamberId: $chamberId,
+    userId: $userId,
+    checkInId: $checkInId,
+    startTime: $startTime,
+    status: "ACTIVE"
+  })
+}
+
+query ListFacilityChambers($facilityId: UUID!) @auth(level: USER) {
+  chambers(where: {facilityId: {eq: $facilityId}}) {
+    chamberName
+    status
+    lastServicedDate
+  }
+}
+
+query GetUserCheckIns @auth(level: USER) {
+  checkIns(where: {userId: {eq_expr: "auth.uid"}}) {
+    checkInId
+    startTime
+    chamber {
+      chamberName
+    }
+  }
+}

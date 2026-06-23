@@ -1,0 +1,40 @@
+type User @table {
+  userId: String!
+  name: String!
+  clearanceLevel: Int!
+  department: String
+  contactNumber: String
+}
+
+type Facility @table {
+  facilityId: String!
+  name: String!
+  locationCode: String!
+  maxCapacity: Int
+}
+
+type Chamber @table {
+  chamberId: String!
+  chamberName: String!
+  status: String!
+  lastServicedDate: Date
+  facility: Facility!
+}
+
+type CheckIn @table {
+  checkInId: String!
+  startTime: Timestamp!
+  status: String!
+  endTime: Timestamp
+  gravityIndexReading: Float
+  user: User!
+  chamber: Chamber!
+}
+
+type Alert @table {
+  alertId: String!
+  severity: String!
+  timestamp: Timestamp!
+  resolutionNotes: String
+  chamber: Chamber!
+}
