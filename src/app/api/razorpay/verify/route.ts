@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { db } from '@/lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import nodemailer from 'nodemailer';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, duration, email } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id) {
       return NextResponse.json({ verified: false, error: 'Missing parameters.' }, { status: 400 });
@@ -13,11 +16,98 @@ export async function POST(request: Request) {
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
+    const generateKeyString = () => {
+      const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `RL-PRO-${seg()}-${seg()}-${seg()}`;
+    };
+
+    const durationDays = duration === 'annual' ? 365 : 30;
+
+    // Helper to generate and save key in Firestore
+    const createAndSaveKey = async (payId: string) => {
+      const newKeyStr = generateKeyString();
+      const keyDocRef = doc(db, "keys", newKeyStr);
+      await setDoc(keyDocRef, {
+        createdAt: Date.now(),
+        durationDays,
+        createdBy: userId || 'anonymous_buyer',
+        status: 'unused',
+        paymentId: payId
+      });
+      return newKeyStr;
+    };
+
+    // Helper to send email to customer
+    const sendEmailToCustomer = async (recipientEmail: string, licenseKey: string) => {
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = process.env.SMTP_PORT;
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      const smtpFrom = process.env.SMTP_FROM || "noreply@rupeeledger.com";
+
+      const subject = "Your RupeeLedger Pro Activation Key";
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h2 style="color: #13315e; text-align: center;">Welcome to RupeeLedger Pro!</h2>
+          <p>Thank you for buying a subscription. Your payment has been verified successfully.</p>
+          <p>Below is your unique Pro activation license key:</p>
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; text-align: center; border: 1px dashed #cbd5e1; margin: 20px 0;">
+            <code style="font-size: 20px; font-weight: bold; color: #0f172a; font-family: monospace; letter-spacing: 1px;">${licenseKey}</code>
+          </div>
+          <p><strong>Instructions:</strong></p>
+          <ol>
+            <li>Copy the code above.</li>
+            <li>Go to the settings section of the RupeeLedger application.</li>
+            <li>Paste it in the <strong>"Activate Annual License Key"</strong> field and click <strong>"Verify & Activate"</strong>.</li>
+          </ol>
+          <p style="margin-top: 30px; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+            This email was sent automatically following a successful payment verification. Please do not reply directly to this mail.
+          </p>
+        </div>
+      `;
+
+      if (smtpHost && smtpPort && smtpUser && smtpPass) {
+        try {
+          const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: Number(smtpPort),
+            secure: Number(smtpPort) === 465,
+            auth: {
+              user: smtpUser,
+              pass: smtpPass
+            }
+          });
+
+          await transporter.sendMail({
+            from: smtpFrom,
+            to: recipientEmail,
+            subject,
+            html: htmlContent
+          });
+          console.log(`Email sent successfully to ${recipientEmail} for payment ${razorpay_payment_id}`);
+        } catch (err) {
+          console.error(`Failed to send email to ${recipientEmail} using SMTP:`, err);
+        }
+      } else {
+        console.warn(`[SMTP NOT CONFIGURED] Simulated email delivery:
+To: ${recipientEmail}
+Subject: ${subject}
+License Key: ${licenseKey}
+Order ID: ${razorpay_order_id}
+Payment ID: ${razorpay_payment_id}
+        `);
+      }
+    };
+
     // Fallback for local sandbox/testing if credentials are not configured
     if (!keyId || !keySecret) {
       if (razorpay_order_id.startsWith('order_mock_')) {
         console.log('Using mock verification because keys are missing in environment.');
-        return NextResponse.json({ verified: true, isMock: true });
+        const newKey = await createAndSaveKey(razorpay_payment_id);
+        if (email) {
+          await sendEmailToCustomer(email, newKey);
+        }
+        return NextResponse.json({ verified: true, isMock: true, licenseKey: newKey });
       }
       return NextResponse.json({ verified: false, error: 'Verification credentials missing.' }, { status: 500 });
     }
@@ -66,7 +156,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ verified: false, error: 'Payment order ID mismatch.' }, { status: 400 });
     }
 
-    return NextResponse.json({ verified: true });
+    // Generate and save key on successful payment
+    const newKey = await createAndSaveKey(razorpay_payment_id);
+    if (email) {
+      await sendEmailToCustomer(email, newKey);
+    }
+    return NextResponse.json({ verified: true, licenseKey: newKey });
   } catch (error) {
     console.error('Error in razorpay/verify:', error);
     const errorMessage = error instanceof Error ? error.message : 'Verification failed.';

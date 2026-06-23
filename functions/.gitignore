@@ -4,3 +4,9 @@ __pycache__/
 # Python virtual environment
 venv/
 *.local
+
+# Compiled Javascript output
+lib/
+
+# Dependency directory
+node_modules/

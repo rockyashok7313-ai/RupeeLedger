@@ -772,6 +772,8 @@ export default function RupeeLedger() {
         ? ''
         : 'https://v0-indian-payroll-website.vercel.app';
 
+      const verifyUrl = `${targetUrl}/api/razorpay/verify`;
+
       toast({
         title: "Initiating Payment Gateway...",
         description: `Preparing payment for your ${duration} Pro Key.`
@@ -791,33 +793,6 @@ export default function RupeeLedger() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const RazorpayConstructor = (window as any).Razorpay;
 
-      const generateKeyString = () => {
-        const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
-        return `RL-PRO-${seg()}-${seg()}-${seg()}`;
-      };
-
-      const executeKeyPurchase = async (paymentId: string) => {
-        const newKeyStr = generateKeyString();
-        try {
-          const keyDocRef = doc(db, "keys", newKeyStr);
-          await setDoc(keyDocRef, {
-            createdAt: Date.now(),
-            durationDays: duration === "annual" ? 365 : 30,
-            createdBy: user?.id || 'guest_user',
-            status: 'unused',
-            paymentId: paymentId
-          });
-        } catch (dbErr) {
-          console.error("Failed to save key in Firestore, falling back locally:", dbErr);
-        }
-
-        setBoughtKey({ key: newKeyStr, duration: duration === "annual" ? "Annual (365 Days)" : "Monthly (30 Days)" });
-        
-        if (isOwner && user?.id) {
-          fetchGeneratedKeys(user.id);
-        }
-      };
-
       // Handle offline or mock orders (missing API keys on server side)
       if (!RazorpayConstructor || order.isMock) {
         toast({
@@ -825,13 +800,16 @@ export default function RupeeLedger() {
           description: "Server keys missing. Running simulated checkout...",
         });
 
-        const verifyResponse = await fetch(`${targetUrl}/api/razorpay/verify`, {
+        const verifyResponse = await fetch(verifyUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             razorpay_order_id: order.id,
             razorpay_payment_id: 'pay_mock_' + Math.random().toString(36).substring(2, 10),
-            razorpay_signature: 'sig_mock_' + Math.random().toString(36).substring(2, 10)
+            razorpay_signature: 'sig_mock_' + Math.random().toString(36).substring(2, 10),
+            userId: user?.id || 'guest_local',
+            duration,
+            email: user?.email || 'customer@example.com'
           })
         });
 
@@ -840,8 +818,11 @@ export default function RupeeLedger() {
         }
 
         const verifyResult = await verifyResponse.json();
-        if (verifyResult.verified) {
-          await executeKeyPurchase('pay_mock_' + Date.now());
+        if (verifyResult.verified && verifyResult.licenseKey) {
+          setBoughtKey({ key: verifyResult.licenseKey, duration: duration === "annual" ? "Annual (365 Days)" : "Monthly (30 Days)" });
+          if (isOwner && user?.id) {
+            fetchGeneratedKeys(user.id);
+          }
         } else {
           toast({ title: "Verification Failed", description: "Verification rejected.", variant: "destructive" });
         }
@@ -863,13 +844,16 @@ export default function RupeeLedger() {
               description: "Validating signature parameters."
             });
 
-            const verifyResponse = await fetch(`${targetUrl}/api/razorpay/verify`, {
+            const verifyResponse = await fetch(verifyUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
+                razorpay_signature: response.razorpay_signature,
+                userId: user?.id || 'guest_local',
+                duration,
+                email: user?.email || 'customer@example.com'
               })
             });
 
@@ -878,8 +862,11 @@ export default function RupeeLedger() {
             }
 
             const verifyResult = await verifyResponse.json();
-            if (verifyResult.verified) {
-              await executeKeyPurchase(response.razorpay_payment_id);
+            if (verifyResult.verified && verifyResult.licenseKey) {
+              setBoughtKey({ key: verifyResult.licenseKey, duration: duration === "annual" ? "Annual (365 Days)" : "Monthly (30 Days)" });
+              if (isOwner && user?.id) {
+                fetchGeneratedKeys(user.id);
+              }
             } else {
               toast({
                 title: "Invalid Signature",
