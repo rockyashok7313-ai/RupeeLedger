@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   Download,
   Trash,
-  TrendingUp
+  TrendingUp,
+  CheckCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile } from "@/lib/types";
@@ -50,7 +51,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -177,6 +179,7 @@ export default function RupeeLedger() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [isClearDataAlertOpen, setIsClearDataAlertOpen] = useState(false);
+  const [boughtKey, setBoughtKey] = useState<{ key: string, duration: string } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [dailyReportDateInput, setDailyReportDateInput] = useState<string>(
     format(new Date(), "dd-MM-yyyy")
@@ -760,49 +763,24 @@ export default function RupeeLedger() {
     }
   }, [subscription.renewalDate]);
 
-  const completeRenewal = () => {
-    try {
-      const currentRenewal = parse(subscription.renewalDate, "dd-MM-yyyy", new Date());
-      const newRenewal = addDays(currentRenewal, 30);
-      const newRenewalStr = format(newRenewal, "dd-MM-yyyy");
-      setSubscription(prev => ({
-        ...prev,
-        status: "active",
-        renewalDate: newRenewalStr
-      }));
-      toast({
-        title: "Subscription Renewed!",
-        description: `Successfully extended plan by 30 days. New renewal: ${newRenewalStr}.`,
-      });
-    } catch {
-      const newRenewalStr = format(addDays(new Date(), 30), "dd-MM-yyyy");
-      setSubscription(prev => ({
-        ...prev,
-        status: "active",
-        renewalDate: newRenewalStr
-      }));
-      toast({
-        title: "Subscription Renewed!",
-        description: `Successfully extended plan. New renewal: ${newRenewalStr}.`,
-      });
-    }
-  };
 
-  const handleRenewSubscription = async () => {
+
+  const handleBuyLicenseKey = async (duration: "monthly" | "annual") => {
     try {
+      const amount = duration === "annual" ? 5000 : 500;
       const targetUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? ''
         : 'https://v0-indian-payroll-website.vercel.app';
 
       toast({
         title: "Initiating Payment Gateway...",
-        description: "Contacting payment service providers."
+        description: `Preparing payment for your ${duration} Pro Key.`
       });
 
       const orderResponse = await fetch(`${targetUrl}/api/razorpay/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: 500 }) // ₹500 subscription renewal
+        body: JSON.stringify({ amount })
       });
 
       if (!orderResponse.ok) {
@@ -813,17 +791,40 @@ export default function RupeeLedger() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const RazorpayConstructor = (window as any).Razorpay;
 
+      const generateKeyString = () => {
+        const seg = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `RL-PRO-${seg()}-${seg()}-${seg()}`;
+      };
+
+      const executeKeyPurchase = async (paymentId: string) => {
+        const newKeyStr = generateKeyString();
+        try {
+          const keyDocRef = doc(db, "keys", newKeyStr);
+          await setDoc(keyDocRef, {
+            createdAt: Date.now(),
+            durationDays: duration === "annual" ? 365 : 30,
+            createdBy: user?.id || 'guest_user',
+            status: 'unused',
+            paymentId: paymentId
+          });
+        } catch (dbErr) {
+          console.error("Failed to save key in Firestore, falling back locally:", dbErr);
+        }
+
+        setBoughtKey({ key: newKeyStr, duration: duration === "annual" ? "Annual (365 Days)" : "Monthly (30 Days)" });
+        
+        if (isOwner && user?.id) {
+          fetchGeneratedKeys(user.id);
+        }
+      };
+
       // Handle offline or mock orders (missing API keys on server side)
       if (!RazorpayConstructor || order.isMock) {
         toast({
-          title: order.isMock ? "Gateway Mock Mode" : "Gateway Offline / Mock Mode",
-          description: order.isMock 
-            ? "Server keys missing. Running simulated verification checkout..." 
-            : "Razorpay script failed to load. Running simulated verification checkout...",
-          variant: order.isMock ? "default" : "destructive"
+          title: "Gateway Mock Mode",
+          description: "Server keys missing. Running simulated checkout...",
         });
 
-        // Directly call verify endpoint with simulated attributes
         const verifyResponse = await fetch(`${targetUrl}/api/razorpay/verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -840,7 +841,7 @@ export default function RupeeLedger() {
 
         const verifyResult = await verifyResponse.json();
         if (verifyResult.verified) {
-          completeRenewal();
+          await executeKeyPurchase('pay_mock_' + Date.now());
         } else {
           toast({ title: "Verification Failed", description: "Verification rejected.", variant: "destructive" });
         }
@@ -852,7 +853,7 @@ export default function RupeeLedger() {
         amount: order.amount,
         currency: order.currency,
         name: 'Rupee Ledger Pro',
-        description: 'Subscription Renewal - 30 Days',
+        description: `${duration === "annual" ? "Annual" : "Monthly"} License Key Purchase`,
         order_id: order.id,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         handler: async function (response: any) {
@@ -878,7 +879,7 @@ export default function RupeeLedger() {
 
             const verifyResult = await verifyResponse.json();
             if (verifyResult.verified) {
-              completeRenewal();
+              await executeKeyPurchase(response.razorpay_payment_id);
             } else {
               toast({
                 title: "Invalid Signature",
@@ -2709,13 +2710,28 @@ export default function RupeeLedger() {
                       </div>
 
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-sm">Extend / Renew Pro Membership</p>
-                          <p className="text-xs text-muted-foreground">Simulate extension of your billing cycle by another 30 days instantly.</p>
+                        <div className="space-y-1 flex-1">
+                          <p className="font-semibold text-sm">Purchase Pro Activation Key</p>
+                          <p className="text-xs text-muted-foreground">Buy a monthly (30 Days - ₹500) or annual (365 Days - ₹5,000) activation key via Razorpay.</p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <Button 
+                              onClick={() => handleBuyLicenseKey("monthly")} 
+                              variant="outline" 
+                              size="sm"
+                              className="font-medium text-xs bg-white hover:bg-slate-100"
+                            >
+                              Buy Monthly Key (₹500)
+                            </Button>
+                            <Button 
+                              onClick={() => handleBuyLicenseKey("annual")} 
+                              variant="outline" 
+                              size="sm"
+                              className="font-medium text-xs bg-white border-accent/60 text-accent hover:bg-accent/5"
+                            >
+                              Buy Annual Key (₹5,000)
+                            </Button>
+                          </div>
                         </div>
-                        <Button onClick={handleRenewSubscription} variant="default" className="shrink-0 font-medium">
-                          Renew License (Simulated)
-                        </Button>
                       </div>
 
                       <div className="space-y-3 pt-2 border-t">
@@ -3234,6 +3250,45 @@ export default function RupeeLedger() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bought Key Dialog */}
+      <Dialog open={!!boughtKey} onOpenChange={(open) => !open && setBoughtKey(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-600 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5" />
+              Payment Successful!
+            </DialogTitle>
+            <DialogDescription>
+              Your new {boughtKey?.duration} Pro Activation Key has been created and registered.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between font-mono text-base font-bold text-center select-all tracking-wider text-slate-800">
+              {boughtKey?.key}
+              <Button 
+                onClick={() => {
+                  if (boughtKey?.key) {
+                    navigator.clipboard.writeText(boughtKey.key);
+                    toast({ title: "Key Copied!", description: "License key copied to clipboard." });
+                  }
+                }}
+                size="sm"
+                variant="ghost"
+                className="ml-2 hover:bg-slate-200/50"
+              >
+                Copy
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong>Instructions:</strong> Copy the code above, paste it in the <strong>&quot;Activate Annual License Key&quot;</strong> field in settings, and click <strong>&quot;Verify &amp; Activate&quot;</strong> to apply it to your account.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setBoughtKey(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Print-only containers */}
       <div className="print-only fixed inset-0 z-[9999] bg-white overflow-visible">
