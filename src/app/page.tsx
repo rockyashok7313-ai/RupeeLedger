@@ -231,6 +231,18 @@ export default function RupeeLedger() {
   const [generatedKeysList, setGeneratedKeysList] = useState<{key: string; duration: string; createdAt: number; status: string}[]>([]);
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
 
+  // Owner Authorization Settings
+  const OWNER_EMAILS = useMemo(() => [
+    "rockyashok7313@gmail.com",
+    "ak@rupeeledger.com",
+    "admin@rupeeledger.com"
+  ], []);
+
+  const isOwner = useMemo(() => {
+    return !!(user && user.authMethod !== 'guest' && user.email && 
+      OWNER_EMAILS.includes(user.email.toLowerCase()));
+  }, [user, OWNER_EMAILS]);
+
   const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
     let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
     let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
@@ -902,6 +914,7 @@ export default function RupeeLedger() {
   };
 
   const fetchGeneratedKeys = async (userId: string) => {
+    if (!isOwner) return;
     try {
       const q = query(collection(db, "keys"), where("createdBy", "==", userId));
       const querySnapshot = await getDocs(q);
@@ -923,6 +936,14 @@ export default function RupeeLedger() {
   };
 
   const handleGenerateLicenseKey = async () => {
+    if (!isOwner) {
+      toast({
+        title: "Access Denied",
+        description: "Only the system owner is authorized to generate license keys.",
+        variant: "destructive"
+      });
+      return;
+    }
     setIsGeneratingKey(true);
     try {
       const keyPart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -2710,97 +2731,99 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Reseller & License Selling Panel */}
-                  <Card className="shadow-sm border-slate-200/80 md:col-span-2">
-                    <CardHeader>
-                      <CardTitle className="text-primary flex items-center gap-2">
-                        <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                        </svg>
-                        Reseller & License Selling Options
-                      </CardTitle>
-                      <CardDescription>Generate unique activation license keys to sell/distribute to client profiles</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="flex flex-col sm:flex-row items-end gap-4 p-4 bg-slate-50 border rounded-lg">
-                        <div className="space-y-1.5 flex-1">
-                          <Label htmlFor="keyDurationSelect" className="text-xs font-semibold text-slate-700">License Key Type / Duration</Label>
-                          <Select 
-                            value={vendorKeyDuration} 
-                            onValueChange={(val) => setVendorKeyDuration(val as "monthly" | "annual")}
+                  {isOwner && (
+                    <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-primary flex items-center gap-2">
+                          <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                          Reseller & License Selling Options
+                        </CardTitle>
+                        <CardDescription>Generate unique activation license keys to sell/distribute to client profiles</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="flex flex-col sm:flex-row items-end gap-4 p-4 bg-slate-50 border rounded-lg">
+                          <div className="space-y-1.5 flex-1">
+                            <Label htmlFor="keyDurationSelect" className="text-xs font-semibold text-slate-700">License Key Type / Duration</Label>
+                            <Select 
+                              value={vendorKeyDuration} 
+                              onValueChange={(val) => setVendorKeyDuration(val as "monthly" | "annual")}
+                            >
+                              <SelectTrigger id="keyDurationSelect" className="bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="monthly">Monthly License Key (30 Days - ₹500 value)</SelectItem>
+                                <SelectItem value="annual">Annual Pro License Key (365 Days - ₹5,000 value)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button 
+                            onClick={handleGenerateLicenseKey} 
+                            disabled={isGeneratingKey}
+                            className="shrink-0 font-medium w-full sm:w-auto"
                           >
-                            <SelectTrigger id="keyDurationSelect" className="bg-white">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="monthly">Monthly License Key (30 Days - ₹500 value)</SelectItem>
-                              <SelectItem value="annual">Annual Pro License Key (365 Days - ₹5,000 value)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                            {isGeneratingKey ? "Generating Key..." : "Generate License Key"}
+                          </Button>
                         </div>
-                        <Button 
-                          onClick={handleGenerateLicenseKey} 
-                          disabled={isGeneratingKey}
-                          className="shrink-0 font-medium w-full sm:w-auto"
-                        >
-                          {isGeneratingKey ? "Generating Key..." : "Generate License Key"}
-                        </Button>
-                      </div>
 
-                      <div className="space-y-3 pt-2">
-                        <Label className="text-xs font-semibold text-slate-700">Reseller Key Inventory & Logs</Label>
-                        {generatedKeysList.length === 0 ? (
-                          <div className="text-center p-6 border border-dashed rounded-lg bg-slate-50/50">
-                            <p className="text-xs text-muted-foreground">No license keys generated yet. Click generate above to create your first client activation key.</p>
-                          </div>
-                        ) : (
-                          <div className="border rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
-                            <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                                <tr>
-                                  <th className="px-4 py-2">License Key</th>
-                                  <th className="px-4 py-2">Duration</th>
-                                  <th className="px-4 py-2">Created</th>
-                                  <th className="px-4 py-2">Status</th>
-                                  <th className="px-4 py-2 text-right">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 font-medium">
-                                {generatedKeysList.map((item, idx) => (
-                                  <tr key={idx} className="hover:bg-slate-50/80">
-                                    <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-slate-700">{item.key}</td>
-                                    <td className="px-4 py-2.5">{item.duration}</td>
-                                    <td className="px-4 py-2.5 text-slate-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
-                                    <td className="px-4 py-2.5">
-                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                        item.status === 'used' 
-                                          ? 'bg-slate-100 text-slate-600' 
-                                          : 'bg-green-100 text-green-800'
-                                      }`}>
-                                        {item.status.toUpperCase()}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-2.5 text-right">
-                                      <Button 
-                                        variant="outline" 
-                                        size="sm" 
-                                        className="h-7 text-[10px]" 
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(item.key);
-                                          toast({ title: "Key Copied", description: `${item.key} copied to clipboard.` });
-                                        }}
-                                      >
-                                        Copy Key
-                                      </Button>
-                                    </td>
+                        <div className="space-y-3 pt-2">
+                          <Label className="text-xs font-semibold text-slate-700">Reseller Key Inventory & Logs</Label>
+                          {generatedKeysList.length === 0 ? (
+                            <div className="text-center p-6 border border-dashed rounded-lg bg-slate-50/50">
+                              <p className="text-xs text-muted-foreground">No license keys generated yet. Click generate above to create your first client activation key.</p>
+                            </div>
+                          ) : (
+                            <div className="border rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
+                              <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
+                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                                  <tr>
+                                    <th className="px-4 py-2">License Key</th>
+                                    <th className="px-4 py-2">Duration</th>
+                                    <th className="px-4 py-2">Created</th>
+                                    <th className="px-4 py-2">Status</th>
+                                    <th className="px-4 py-2 text-right">Action</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium">
+                                  {generatedKeysList.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-50/80">
+                                      <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-slate-700">{item.key}</td>
+                                      <td className="px-4 py-2.5">{item.duration}</td>
+                                      <td className="px-4 py-2.5 text-slate-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
+                                      <td className="px-4 py-2.5">
+                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                          item.status === 'used' 
+                                            ? 'bg-slate-100 text-slate-600' 
+                                            : 'bg-green-100 text-green-800'
+                                        }`}>
+                                          {item.status.toUpperCase()}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-right">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm" 
+                                          className="h-7 text-[10px]" 
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(item.key);
+                                            toast({ title: "Key Copied", description: `${item.key} copied to clipboard.` });
+                                          }}
+                                        >
+                                          Copy Key
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Data & Backups Card */}
                   <Card className="shadow-sm border-slate-200/80">
