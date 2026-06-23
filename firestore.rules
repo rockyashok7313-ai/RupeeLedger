@@ -1,28 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Secure user-scoped data (profiles, accounts, transactions, settings)
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // Helper: true if the caller is a signed-in Firebase user
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Secure license keys collection
+    // Helper: true if the user owns the document by UID match
+    function isOwnerByUid(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Helper: true for simulated phone-user paths (p_<phone>)
+    // Phone logins use a mock OTP and store data under custom "p_<phone>" paths.
+    // These users are authenticated through Google/Email but store under custom IDs.
+    function isPhonePath(userId) {
+      return userId.matches('p_.*');
+    }
+
+    // User-scoped data: profiles, accounts, transactions, settings
+    match /users/{userId}/{document=**} {
+      // Google/Email users: UID must match
+      // Phone (mock) users: any signed-in user can access "p_" prefixed docs
+      allow read, write: if isSignedIn() &&
+        (isOwnerByUid(userId) || isPhonePath(userId));
+    }
+
+    // License keys collection
     match /keys/{keyId} {
       // Any authenticated user can read/lookup key details to verify it
-      allow read: if request.auth != null;
+      allow read: if isSignedIn();
 
-      // Only authorized reseller admin emails can generate new keys client-side
-      allow create: if request.auth != null && 
+      // Only the authorized admin email can create keys directly from the client
+      // (Payment-verified keys are created server-side via /api/razorpay/verify)
+      allow create: if isSignedIn() &&
         request.auth.token.email == 'rockyashok7313@gmail.com';
 
-      // Any authenticated user can activate (update) an unused key for their profile
-      allow update: if request.auth != null &&
+      // Any authenticated user can activate an unused key (status: unused → used).
+      // usedBy may be a UID or a phone-prefix ID (p_<phone>) depending on auth method.
+      allow update: if isSignedIn() &&
         resource.data.status == 'unused' &&
         request.resource.data.status == 'used' &&
-        request.resource.data.usedBy == request.auth.uid &&
-        request.resource.data.usedAt != null;
+        request.resource.data.usedAt != null &&
+        (request.resource.data.usedBy == request.auth.uid ||
+         request.resource.data.usedBy.matches('p_.*'));
 
-      // Deleting keys from the client is prohibited
+      // No client-side deletions allowed
       allow delete: if false;
     }
   }
