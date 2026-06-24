@@ -890,19 +890,31 @@ export default function RupeeLedger() {
     setAccounts([]);
     setTransactions([]);
     setSelectedAccountId(null);
-    
-    if (user?.authMethod !== 'guest') {
+
+    const method = user?.authMethod;
+
+    // Firebase Auth users (Google, email/password)
+    if (method === 'google' || method === 'email') {
       try {
         await signOut(auth);
       } catch (err) {
-        console.error("Signout error:", err);
+        console.error('Signout error:', err);
       }
-    } else {
-      setUser(null);
-      setShowLogin(true);
-      localStorage.removeItem("rupee_ledger_user");
-      toast({ title: "Logged Out", description: "Your guest session has been terminated." });
     }
+
+    // All non-Firebase users (phone OTP, email OTP, guest) — clear manually
+    setUser(null);
+    setShowLogin(true);
+    setIsLocked(false);
+    setPinInput('');
+    setOtpSent(false);
+    setOtpInput('');
+    setPhoneInput('');
+    setEmailOtpSent(false);
+    setEmailOtpInput('');
+    setEmailInput('');
+    localStorage.removeItem('rupee_ledger_user');
+    toast({ title: 'Signed Out', description: 'You have been logged out successfully.' });
   };
 
   // Business Profile and Security Handlers
@@ -1948,23 +1960,9 @@ export default function RupeeLedger() {
 
           </div>
 
-          <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-slate-800"></div>
-            <span className="flex-shrink mx-4 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Or Continue</span>
-            <div className="flex-grow border-t border-slate-800"></div>
-          </div>
-
-          {/* Guest / Offline Access Button */}
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="w-full bg-slate-950 border border-slate-800 hover:bg-slate-900 active:scale-[0.98] transition-all text-xs font-semibold text-slate-300 h-11 rounded-lg"
-          >
-            Access Local-Only Guest Ledger
-          </button>
 
           <p className="text-[10px] text-center text-muted-foreground mt-4 leading-relaxed">
-            By authenticating, you agree to our local sandboxing policies. Signed in sessions maintain a cloud ledger bridge if configured.
+            By authenticating, you agree to our terms. All sessions require a verified login and maintain a secure cloud ledger bridge.
           </p>
         </div>
       </div>
