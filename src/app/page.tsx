@@ -1071,7 +1071,7 @@ export default function RupeeLedger() {
       }
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T5LqHUZOSq2woW',
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_live_T5M6deMH7KrUEn',
         amount: order.amount,
         currency: order.currency,
         name: 'Rupee Ledger Pro',
@@ -2199,6 +2199,12 @@ export default function RupeeLedger() {
                 Activate
               </Button>
             </div>
+          </div>
+
+          <div className="w-full pt-4 border-t border-slate-800 text-slate-400 space-y-1">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Support & Inquiries</p>
+            <p className="text-xs font-semibold text-slate-300">Owner: L.ASHOK KUMAR, COIMBATORE</p>
+            <p className="text-xs">Mobile: <a href="tel:+919791335351" className="text-amber-400 font-bold hover:underline">9791335351</a></p>
           </div>
 
           <div className="w-full pt-2">
