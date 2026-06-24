@@ -3343,27 +3343,29 @@ export default function RupeeLedger() {
                       </div>
 
                       {/* Firebase SDK Config Check */}
-                      <div className="pt-4 mt-2 border-t space-y-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Firebase Cloud SDK Bindings</h4>
-                        <div className="grid grid-cols-2 gap-2 text-xs p-3 bg-muted/40 rounded-lg border">
-                          <div>
-                            <p className="text-slate-500 font-semibold">Project ID</p>
-                            <p className="font-mono text-slate-800 font-bold truncate" title={auth.app.options.projectId || ""}>
-                              {auth.app.options.projectId || "Not Configured"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-slate-500 font-semibold">SDK Status</p>
-                            <p className="font-semibold mt-0.5">
-                              {user && user.authMethod !== 'guest' ? (
-                                <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Active Synced</span>
-                              ) : (
-                                <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Mode</span>
-                              )}
-                            </p>
+                      {isOwner && (
+                        <div className="pt-4 mt-2 border-t space-y-2">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Firebase Cloud SDK Bindings</h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs p-3 bg-muted/40 rounded-lg border">
+                            <div>
+                              <p className="text-slate-500 font-semibold">Project ID</p>
+                              <p className="font-mono text-slate-800 font-bold truncate" title={auth.app.options.projectId || ""}>
+                                {auth.app.options.projectId || "Not Configured"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-semibold">SDK Status</p>
+                              <p className="font-semibold mt-0.5">
+                                {user && user.authMethod !== 'guest' ? (
+                                  <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Active Synced</span>
+                                ) : (
+                                  <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Mode</span>
+                                )}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </CardContent>
                   </Card>
 
