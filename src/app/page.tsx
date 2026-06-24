@@ -226,6 +226,18 @@ export default function RupeeLedger() {
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  // Email OTP login states
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpInput, setEmailOtpInput] = useState("");
+  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
+  // Guest upgrade modal states
+  const [showGuestUpgradeModal, setShowGuestUpgradeModal] = useState(false);
+  const [guestUpgradeEmail, setGuestUpgradeEmail] = useState("");
+  const [guestUpgradeOtpSent, setGuestUpgradeOtpSent] = useState(false);
+  const [guestUpgradeOtp, setGuestUpgradeOtp] = useState("");
+  const [guestUpgradeDevOtp, setGuestUpgradeDevOtp] = useState("");
+  const [guestUpgradeLoading, setGuestUpgradeLoading] = useState(false);
+  const [emailLoginMode, setEmailLoginMode] = useState<"otp" | "password">("otp");
 
   const [isLocked, setIsLocked] = useState(false);
 
@@ -460,7 +472,19 @@ export default function RupeeLedger() {
     };
   }, []);
 
+  // Guest 7-day plan expiry check
+  useEffect(() => {
+    if (!isLoaded || !user || user.authMethod !== 'guest') return;
+    if (subscription.status === 'active' && subscription.purchasedAt) {
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (Date.now() - subscription.purchasedAt > sevenDays) {
+        setShowGuestUpgradeModal(true);
+      }
+    }
+  }, [isLoaded, user, subscription]);
+
   // Sync to local storage
+
   useEffect(() => {
     if (isLoaded) {
       const storageSuffix = user ? user.id : "guest_local";
@@ -525,124 +549,285 @@ export default function RupeeLedger() {
     }
   };
 
-  const handleSendOTP = () => {
+  // ── Phone OTP (server-side) ─────────────────────────────────────
+  const handleSendOTP = async () => {
     if (!phoneInput || phoneInput.length < 10) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid 10-digit phone number.",
-        variant: "destructive"
-      });
+      toast({ title: "Invalid Phone Number", description: "Please enter a valid 10-digit phone number.", variant: "destructive" });
       return;
     }
-    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(mockOtp);
-    setOtpSent(true);
-    toast({
-      title: "OTP Code Dispatched",
-      description: `SMS OTP code sent to ${phoneInput}. [TEST CODE: ${mockOtp}]`,
-    });
+    try {
+      const res = await fetch('/api/auth/phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setOtpSent(true);
+      // In dev/demo mode the OTP is returned; store it in generatedOtp for display
+      if (data.devOtp) {
+        setGeneratedOtp(data.devOtp);
+        toast({ title: "OTP Sent (Demo)", description: `Your OTP: ${data.devOtp}` });
+      } else {
+        setGeneratedOtp("");
+        toast({ title: "OTP Sent", description: `SMS sent to +91 ${phoneInput}` });
+      }
+    } catch (err) {
+      toast({ title: "Failed to Send OTP", description: err instanceof Error ? err.message : "Server error.", variant: "destructive" });
+    }
   };
 
   const handleVerifyOTP = async () => {
-    if (otpInput === generatedOtp) {
-      const phoneId = "p_" + phoneInput;
+    if (!otpInput || otpInput.length < 6) {
+      toast({ title: "Enter OTP", description: "Please enter the 6-digit OTP.", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput, action: 'verify', otp: otpInput })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const phoneId = 'p_' + phoneInput;
       const phoneUser: UserProfile = {
         id: phoneId,
         name: `User ${phoneInput.slice(-4)}`,
         phone: phoneInput,
-        authMethod: "phone",
+        authMethod: 'phone',
         avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${phoneInput}`,
         createdAt: Date.now()
       };
-      
-      toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+      toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const userDocRef = doc(db, "users", phoneId);
+        const userDocRef = doc(db, 'users', phoneId);
         const userDoc = await getDoc(userDocRef);
-        
         let shouldLock = false;
         if (userDoc.exists()) {
-          const data = userDoc.data();
-          if (data.businessProfile) setBusinessProfile(data.businessProfile);
-          if (data.subscription) setSubscription(data.subscription);
-          if (data.securitySettings) {
-            const migrated = await migrateSecuritySettings(data.securitySettings, phoneId);
+          const d = userDoc.data();
+          if (d.businessProfile) setBusinessProfile(d.businessProfile);
+          if (d.subscription) setSubscription(d.subscription);
+          if (d.securitySettings) {
+            const migrated = await migrateSecuritySettings(d.securitySettings, phoneId);
             setSecuritySettings(migrated);
-            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
-              shouldLock = true;
-            }
+            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
           }
         } else {
-          // Write default config
-          await setDoc(userDocRef, {
-            businessProfile,
-            subscription,
-            securitySettings
-          });
+          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
         }
-
-        // Fetch accounts
-        const accountsSnapshot = await getDocs(collection(db, "users", phoneId, "accounts"));
+        const accsSnap = await getDocs(collection(db, 'users', phoneId, 'accounts'));
         let fetchedAccounts: Account[] = [];
-        accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
-
-        // Fetch transactions
-        const txsSnapshot = await getDocs(collection(db, "users", phoneId, "transactions"));
+        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
+        const txsSnap = await getDocs(collection(db, 'users', phoneId, 'transactions'));
         let fetchedTxs: Transaction[] = [];
-        txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
-
-        // Auto-migration check: If cloud database is empty, check for guest data
-        if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
-          const guestAccs = localStorage.getItem("rupee_ledger_accounts_guest_local") || 
-                            localStorage.getItem("rupee_ledger_accounts_");
-          const guestTxs = localStorage.getItem("rupee_ledger_transactions_guest_local") || 
-                           localStorage.getItem("rupee_ledger_transactions_");
-          
-          if (guestAccs || guestTxs) {
-            const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
-            const parsedTxs: Transaction[] = guestTxs ? JSON.parse(guestTxs) : [];
-            if (parsedAccs.length > 0 || parsedTxs.length > 0) {
-              toast({ 
-                title: "Migrating Local Data", 
-                description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
-              });
-              await commitBatchInChunks(phoneId, parsedAccs, parsedTxs);
-              fetchedAccounts = parsedAccs;
-              fetchedTxs = parsedTxs;
-            }
-          }
-        }
-
+        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
         setAccounts(fetchedAccounts);
         setTransactions(fetchedTxs);
         await fetchGeneratedKeys(phoneId);
-
         setUser(phoneUser);
         setShowLogin(false);
         setIsLocked(shouldLock);
-        setPinInput("");
+        setPinInput('');
         setOtpSent(false);
-        setOtpInput("");
-        setPhoneInput("");
-        toast({ title: "Verification Successful", description: "Your phone number is authenticated." });
+        setOtpInput('');
+        setPhoneInput('');
+        toast({ title: 'Verification Successful', description: 'Your phone number is authenticated.' });
       } catch (err) {
-        console.error("Firestore phone login loading error:", err);
-        toast({ title: "Cloud Connection Error", description: "Loading backup cache from local storage.", variant: "destructive" });
-        
-        // Log user in using local data as fallback
+        console.error('Firestore phone login error:', err);
         setUser(phoneUser);
         setShowLogin(false);
         await loadLocalStorageData(phoneId);
         setOtpSent(false);
-        setOtpInput("");
-        setPhoneInput("");
+        setOtpInput('');
+        setPhoneInput('');
       }
-    } else {
-      toast({
-        title: "Incorrect OTP",
-        description: "The verification code does not match. Please try again.",
-        variant: "destructive"
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    }
+  };
+
+  // ── Email OTP login ──────────────────────────────────────────────
+  const handleSendEmailOtp = async () => {
+    if (!emailInput || !emailInput.includes('@')) {
+      toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
+      return;
+    }
+    setEmailOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput, action: 'send' })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEmailOtpSent(true);
+      if (data.devOtp) {
+        toast({ title: 'OTP Sent (Demo)', description: `Your OTP: ${data.devOtp}` });
+      } else {
+        toast({ title: 'OTP Sent', description: `Check your inbox at ${emailInput}` });
+      }
+    } catch (err) {
+      toast({ title: 'Failed to Send OTP', description: err instanceof Error ? err.message : 'Server error.', variant: 'destructive' });
+    } finally {
+      setEmailOtpLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtpInput || emailOtpInput.length < 6) {
+      toast({ title: 'Enter OTP', description: 'Please enter the 6-digit OTP.', variant: 'destructive' });
+      return;
+    }
+    setEmailOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput, action: 'verify', otp: emailOtpInput })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const emailId = 'e_' + emailInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const emailUser: UserProfile = {
+        id: emailId,
+        name: emailInput.split('@')[0],
+        email: emailInput.trim().toLowerCase(),
+        authMethod: 'emailOtp',
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${emailInput}`,
+        createdAt: Date.now()
+      };
+      toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
+      try {
+        const userDocRef = doc(db, 'users', emailId);
+        const userDoc = await getDoc(userDocRef);
+        let shouldLock = false;
+        if (userDoc.exists()) {
+          const d = userDoc.data();
+          if (d.businessProfile) setBusinessProfile(d.businessProfile);
+          if (d.subscription) setSubscription(d.subscription);
+          if (d.securitySettings) {
+            const migrated = await migrateSecuritySettings(d.securitySettings, emailId);
+            setSecuritySettings(migrated);
+            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+          }
+        } else {
+          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
+        }
+        const accsSnap = await getDocs(collection(db, 'users', emailId, 'accounts'));
+        let fetchedAccounts: Account[] = [];
+        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
+        const txsSnap = await getDocs(collection(db, 'users', emailId, 'transactions'));
+        let fetchedTxs: Transaction[] = [];
+        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
+        setAccounts(fetchedAccounts);
+        setTransactions(fetchedTxs);
+        await fetchGeneratedKeys(emailId);
+        setUser(emailUser);
+        setShowLogin(false);
+        setIsLocked(shouldLock);
+        setPinInput('');
+        setEmailOtpSent(false);
+        setEmailOtpInput('');
+        setEmailInput('');
+        toast({ title: 'Welcome!', description: `Signed in as ${emailUser.email}` });
+      } catch (err) {
+        console.error('Firestore email OTP login error:', err);
+        setUser(emailUser);
+        setShowLogin(false);
+        await loadLocalStorageData(emailId);
+        setEmailOtpSent(false);
+        setEmailOtpInput('');
+        setEmailInput('');
+      }
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setEmailOtpLoading(false);
+    }
+  };
+
+  // ── Guest account upgrade (email linkage) ────────────────────────
+  const handleSendGuestUpgradeOtp = async () => {
+    if (!guestUpgradeEmail || !guestUpgradeEmail.includes('@')) {
+      toast({ title: 'Invalid Email', description: 'Enter a valid email to link your account.', variant: 'destructive' });
+      return;
+    }
+    setGuestUpgradeLoading(true);
+    try {
+      const res = await fetch('/api/auth/email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: guestUpgradeEmail, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setGuestUpgradeOtpSent(true);
+      if (data.devOtp) {
+        setGuestUpgradeDevOtp(data.devOtp);
+        toast({ title: 'OTP Sent (Demo)', description: `Your OTP: ${data.devOtp}` });
+      } else {
+        setGuestUpgradeDevOtp('');
+        toast({ title: 'OTP Sent', description: `Check your inbox at ${guestUpgradeEmail}` });
+      }
+    } catch (err) {
+      toast({ title: 'Failed to Send OTP', description: err instanceof Error ? err.message : 'Server error.', variant: 'destructive' });
+    } finally {
+      setGuestUpgradeLoading(false);
+    }
+  };
+
+  const handleVerifyGuestUpgrade = async () => {
+    if (!guestUpgradeOtp || guestUpgradeOtp.length < 6) {
+      toast({ title: 'Enter OTP', description: 'Please enter the 6-digit OTP.', variant: 'destructive' });
+      return;
+    }
+    setGuestUpgradeLoading(true);
+    try {
+      const res = await fetch('/api/auth/email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: guestUpgradeEmail, action: 'verify', otp: guestUpgradeOtp })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const emailId = 'e_' + guestUpgradeEmail.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const upgradedUser: UserProfile = {
+        id: emailId,
+        name: guestUpgradeEmail.split('@')[0],
+        email: guestUpgradeEmail.trim().toLowerCase(),
+        authMethod: 'emailOtp',
+        avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${guestUpgradeEmail}`,
+        createdAt: Date.now()
+      };
+
+      // Migrate local guest data to cloud
+      toast({ title: 'Linking Account...', description: 'Migrating your ledger data to cloud.' });
+      try {
+        await setDoc(doc(db, 'users', emailId), { businessProfile, subscription, securitySettings }, { merge: true });
+        if (accounts.length > 0 || transactions.length > 0) {
+          await commitBatchInChunks(emailId, accounts, transactions);
+        }
+        toast({ title: 'Account Linked!', description: `Your ledger is now saved under ${guestUpgradeEmail}` });
+      } catch (err) {
+        console.error('Guest migration error:', err);
+        toast({ title: 'Cloud Sync Failed', description: 'Data kept locally. Try again later.', variant: 'destructive' });
+      }
+
+      setUser(upgradedUser);
+      setShowGuestUpgradeModal(false);
+      setGuestUpgradeEmail('');
+      setGuestUpgradeOtp('');
+      setGuestUpgradeOtpSent(false);
+      setGuestUpgradeDevOtp('');
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setGuestUpgradeLoading(false);
     }
   };
 
@@ -1025,7 +1210,8 @@ export default function RupeeLedger() {
             plan: planName,
             price: priceStr,
             renewalDate: newRenewalStr,
-            licenseKey: keyStr
+            licenseKey: keyStr,
+            purchasedAt: Date.now()
           });
           setLicenseInput("");
           toast({
@@ -1048,7 +1234,8 @@ export default function RupeeLedger() {
         plan: days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)",
         price: days === 365 ? "₹1,999 / year" : "₹199 / month",
         renewalDate: newRenewalStr,
-        licenseKey: keyStr
+        licenseKey: keyStr,
+        purchasedAt: Date.now()
       });
       setLicenseInput("");
       toast({
@@ -1523,6 +1710,7 @@ export default function RupeeLedger() {
 
   if (showLogin && isLoaded) {
     return (
+      <>
       <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 overflow-y-auto p-4 animate-in fade-in duration-300">
         <Toaster />
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
@@ -1654,40 +1842,90 @@ export default function RupeeLedger() {
               </div>
             )}
 
-            {/* Email / Password Sign-in tab */}
+            {/* Email OTP / Password Sign-in tab */}
             {loginTab === "email" && (
-              <form onSubmit={handleEmailLogin} className="space-y-4">
-                <div className="space-y-1">
-                  <Label htmlFor="emailInput" className="text-xs text-slate-300">Email Address</Label>
-                  <Input
-                    id="emailInput"
-                    type="email"
-                    required
-                    placeholder="name@company.com"
-                    className="bg-slate-950 border-slate-800 text-white h-11"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                  />
+              <div className="space-y-4">
+                {/* Mode toggle */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary underline underline-offset-2"
+                    onClick={() => { setEmailLoginMode(emailLoginMode === 'otp' ? 'password' : 'otp'); setEmailOtpSent(false); setEmailOtpInput(''); }}
+                  >
+                    {emailLoginMode === 'otp' ? 'Use password instead' : 'Use OTP instead (no password)'}
+                  </button>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="passInput" className="text-xs text-slate-300">Password</Label>
-                  <Input
-                    id="passInput"
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    className="bg-slate-950 border-slate-800 text-white h-11"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full h-11 bg-primary text-white hover:bg-primary/95"
-                >
-                  Log In / Create Account
-                </Button>
-              </form>
+
+                {/* Email OTP Mode */}
+                {emailLoginMode === 'otp' && (
+                  <div className="space-y-3">
+                    {!emailOtpSent ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label htmlFor="emailOtpAddr" className="text-xs text-slate-300">Email Address</Label>
+                          <Input
+                            id="emailOtpAddr"
+                            type="email"
+                            placeholder="name@company.com"
+                            className="bg-slate-950 border-slate-800 text-white h-11"
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSendEmailOtp()}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={handleSendEmailOtp}
+                          disabled={emailOtpLoading}
+                          className="w-full h-11 bg-primary text-white hover:bg-primary/95"
+                        >
+                          {emailOtpLoading ? 'Sending...' : 'Send OTP to Email'}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-400">OTP sent to <span className="text-white font-semibold">{emailInput}</span></p>
+                        <div className="space-y-1">
+                          <Label htmlFor="emailOtpCode" className="text-xs text-slate-300">Enter 6-Digit OTP</Label>
+                          <Input
+                            id="emailOtpCode"
+                            type="text"
+                            maxLength={6}
+                            placeholder="xxxxxx"
+                            className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                            value={emailOtpInput}
+                            onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            onKeyDown={(e) => e.key === 'Enter' && handleVerifyEmailOtp()}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }} className="flex-1 h-11 bg-transparent border-slate-800 hover:text-white">Back</Button>
+                          <Button type="button" onClick={handleVerifyEmailOtp} disabled={emailOtpLoading} className="flex-1 h-11 bg-primary text-white hover:bg-primary/95">
+                            {emailOtpLoading ? 'Verifying...' : 'Verify & Sign In'}
+                          </Button>
+                        </div>
+                        <button type="button" className="text-[11px] text-muted-foreground w-full text-center" onClick={handleSendEmailOtp}>Resend OTP</button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Password Mode */}
+                {emailLoginMode === 'password' && (
+                  <form onSubmit={handleEmailLogin} className="space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="emailInput" className="text-xs text-slate-300">Email Address</Label>
+                      <Input id="emailInput" type="email" required placeholder="name@company.com" className="bg-slate-950 border-slate-800 text-white h-11" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="passInput" className="text-xs text-slate-300">Password</Label>
+                      <Input id="passInput" type="password" required placeholder="••••••••" className="bg-slate-950 border-slate-800 text-white h-11" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} />
+                    </div>
+                    <Button type="submit" className="w-full h-11 bg-primary text-white hover:bg-primary/95">Log In / Create Account</Button>
+                  </form>
+                )}
+              </div>
             )}
 
           </div>
@@ -1712,6 +1950,74 @@ export default function RupeeLedger() {
           </p>
         </div>
       </div>
+
+      {/* Guest Account Upgrade Modal */}
+      {showGuestUpgradeModal && (
+        <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center space-y-2">
+              <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                <span className="text-2xl">🔒</span>
+              </div>
+              <h2 className="text-lg font-bold text-white">Account Upgrade Required</h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Your 7-day guest plan has expired. Link your email to continue accessing your ledger and save your data permanently to the cloud.
+              </p>
+            </div>
+
+            {!guestUpgradeOtpSent ? (
+              <div className="space-y-3">
+                <Label className="text-xs text-slate-300">Your Email Address</Label>
+                <Input
+                  type="email"
+                  placeholder="name@company.com"
+                  className="bg-slate-950 border-slate-700 text-white h-11"
+                  value={guestUpgradeEmail}
+                  onChange={(e) => setGuestUpgradeEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendGuestUpgradeOtp()}
+                  autoFocus
+                />
+                <Button
+                  onClick={handleSendGuestUpgradeOtp}
+                  disabled={guestUpgradeLoading}
+                  className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold"
+                >
+                  {guestUpgradeLoading ? 'Sending...' : 'Send OTP & Link Account'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">OTP sent to <span className="text-white font-semibold">{guestUpgradeEmail}</span></p>
+                {guestUpgradeDevOtp && (
+                  <div className="bg-slate-800 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                    <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{guestUpgradeDevOtp}</p>
+                  </div>
+                )}
+                <Label className="text-xs text-slate-300">Enter 6-Digit OTP</Label>
+                <Input
+                  type="text"
+                  maxLength={6}
+                  placeholder="xxxxxx"
+                  className="bg-slate-950 border-slate-700 text-white text-center font-mono tracking-widest text-lg h-11"
+                  value={guestUpgradeOtp}
+                  onChange={(e) => setGuestUpgradeOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyGuestUpgrade()}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => { setGuestUpgradeOtpSent(false); setGuestUpgradeOtp(''); }} className="flex-1 h-11 bg-transparent border-slate-700 hover:text-white text-xs">Back</Button>
+                  <Button onClick={handleVerifyGuestUpgrade} disabled={guestUpgradeLoading} className="flex-1 h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                    {guestUpgradeLoading ? 'Linking...' : 'Verify & Link'}
+                  </Button>
+                </div>
+                <button type="button" className="text-[11px] text-muted-foreground w-full text-center" onClick={handleSendGuestUpgradeOtp}>Resend OTP</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 

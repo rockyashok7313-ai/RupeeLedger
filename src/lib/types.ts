@@ -50,6 +50,8 @@ export interface Subscription {
   price: string;
   renewalDate: string;
   licenseKey: string;
+  /** Timestamp (ms) when plan was purchased — used for guest 7-day grace period. */
+  purchasedAt?: number;
 }
 
 export interface SecuritySettings {
@@ -64,7 +66,6 @@ export interface UserProfile {
   email?: string;
   phone?: string;
   avatarUrl?: string;
-  authMethod: 'google' | 'phone' | 'email' | 'guest';
+  authMethod: 'google' | 'phone' | 'email' | 'emailOtp' | 'guest';
   createdAt: number;
 }
-
