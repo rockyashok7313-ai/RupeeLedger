@@ -285,7 +285,13 @@ export default function RupeeLedger() {
     if (savedProfile) setBusinessProfile(JSON.parse(savedProfile));
 
     const savedSub = localStorage.getItem("rupee_ledger_subscription");
-    if (savedSub) setSubscription(JSON.parse(savedSub));
+    if (savedSub) {
+      const parsedSub = JSON.parse(savedSub);
+      // Migrate old pricing to new pricing
+      if (parsedSub.price === '₹500 / month' || parsedSub.price === '₹500/month') parsedSub.price = '₹199 / month';
+      if (parsedSub.price === '₹5,000 / year' || parsedSub.price === '₹5000 / year') parsedSub.price = '₹1,999 / year';
+      setSubscription(parsedSub);
+    }
 
     const savedSecurity = localStorage.getItem("rupee_ledger_security");
     if (savedSecurity) {
@@ -312,7 +318,12 @@ export default function RupeeLedger() {
           if (userDoc.exists()) {
             const data = userDoc.data();
             if (data.businessProfile) setBusinessProfile(data.businessProfile);
-            if (data.subscription) setSubscription(data.subscription);
+            if (data.subscription) {
+              const s = data.subscription;
+              if (s.price === '₹500 / month') s.price = '₹199 / month';
+              if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+              setSubscription(s);
+            }
             if (data.securitySettings) {
               const migrated = await migrateSecuritySettings(data.securitySettings, firebaseUser.uid);
               setSecuritySettings(migrated);
@@ -421,7 +432,12 @@ export default function RupeeLedger() {
                 if (userDoc.exists()) {
                   const data = userDoc.data();
                   if (data.businessProfile) setBusinessProfile(data.businessProfile);
-                  if (data.subscription) setSubscription(data.subscription);
+                  if (data.subscription) {
+                    const s = data.subscription;
+                    if (s.price === '₹500 / month') s.price = '₹199 / month';
+                    if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+                    setSubscription(s);
+                  }
                   if (data.securitySettings) {
                     const migrated = await migrateSecuritySettings(data.securitySettings, parsed.id);
                     setSecuritySettings(migrated);
