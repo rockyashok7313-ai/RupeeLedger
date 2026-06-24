@@ -1008,6 +1008,20 @@ export default function RupeeLedger() {
 
   const handleBuyLicenseKey = async (duration: "monthly" | "annual") => {
     try {
+      let purchaserEmail = user?.email || "";
+      if (!purchaserEmail) {
+        const inputEmail = prompt("Please enter your email address for key delivery:");
+        if (!inputEmail || !inputEmail.includes("@")) {
+          toast({
+            title: "Email Required",
+            description: "A valid email address is required to deliver your license key.",
+            variant: "destructive"
+          });
+          return;
+        }
+        purchaserEmail = inputEmail.trim();
+      }
+
       const amount = duration === "annual" ? 1999 : 199;
       const targetUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? ''
@@ -1050,8 +1064,8 @@ export default function RupeeLedger() {
             razorpay_signature: 'sig_mock_' + Math.random().toString(36).substring(2, 10),
             userId: user?.id || 'guest_local',
             duration,
-            email: user?.email || 'customer@example.com',
-            purchaserContact: user?.phone || user?.email || ''
+            email: purchaserEmail,
+            purchaserContact: user?.phone || purchaserEmail
           })
         });
 
@@ -1095,8 +1109,8 @@ export default function RupeeLedger() {
                 razorpay_signature: response.razorpay_signature,
                 userId: user?.id || 'guest_local',
                 duration,
-                email: user?.email || 'customer@example.com',
-                purchaserContact: user?.phone || user?.email || ''
+                email: purchaserEmail,
+                purchaserContact: user?.phone || purchaserEmail
               })
             });
 
@@ -1130,7 +1144,8 @@ export default function RupeeLedger() {
         },
         prefill: {
           name: businessProfile.companyName || 'RupeeLedger Member',
-          contact: businessProfile.phone || '9999999999'
+          contact: businessProfile.phone || '9999999999',
+          email: purchaserEmail
         },
         theme: {
           color: '#0f172a'
