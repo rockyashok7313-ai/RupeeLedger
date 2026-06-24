@@ -204,10 +204,11 @@ export default function RupeeLedger() {
 
   const [subscription, setSubscription] = useState<Subscription>({
     status: "active",
-    plan: "Pro Business License",
+    plan: "Free Trial (7 Days)",
     price: "₹199 / month",
-    renewalDate: format(addDays(new Date(), 30), "dd-MM-yyyy"),
-    licenseKey: "RL-PRO-8742-9901-LOCK"
+    renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+    licenseKey: "FREE-TRIAL",
+    purchasedAt: Date.now()
   });
 
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
@@ -333,9 +334,18 @@ export default function RupeeLedger() {
             }
           } else {
             // Write default config
+            const initialSubscription = {
+              status: "active",
+              plan: "Free Trial (7 Days)",
+              price: "₹199 / month",
+              renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+              licenseKey: "FREE-TRIAL",
+              purchasedAt: Date.now()
+            };
+            setSubscription(initialSubscription);
             await setDoc(userDocRef, {
               businessProfile,
-              subscription,
+              subscription: initialSubscription,
               securitySettings
             });
           }
@@ -488,14 +498,32 @@ export default function RupeeLedger() {
     };
   }, []);
 
-  // Guest 7-day plan expiry check
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
+
+  // 7-day free trial plan expiry check for all logins
   useEffect(() => {
-    if (!isLoaded || !user || user.authMethod !== 'guest') return;
-    if (subscription.status === 'active' && subscription.purchasedAt) {
+    if (!isLoaded || !user) return;
+    
+    // Check if the user is using a free trial or has no license key
+    const isTrial = !subscription.licenseKey || 
+                    subscription.licenseKey === "FREE-TRIAL" || 
+                    subscription.plan.toLowerCase().includes("trial");
+
+    if (isTrial && subscription.purchasedAt) {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
       if (Date.now() - subscription.purchasedAt > sevenDays) {
-        setShowGuestUpgradeModal(true);
+        setIsTrialExpired(true);
+      } else {
+        setIsTrialExpired(false);
       }
+    } else if (isTrial && !subscription.purchasedAt) {
+      // Fallback: If no purchasedAt exists, initialize it to now to start the 7 days trial
+      setSubscription(prev => ({
+        ...prev,
+        purchasedAt: Date.now()
+      }));
+    } else {
+      setIsTrialExpired(false);
     }
   }, [isLoaded, user, subscription]);
 
@@ -2102,6 +2130,83 @@ export default function RupeeLedger() {
               className="h-14 w-14 rounded-full flex items-center justify-center text-xs font-semibold hover:text-destructive active:scale-95 transition-all"
             >
               Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isTrialExpired && isLoaded) {
+    return (
+      <div className="fixed inset-0 z-[15000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 animate-in fade-in duration-300">
+        <Toaster />
+        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-6 bg-slate-900 border border-red-500/20 rounded-3xl shadow-2xl">
+          {/* Logo / Expiry Icon */}
+          <div className="flex flex-col items-center space-y-3">
+            <div className="h-16 w-16 bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/30">
+              <span className="text-3xl">⚠️</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-white">Free Trial Expired</h1>
+              <p className="text-xs text-slate-400 mt-1">Your 7-day free trial usage period has ended.</p>
+            </div>
+          </div>
+
+          <div className="w-full space-y-4 pt-4 border-t border-slate-800">
+            <div className="bg-slate-950 rounded-xl p-4 text-left border border-slate-800 space-y-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Select a Subscription Plan</p>
+              <div className="flex justify-between items-center text-sm py-1 border-b border-slate-900">
+                <span className="text-slate-300">Monthly Pro License</span>
+                <span className="font-bold text-white">₹199 / month</span>
+              </div>
+              <div className="flex justify-between items-center text-sm py-1">
+                <span className="text-slate-300">Annual Pro License</span>
+                <span className="font-bold text-amber-400">₹1,999 / year</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button 
+                onClick={() => handleBuyLicenseKey("monthly")}
+                className="h-11 bg-slate-950 border border-slate-800 hover:bg-slate-900 text-white font-bold"
+              >
+                Buy Monthly
+              </Button>
+              <Button 
+                onClick={() => handleBuyLicenseKey("annual")}
+                className="h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold"
+              >
+                Buy Annual
+              </Button>
+            </div>
+          </div>
+
+          <div className="w-full space-y-3 pt-4 border-t border-slate-800">
+            <Label className="text-xs text-left block text-slate-300">Already have an Activation Key?</Label>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="RL-PRO-XXXX-XXXX-XXXX"
+                className="bg-slate-950 border-slate-800 text-white font-mono tracking-wider text-xs h-11"
+                value={licenseInput}
+                onChange={(e) => setLicenseInput(e.target.value)}
+              />
+              <Button 
+                onClick={handleActivateKey}
+                className="h-11 px-4 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs"
+              >
+                Activate
+              </Button>
+            </div>
+          </div>
+
+          <div className="w-full pt-2">
+            <button 
+              onClick={handleLogout}
+              className="text-xs text-slate-400 hover:text-white underline transition-all"
+            >
+              Sign Out & Switch Account
             </button>
           </div>
         </div>
