@@ -3395,9 +3395,17 @@ export default function RupeeLedger() {
                             <span className="text-muted-foreground font-medium">Privacy Status</span>
                             <span className="text-green-600 font-bold">Encapsulated</span>
                           </div>
+                          <div className="flex justify-between text-sm border-b pb-1">
+                            <span className="text-muted-foreground font-medium">Owner / Support</span>
+                            <span className="font-bold text-slate-800 text-right">L.ASHOK KUMAR, COIMBATORE</span>
+                          </div>
+                          <div className="flex justify-between text-sm border-b pb-1">
+                            <span className="text-muted-foreground font-medium">Support Mobile</span>
+                            <a href="tel:+919791335351" className="text-amber-600 font-bold hover:underline">9791335351</a>
+                          </div>
                        </div>
                        <p className="text-xs text-muted-foreground mt-4 italic leading-relaxed">
-                         RupeeLedger is designed for absolute privacy. All computations and storage happen entirely within your local browser sandbox.
+                         RupeeLedger is designed for absolute privacy. All computations and storage happen entirely within your local browser sandbox. For license renewals or activations, please contact support.
                        </p>
                     </CardContent>
                   </Card>
