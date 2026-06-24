@@ -1071,7 +1071,7 @@ export default function RupeeLedger() {
       }
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_live_T586Du4rMZIuzy',
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_T5LqHUZOSq2woW',
         amount: order.amount,
         currency: order.currency,
         name: 'Rupee Ledger Pro',
