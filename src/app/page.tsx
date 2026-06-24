@@ -957,7 +957,7 @@ export default function RupeeLedger() {
         ? ''
         : 'https://v0-indian-payroll-website.vercel.app';
 
-      const verifyUrl = `${targetUrl}/api/razorpay/verify`;
+      const verifyUrl = `/api/razorpay/verify`;
 
       toast({
         title: "Initiating Payment Gateway...",
@@ -1060,10 +1060,12 @@ export default function RupeeLedger() {
               });
             }
           } catch (err) {
-            console.error(err);
+            console.error('Verify fetch error:', err);
+            let errMsg = 'Failed to connect to verification server.';
+            if (err instanceof Error) errMsg = err.message;
             toast({
               title: "Verification Failure",
-              description: "Failed to connect to verification server.",
+              description: errMsg,
               variant: "destructive"
             });
           }
