@@ -205,7 +205,7 @@ export default function RupeeLedger() {
   const [subscription, setSubscription] = useState<Subscription>({
     status: "active",
     plan: "Pro Business License",
-    price: "₹500 / month",
+    price: "₹199 / month",
     renewalDate: format(addDays(new Date(), 30), "dd-MM-yyyy"),
     licenseKey: "RL-PRO-8742-9901-LOCK"
   });
@@ -767,7 +767,7 @@ export default function RupeeLedger() {
 
   const handleBuyLicenseKey = async (duration: "monthly" | "annual") => {
     try {
-      const amount = duration === "annual" ? 5000 : 500;
+      const amount = duration === "annual" ? 1999 : 199;
       const targetUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
         ? ''
         : 'https://v0-indian-payroll-website.vercel.app';
@@ -1018,7 +1018,7 @@ export default function RupeeLedger() {
           const days = keyData.durationDays || 30;
           const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
           const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
-          const priceStr = days === 365 ? "₹5,000 / year" : "₹500 / month";
+          const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
           
           setSubscription({
             status: "active",
@@ -1046,7 +1046,7 @@ export default function RupeeLedger() {
       setSubscription({
         status: "active",
         plan: days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)",
-        price: days === 365 ? "₹5,000 / year" : "₹500 / month",
+        price: days === 365 ? "₹1,999 / year" : "₹199 / month",
         renewalDate: newRenewalStr,
         licenseKey: keyStr
       });
@@ -2699,7 +2699,7 @@ export default function RupeeLedger() {
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
                         <div className="space-y-1 flex-1">
                           <p className="font-semibold text-sm">Purchase Pro Activation Key</p>
-                          <p className="text-xs text-muted-foreground">Buy a monthly (30 Days - ₹500) or annual (365 Days - ₹5,000) activation key via Razorpay.</p>
+                          <p className="text-xs text-muted-foreground">Buy a monthly (30 Days - ₹199) or annual (365 Days - ₹1,999) activation key via Razorpay.</p>
                           <div className="flex flex-wrap gap-2 mt-2">
                             <Button 
                               onClick={() => handleBuyLicenseKey("monthly")} 
@@ -2707,7 +2707,7 @@ export default function RupeeLedger() {
                               size="sm"
                               className="font-medium text-xs bg-white hover:bg-slate-100"
                             >
-                              Buy Monthly Key (₹500)
+                              Buy Monthly Key (₹199)
                             </Button>
                             <Button 
                               onClick={() => handleBuyLicenseKey("annual")} 
@@ -2715,7 +2715,7 @@ export default function RupeeLedger() {
                               size="sm"
                               className="font-medium text-xs bg-white border-accent/60 text-accent hover:bg-accent/5"
                             >
-                              Buy Annual Key (₹5,000)
+                              Buy Annual Key (₹1,999)
                             </Button>
                           </div>
                         </div>
@@ -2766,8 +2766,8 @@ export default function RupeeLedger() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="monthly">Monthly License Key (30 Days - ₹500 value)</SelectItem>
-                                <SelectItem value="annual">Annual Pro License Key (365 Days - ₹5,000 value)</SelectItem>
+                                <SelectItem value="monthly">Monthly License Key (30 Days - ₹199 value)</SelectItem>
+                                <SelectItem value="annual">Annual Pro License Key (365 Days - ₹1,999 value)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
