@@ -66,6 +66,6 @@ export interface UserProfile {
   email?: string;
   phone?: string;
   avatarUrl?: string;
-  authMethod: 'google' | 'phone' | 'email' | 'emailOtp' | 'guest';
+  authMethod: 'google' | 'phone' | 'email' | 'emailOtp' | 'guest' | 'whatsapp';
   createdAt: number;
 }

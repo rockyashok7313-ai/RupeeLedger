@@ -219,11 +219,18 @@ export default function RupeeLedger() {
   // Authentication States
   const [user, setUser] = useState<UserProfile | null>(null);
   const [showLogin, setShowLogin] = useState(true);
-  const [loginTab, setLoginTab] = useState<"google" | "phone" | "email">("google");
+  const [loginTab, setLoginTab] = useState<"google" | "phone" | "email" | "whatsapp">("google");
   const [phoneInput, setPhoneInput] = useState("");
   const [otpInput, setOtpInput] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState("");
+
+  // WhatsApp OTP states
+  const [whatsappInput, setWhatsappInput] = useState("");
+  const [whatsappOtpInput, setWhatsappOtpInput] = useState("");
+  const [whatsappOtpSent, setWhatsappOtpSent] = useState(false);
+  const [whatsappOtpLoading, setWhatsappOtpLoading] = useState(false);
+  const [whatsappGeneratedOtp, setWhatsappGeneratedOtp] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
@@ -428,12 +435,12 @@ export default function RupeeLedger() {
             await loadLocalStorageData(parsed.id);
             setIsLoaded(true);
             return;
-          } else if (parsed.authMethod === 'phone') {
+          } else if (parsed.authMethod === 'phone' || parsed.authMethod === 'whatsapp') {
             setUser(parsed);
             setShowLogin(false);
             setIsLocked(false);
             setPinInput("");
-            const loadPhoneData = async () => {
+            const loadUserData = async () => {
               try {
                 toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
                 const userDocRef = doc(db, "users", parsed.id);
@@ -469,12 +476,12 @@ export default function RupeeLedger() {
                 setIsLocked(shouldLock);
                 setIsLoaded(true);
               } catch (err) {
-                console.error("Firestore phone loading error on refresh:", err);
+                console.error("Firestore user loading error on refresh:", err);
                 await loadLocalStorageData(parsed.id);
                 setIsLoaded(true);
               }
             };
-            loadPhoneData();
+            loadUserData();
             return;
           }
         }
@@ -689,6 +696,110 @@ export default function RupeeLedger() {
       }
     } catch (err) {
       toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    }
+  };
+
+  // ── WhatsApp OTP (server-side) ──────────────────────────────────
+  const handleSendWhatsappOTP = async () => {
+    if (!whatsappInput || whatsappInput.length < 10) {
+      toast({ title: "Invalid Phone Number", description: "Please enter a valid 10-digit WhatsApp number.", variant: "destructive" });
+      return;
+    }
+    setWhatsappOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/whatsapp-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: whatsappInput, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setWhatsappOtpSent(true);
+      if (data.devOtp) {
+        setWhatsappGeneratedOtp(data.devOtp);
+        toast({ title: "WhatsApp OTP Sent (Demo)", description: `Your OTP: ${data.devOtp}` });
+      } else {
+        setWhatsappGeneratedOtp("");
+        toast({ title: "WhatsApp OTP Sent", description: `OTP sent to WhatsApp +91 ${whatsappInput}` });
+      }
+    } catch (err) {
+      toast({ title: "Failed to Send OTP", description: err instanceof Error ? err.message : "Server error.", variant: "destructive" });
+    } finally {
+      setWhatsappOtpLoading(false);
+    }
+  };
+
+  const handleVerifyWhatsappOTP = async () => {
+    if (!whatsappOtpInput || whatsappOtpInput.length < 6) {
+      toast({ title: "Enter OTP", description: "Please enter the 6-digit OTP.", variant: "destructive" });
+      return;
+    }
+    setWhatsappOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/whatsapp-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: whatsappInput, action: 'verify', otp: whatsappOtpInput })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const phoneId = 'p_' + whatsappInput;
+      const whatsappUser: UserProfile = {
+        id: phoneId,
+        name: `User ${whatsappInput.slice(-4)}`,
+        phone: whatsappInput,
+        authMethod: 'whatsapp',
+        avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${whatsappInput}`,
+        createdAt: Date.now()
+      };
+      toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
+      try {
+        const userDocRef = doc(db, 'users', phoneId);
+        const userDoc = await getDoc(userDocRef);
+        let shouldLock = false;
+        if (userDoc.exists()) {
+          const d = userDoc.data();
+          if (d.businessProfile) setBusinessProfile(d.businessProfile);
+          if (d.subscription) setSubscription(d.subscription);
+          if (d.securitySettings) {
+            const migrated = await migrateSecuritySettings(d.securitySettings, phoneId);
+            setSecuritySettings(migrated);
+            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+          }
+        } else {
+          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
+        }
+        const accsSnap = await getDocs(collection(db, 'users', phoneId, 'accounts'));
+        let fetchedAccounts: Account[] = [];
+        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
+        const txsSnap = await getDocs(collection(db, 'users', phoneId, 'transactions'));
+        let fetchedTxs: Transaction[] = [];
+        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
+        setAccounts(fetchedAccounts);
+        setTransactions(fetchedTxs);
+        await fetchGeneratedKeys(phoneId);
+        setUser(whatsappUser);
+        setShowLogin(false);
+        setIsLocked(shouldLock);
+        setPinInput('');
+        setWhatsappOtpSent(false);
+        setWhatsappOtpInput('');
+        setWhatsappInput('');
+        toast({ title: 'Verification Successful', description: 'Your WhatsApp number is authenticated.' });
+      } catch (err) {
+        console.error('Firestore whatsapp login error:', err);
+        setUser(whatsappUser);
+        setShowLogin(false);
+        await loadLocalStorageData(phoneId);
+        setWhatsappOtpSent(false);
+        setWhatsappOtpInput('');
+        setWhatsappInput('');
+      }
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setWhatsappOtpLoading(false);
     }
   };
 
@@ -1800,22 +1911,23 @@ export default function RupeeLedger() {
           </div>
 
           {/* Login Mode Tab Switches */}
-          <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-            {(["google", "phone", "email"] as const).map((tab) => (
+          <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            {(["google", "phone", "whatsapp", "email"] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => {
                   setLoginTab(tab);
                   setOtpSent(false);
+                  setWhatsappOtpSent(false);
                 }}
-                className={`py-1.5 text-xs font-semibold rounded transition-all capitalize ${
+                className={`py-1.5 text-[10px] font-semibold rounded transition-all capitalize ${
                   loginTab === tab 
                     ? "bg-primary text-white shadow-sm" 
                     : "text-muted-foreground hover:text-slate-200"
                 }`}
               >
-                {tab}
+                {tab === 'whatsapp' ? 'WhatsApp' : tab}
               </button>
             ))}
           </div>
@@ -1886,6 +1998,12 @@ export default function RupeeLedger() {
                 ) : (
                   <div className="space-y-3">
                     <Label htmlFor="otpCode" className="text-xs text-slate-300">Enter 6-Digit OTP Code</Label>
+                    {generatedOtp && (
+                      <div className="bg-slate-800 rounded-lg p-3 text-center">
+                        <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                        <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{generatedOtp}</p>
+                      </div>
+                    )}
                     <Input
                       id="otpCode"
                       type="text"
@@ -1910,6 +2028,74 @@ export default function RupeeLedger() {
                         className="flex-1 h-11 bg-primary text-white hover:bg-primary/95"
                       >
                         Verify & Access
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* WhatsApp OTP Sign-in tab */}
+            {loginTab === "whatsapp" && (
+              <div className="space-y-4">
+                {!whatsappOtpSent ? (
+                  <div className="space-y-3">
+                    <Label htmlFor="whatsappLogin" className="text-xs text-slate-300">Enter WhatsApp Phone Number</Label>
+                    <div className="flex gap-2">
+                      <span className="flex items-center justify-center bg-slate-950 border border-slate-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
+                      <Input
+                        id="whatsappLogin"
+                        type="tel"
+                        maxLength={10}
+                        placeholder="9876543210"
+                        className="bg-slate-950 border-slate-800 text-white h-11"
+                        value={whatsappInput}
+                        onChange={(e) => setWhatsappInput(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleSendWhatsappOTP}
+                      disabled={whatsappOtpLoading}
+                      className="w-full h-11 bg-green-600 hover:bg-green-500 text-white font-bold"
+                    >
+                      {whatsappOtpLoading ? 'Sending...' : 'Send WhatsApp OTP'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Label htmlFor="whatsappOtpCode" className="text-xs text-slate-300">Enter 6-Digit WhatsApp OTP</Label>
+                    {whatsappGeneratedOtp && (
+                      <div className="bg-slate-800 rounded-lg p-3 text-center">
+                        <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                        <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{whatsappGeneratedOtp}</p>
+                      </div>
+                    )}
+                    <Input
+                      id="whatsappOtpCode"
+                      type="text"
+                      maxLength={6}
+                      placeholder="xxxxxx"
+                      className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                      value={whatsappOtpInput}
+                      onChange={(e) => setWhatsappOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => { setWhatsappOtpSent(false); setWhatsappOtpInput(''); }}
+                        className="flex-1 h-11 bg-transparent border-slate-800 hover:bg-slate-850 hover:text-white"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleVerifyWhatsappOTP}
+                        disabled={whatsappOtpLoading}
+                        className="flex-1 h-11 bg-green-600 hover:bg-green-500 text-white font-bold"
+                      >
+                        {whatsappOtpLoading ? 'Verifying...' : 'Verify & Access'}
                       </Button>
                     </div>
                   </div>
