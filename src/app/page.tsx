@@ -1050,7 +1050,8 @@ export default function RupeeLedger() {
             razorpay_signature: 'sig_mock_' + Math.random().toString(36).substring(2, 10),
             userId: user?.id || 'guest_local',
             duration,
-            email: user?.email || 'customer@example.com'
+            email: user?.email || 'customer@example.com',
+            purchaserContact: user?.phone || user?.email || ''
           })
         });
 
@@ -1094,7 +1095,8 @@ export default function RupeeLedger() {
                 razorpay_signature: response.razorpay_signature,
                 userId: user?.id || 'guest_local',
                 duration,
-                email: user?.email || 'customer@example.com'
+                email: user?.email || 'customer@example.com',
+                purchaserContact: user?.phone || user?.email || ''
               })
             });
 
