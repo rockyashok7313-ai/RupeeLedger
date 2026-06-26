@@ -235,15 +235,15 @@ export function InvoicePrint({ transaction, account, businessProfile, onEdit }: 
           <div>
             <h3 className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider mb-1">Billed To (Buyer)</h3>
             <p className="text-xs font-bold text-slate-900">{transaction.customerName || "Valued Customer"}</p>
-            {transaction.customerGstin ? (
+            {(transaction.customerGstin || account.gstin) ? (
               <p className="text-[9px] font-mono font-semibold mt-1 text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded inline-block uppercase">
-                GSTIN: {transaction.customerGstin}
+                GSTIN: {transaction.customerGstin || account.gstin}
               </p>
             ) : (
               <p className="text-[10px] text-slate-500 italic mt-0.5">GSTIN: Not Provided</p>
             )}
-            {transaction.customerAddress && (
-              <p className="text-[10px] text-slate-500 mt-0.5">{transaction.customerAddress}</p>
+            {(transaction.customerAddress || account.address) && (
+              <p className="text-[10px] text-slate-500 mt-0.5 max-w-[200px] whitespace-pre-wrap">{transaction.customerAddress || account.address}</p>
             )}
           </div>
           <div className="space-y-0.5">
