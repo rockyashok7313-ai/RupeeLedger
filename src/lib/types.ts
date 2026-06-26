@@ -40,6 +40,7 @@ export interface Transaction {
   gstCalculationType?: 'including' | 'excluding';
   hsnCode?: string;
   customerAddress?: string;
+  shippingAddress?: string;
 }
 
 export interface BusinessProfile {
