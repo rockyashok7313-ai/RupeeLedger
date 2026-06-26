@@ -364,11 +364,13 @@ export default function RupeeLedger() {
             await loadLocalStorageData(firebaseUser.uid);
           }
 
-          // Auto-migration check: If cloud database is empty, check for guest data
+          // Auto-migration check: If cloud database is empty, check for local data
           if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
-            const guestAccs = localStorage.getItem("rupee_ledger_accounts_guest_local") || 
+            const guestAccs = localStorage.getItem(`rupee_ledger_accounts_${firebaseUser.uid}`) ||
+                              localStorage.getItem("rupee_ledger_accounts_guest_local") || 
                               localStorage.getItem("rupee_ledger_accounts_");
-            const guestTxs = localStorage.getItem("rupee_ledger_transactions_guest_local") || 
+            const guestTxs = localStorage.getItem(`rupee_ledger_transactions_${firebaseUser.uid}`) ||
+                              localStorage.getItem("rupee_ledger_transactions_guest_local") || 
                               localStorage.getItem("rupee_ledger_transactions_");
             
             if (guestAccs || guestTxs) {
