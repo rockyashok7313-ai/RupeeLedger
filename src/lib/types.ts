@@ -10,6 +10,10 @@ export interface Account {
   address?: string;
   gstin?: string;
   phone?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  bankAccountName?: string;
 }
 
 export type TransactionType = 'Credit' | 'Debit';

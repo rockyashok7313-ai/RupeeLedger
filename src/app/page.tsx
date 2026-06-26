@@ -1541,10 +1541,14 @@ export default function RupeeLedger() {
     const address = formData.get("address") as string || "";
     const gstin = formData.get("gstin") as string || "";
     const phone = formData.get("phone") as string || "";
+    const bankName = formData.get("bankName") as string || "";
+    const bankAccountNumber = formData.get("bankAccountNumber") as string || "";
+    const bankIfsc = formData.get("bankIfsc") as string || "";
+    const bankAccountName = formData.get("bankAccountName") as string || "";
 
     if (editingAccount) {
       const updatedAccounts = accounts.map(a => 
-        a.id === editingAccount.id ? { ...a, name, type, initialBalance, address, gstin, phone } : a
+        a.id === editingAccount.id ? { ...a, name, type, initialBalance, address, gstin, phone, bankName, bankAccountNumber, bankIfsc, bankAccountName } : a
       );
       recalculateData(updatedAccounts, transactions);
       setEditingAccount(null);
@@ -1560,6 +1564,10 @@ export default function RupeeLedger() {
         address,
         gstin,
         phone,
+        bankName,
+        bankAccountNumber,
+        bankIfsc,
+        bankAccountName,
       };
       recalculateData([...accounts, newAccount], transactions);
       setIsNewAccountOpen(false);
@@ -3692,6 +3700,15 @@ export default function RupeeLedger() {
                   defaultValue={editingAccount?.phone} 
                   placeholder="e.g. +91 99999 99999" 
                 />
+              </div>
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <Label className="text-muted-foreground font-semibold">Bank Details</Label>
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <Input id="bankName" name="bankName" defaultValue={editingAccount?.bankName} placeholder="Bank Name" />
+                  <Input id="bankAccountName" name="bankAccountName" defaultValue={editingAccount?.bankAccountName} placeholder="Account Holder Name" />
+                  <Input id="bankAccountNumber" name="bankAccountNumber" defaultValue={editingAccount?.bankAccountNumber} placeholder="Account Number" />
+                  <Input id="bankIfsc" name="bankIfsc" defaultValue={editingAccount?.bankIfsc} placeholder="IFSC Code" />
+                </div>
               </div>
             </div>
             <DialogFooter>

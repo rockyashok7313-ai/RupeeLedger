@@ -351,6 +351,17 @@ export function InvoicePrint({ transaction, account, businessProfile, onEdit }: 
         {/* Payment and Terms Details */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t text-[10px] text-slate-500">
           <div>
+            {(account.bankName || account.bankAccountNumber) && (
+              <div className="mb-3">
+                <h5 className="font-extrabold uppercase text-slate-700 tracking-wider mb-1">Bank Details</h5>
+                <ul className="list-none space-y-0.5 leading-normal">
+                  {account.bankName && <li><span className="font-semibold text-slate-600">Bank:</span> {account.bankName}</li>}
+                  {account.bankAccountName && <li><span className="font-semibold text-slate-600">Account Name:</span> {account.bankAccountName}</li>}
+                  {account.bankAccountNumber && <li><span className="font-semibold text-slate-600">A/c No:</span> {account.bankAccountNumber}</li>}
+                  {account.bankIfsc && <li><span className="font-semibold text-slate-600">IFSC:</span> {account.bankIfsc}</li>}
+                </ul>
+              </div>
+            )}
             <h5 className="font-extrabold uppercase text-slate-700 tracking-wider mb-1">Standard Terms & Declarations</h5>
             <ul className="list-disc list-inside space-y-0.5 leading-normal">
               <li>Declare that all details are true and correct.</li>
