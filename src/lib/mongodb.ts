@@ -47,21 +47,6 @@ export async function getMongoClient(): Promise<MongoClient> {
       });
     }
     
-    // Check if the client is closed before returning
-    const anyClient = client as any;
-    if (anyClient && anyClient.topology && anyClient.topology.isClosed()) {
-      clientPromise = null;
-      client = new MongoClient(uri, {
-        connectTimeoutMS: 10000,
-        socketTimeoutMS: 45000,
-      });
-      clientPromise = client.connect().catch((err) => {
-        clientPromise = null;
-        client = null;
-        throw err;
-      });
-    }
-
     return clientPromise;
   }
 }

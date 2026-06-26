@@ -3628,7 +3628,7 @@ export default function RupeeLedger() {
         <DialogContent>
           <form onSubmit={handleAccountSubmit} key={editingAccount ? editingAccount.id : "new"}>
             <DialogHeader>
-              <DialogTitle>{editingAccount ? "Modify Account" : "Establish New Account"}</DialogTitle>
+              <DialogTitle>{editingAccount ? "Modify Buyer Name" : "Buyer Name"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
