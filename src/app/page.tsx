@@ -3776,7 +3776,18 @@ export default function RupeeLedger() {
             <DialogTitle>Tax Invoice Document</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto pt-2">
-            {selectedInvoice && <InvoicePrint transaction={selectedInvoice.t} account={selectedInvoice.a} businessProfile={businessProfile} />}
+            {selectedInvoice && <InvoicePrint 
+              transaction={selectedInvoice.t} 
+              account={selectedInvoice.a} 
+              businessProfile={businessProfile} 
+              onEdit={(updates) => {
+                const updatedTx = { ...selectedInvoice.t, ...updates };
+                const updatedTransactions = transactions.map(t => t.id === updatedTx.id ? updatedTx : t);
+                setTransactions(updatedTransactions);
+                setSelectedInvoice({ t: updatedTx, a: selectedInvoice.a });
+                recalculateData(accounts, updatedTransactions);
+              }}
+            />}
           </div>
         </DialogContent>
       </Dialog>
