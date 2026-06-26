@@ -3638,8 +3638,8 @@ export default function RupeeLedger() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Display Name</Label>
-                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder="e.g. Personal Savings, Corporate ICICI" required />
+                <Label htmlFor="name">Company Name</Label>
+                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder="e.g. Senthil Kumar Textiles, Acme Corp" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Account Classification</Label>
