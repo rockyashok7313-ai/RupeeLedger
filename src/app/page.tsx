@@ -158,6 +158,7 @@ export default function RupeeLedger() {
   
   // Modals state
   const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [newAccountContext, setNewAccountContext] = useState<'buyer' | 'company'>('company');
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
   const [selectedVoucher, setSelectedVoucher] = useState<{t: Transaction, a: Account} | null>(null);
@@ -2599,7 +2600,7 @@ export default function RupeeLedger() {
                   <Button variant="outline" onClick={() => setIsDailyReportOpen(true)} className="flex-1 sm:flex-none">
                     <CalendarDays className="mr-2 h-4 w-4" /> Reports
                   </Button>
-                  <Button onClick={() => setIsNewAccountOpen(true)} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm">
+                  <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm">
                     <Plus className="mr-2 h-4 w-4" /> Add Account
                   </Button>
                 </div>
@@ -2637,7 +2638,7 @@ export default function RupeeLedger() {
                 {accounts.length === 0 ? (
                   <div className="col-span-full py-12 text-center border-2 border-dashed rounded-lg bg-card/50">
                     <p className="text-muted-foreground mb-4">No accounts yet. Start by creating one.</p>
-                    <Button onClick={() => setIsNewAccountOpen(true)} variant="outline">Create My First Account</Button>
+                    <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }} variant="outline">Create My First Account</Button>
                   </div>
                 ) : (
                   accounts.map((acc) => (
@@ -2663,7 +2664,7 @@ export default function RupeeLedger() {
                       accounts={accounts}
                       defaultAccountId={selectedAccountId}
                       onSuccess={handleTransactionAdd}
-                      onCreateCustomer={() => setIsNewAccountOpen(true)}
+                      onCreateCustomer={() => { setNewAccountContext('buyer'); setIsNewAccountOpen(true); }}
                     />
                   </div>
                   <div className="space-y-4">
@@ -2966,7 +2967,7 @@ export default function RupeeLedger() {
                         accounts={accounts}
                         defaultAccountId={selectedAccountId}
                         onSuccess={handleTransactionAdd}
-                        onCreateCustomer={() => setIsNewAccountOpen(true)}
+                        onCreateCustomer={() => { setNewAccountContext('buyer'); setIsNewAccountOpen(true); }}
                       />
                     </div>
                   </div>
@@ -3634,12 +3635,12 @@ export default function RupeeLedger() {
         <DialogContent>
           <form onSubmit={handleAccountSubmit} key={editingAccount ? editingAccount.id : "new"}>
             <DialogHeader>
-              <DialogTitle>{editingAccount ? "Modify Buyer Name" : "Buyer Name"}</DialogTitle>
+              <DialogTitle>{editingAccount ? "Modify Account" : (newAccountContext === 'buyer' ? "Buyer Name" : "Company Name")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Company Name</Label>
-                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder="e.g. Senthil Kumar Textiles, Acme Corp" required />
+                <Label htmlFor="name">{newAccountContext === 'buyer' ? "Buyer Name" : "Company Name"}</Label>
+                <Input id="name" name="name" defaultValue={editingAccount?.name} placeholder={newAccountContext === 'buyer' ? "e.g. Senthil Kumar" : "e.g. Acme Corp"} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="type">Account Classification</Label>
@@ -3813,7 +3814,7 @@ export default function RupeeLedger() {
                   handleTransactionAdd(data); 
                   setIsNewInvoiceOpen(false); 
                 }}
-                onCreateCustomer={() => setIsNewAccountOpen(true)}
+                onCreateCustomer={() => { setNewAccountContext('buyer'); setIsNewAccountOpen(true); }}
               />
             )}
           </div>
