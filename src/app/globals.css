@@ -112,6 +112,22 @@
     backdrop-filter: none !important;
     box-shadow: none !important;
   }
+
+  /* A4 single-page invoice wrapper */
+  .invoice-wrapper {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 270mm;
+    max-height: 297mm;
+    margin: 0 auto !important;
+    overflow: hidden !important;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+    padding: 10mm !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
 }
 
 .print-only {

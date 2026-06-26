@@ -32,17 +32,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from "firebase/auth";
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  deleteDoc, 
-  collection, 
-  getDocs, 
-  writeBatch,
-  query,
-  where 
-} from "firebase/firestore";
+// Removed Firestore imports to migrate fully to MongoDB API endpoints
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
 import { CurrencyDisplay } from "@/components/CurrencyDisplay";
@@ -122,38 +112,37 @@ async function migrateSecuritySettings(sec: SecuritySettings, userId: string): P
   return sec;
 }
 
-async function commitBatchInChunks(
+
+async function pushSyncToMongoDB(
   userId: string,
   accountsList: Account[],
-  transactionsList: Transaction[]
+  transactionsList: Transaction[],
+  businessProfile?: BusinessProfile,
+  subscription?: Subscription,
+  securitySettings?: SecuritySettings
 ) {
-  let operationsCount = 0;
-  let batch = writeBatch(db);
-
-  const commitIfNeeded = async () => {
-    if (operationsCount >= 400) {
-      await batch.commit();
-      batch = writeBatch(db);
-      operationsCount = 0;
+  try {
+    const res = await fetch('/api/ledger/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        accounts: accountsList,
+        transactions: transactionsList,
+        businessProfile,
+        subscription,
+        securitySettings,
+        action: 'push'
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`Sync request failed with status ${res.status}`);
     }
-  };
-
-  for (const acc of accountsList) {
-    const accRef = doc(db, "users", userId, "accounts", acc.id);
-    batch.set(accRef, acc);
-    operationsCount++;
-    await commitIfNeeded();
-  }
-
-  for (const tx of transactionsList) {
-    const txRef = doc(db, "users", userId, "transactions", tx.id);
-    batch.set(txRef, tx);
-    operationsCount++;
-    await commitIfNeeded();
-  }
-
-  if (operationsCount > 0) {
-    await batch.commit();
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("MongoDB backup sync error:", err);
+    throw err;
   }
 }
 
@@ -312,67 +301,75 @@ export default function RupeeLedger() {
     }
   };
 
-  // Load from local storage and Razorpay Script + Firebase Auth Setup
   useEffect(() => {
     // 1. Setup Auth Observer
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
+          // Fetch user data via MongoDB Sync API route
+          const syncRes = await fetch('/api/ledger/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
+          });
+
           let shouldLock = false;
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.businessProfile) setBusinessProfile(data.businessProfile);
-            if (data.subscription) {
-              const s = data.subscription;
-              if (s.price === '₹500 / month') s.price = '₹199 / month';
-              if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
-              setSubscription(s);
-            }
-            if (data.securitySettings) {
-              const migrated = await migrateSecuritySettings(data.securitySettings, firebaseUser.uid);
-              setSecuritySettings(migrated);
-              if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
-                shouldLock = true;
+          let fetchedAccounts: Account[] = [];
+          let fetchedTxs: Transaction[] = [];
+
+          if (syncRes.ok) {
+            const syncData = await syncRes.json();
+            if (syncData.isOfflineFallback) {
+              await loadLocalStorageData(firebaseUser.uid);
+            } else {
+              if (syncData.exists) {
+                if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+                if (syncData.subscription) {
+                  const s = syncData.subscription;
+                  if (s.price === '₹500 / month') s.price = '₹199 / month';
+                  if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+                  setSubscription(s);
+                }
+                if (syncData.securitySettings) {
+                  const migrated = await migrateSecuritySettings(syncData.securitySettings, firebaseUser.uid);
+                  setSecuritySettings(migrated);
+                  if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                    shouldLock = true;
+                  }
+                }
+                fetchedAccounts = syncData.accounts || [];
+                fetchedTxs = syncData.transactions || [];
+              } else {
+                const initialSubscription: Subscription = {
+                  status: "active",
+                  plan: "Free Trial (7 Days)",
+                  price: "₹199 / month",
+                  renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+                  licenseKey: "FREE-TRIAL",
+                  purchasedAt: Date.now()
+                };
+                setSubscription(initialSubscription);
+                await pushSyncToMongoDB(
+                  firebaseUser.uid,
+                  [],
+                  [],
+                  businessProfile,
+                  initialSubscription,
+                  securitySettings
+                );
               }
             }
           } else {
-            // Write default config
-            const initialSubscription = {
-              status: "active",
-              plan: "Free Trial (7 Days)",
-              price: "₹199 / month",
-              renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
-              licenseKey: "FREE-TRIAL",
-              purchasedAt: Date.now()
-            };
-            setSubscription(initialSubscription);
-            await setDoc(userDocRef, {
-              businessProfile,
-              subscription: initialSubscription,
-              securitySettings
-            });
+            await loadLocalStorageData(firebaseUser.uid);
           }
-
-          // Fetch accounts
-          const accountsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "accounts"));
-          let fetchedAccounts: Account[] = [];
-          accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
-
-          // Fetch transactions
-          const txsSnapshot = await getDocs(collection(db, "users", firebaseUser.uid, "transactions"));
-          let fetchedTxs: Transaction[] = [];
-          txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
 
           // Auto-migration check: If cloud database is empty, check for guest data
           if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
             const guestAccs = localStorage.getItem("rupee_ledger_accounts_guest_local") || 
                               localStorage.getItem("rupee_ledger_accounts_");
             const guestTxs = localStorage.getItem("rupee_ledger_transactions_guest_local") || 
-                             localStorage.getItem("rupee_ledger_transactions_");
+                              localStorage.getItem("rupee_ledger_transactions_");
             
             if (guestAccs || guestTxs) {
               const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
@@ -382,7 +379,7 @@ export default function RupeeLedger() {
                   title: "Migrating Local Data", 
                   description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
                 });
-                await commitBatchInChunks(firebaseUser.uid, parsedAccs, parsedTxs);
+                await pushSyncToMongoDB(firebaseUser.uid, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings);
                 fetchedAccounts = parsedAccs;
                 fetchedTxs = parsedTxs;
               }
@@ -408,7 +405,7 @@ export default function RupeeLedger() {
           setPinInput("");
           setIsLoaded(true);
         } catch (err) {
-          console.error("Firestore loading error:", err);
+          console.error("MongoDB loading error:", err);
           toast({ title: "Cloud Sync Failure", description: "Loading backup cache from local storage.", variant: "destructive" });
           await loadLocalStorageData(firebaseUser.uid);
           
@@ -435,7 +432,7 @@ export default function RupeeLedger() {
             await loadLocalStorageData(parsed.id);
             setIsLoaded(true);
             return;
-          } else if (parsed.authMethod === 'phone' || parsed.authMethod === 'whatsapp') {
+          } else if (parsed.authMethod === 'phone' || parsed.authMethod === 'whatsapp' || parsed.authMethod === 'emailOtp') {
             setUser(parsed);
             setShowLogin(false);
             setIsLocked(false);
@@ -443,40 +440,42 @@ export default function RupeeLedger() {
             const loadUserData = async () => {
               try {
                 toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
-                const userDocRef = doc(db, "users", parsed.id);
-                const userDoc = await getDoc(userDocRef);
+                const syncRes = await fetch('/api/ledger/sync', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: parsed.id, action: 'pull' })
+                });
                 let shouldLock = false;
-                if (userDoc.exists()) {
-                  const data = userDoc.data();
-                  if (data.businessProfile) setBusinessProfile(data.businessProfile);
-                  if (data.subscription) {
-                    const s = data.subscription;
-                    if (s.price === '₹500 / month') s.price = '₹199 / month';
-                    if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
-                    setSubscription(s);
-                  }
-                  if (data.securitySettings) {
-                    const migrated = await migrateSecuritySettings(data.securitySettings, parsed.id);
-                    setSecuritySettings(migrated);
-                    if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
-                      shouldLock = true;
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData.isOfflineFallback) {
+                    await loadLocalStorageData(parsed.id);
+                  } else if (syncData.exists) {
+                    if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+                    if (syncData.subscription) {
+                      const s = syncData.subscription;
+                      if (s.price === '₹500 / month') s.price = '₹199 / month';
+                      if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+                      setSubscription(s);
                     }
+                    if (syncData.securitySettings) {
+                      const migrated = await migrateSecuritySettings(syncData.securitySettings, parsed.id);
+                      setSecuritySettings(migrated);
+                      if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                        shouldLock = true;
+                      }
+                    }
+                    setAccounts(syncData.accounts || []);
+                    setTransactions(syncData.transactions || []);
                   }
+                } else {
+                  await loadLocalStorageData(parsed.id);
                 }
-                const accountsSnapshot = await getDocs(collection(db, "users", parsed.id, "accounts"));
-                const fetchedAccounts: Account[] = [];
-                accountsSnapshot.forEach(docSnap => fetchedAccounts.push(docSnap.data() as Account));
-                setAccounts(fetchedAccounts);
-
-                const txsSnapshot = await getDocs(collection(db, "users", parsed.id, "transactions"));
-                const fetchedTxs: Transaction[] = [];
-                txsSnapshot.forEach(docSnap => fetchedTxs.push(docSnap.data() as Transaction));
-                setTransactions(fetchedTxs);
                 
                 setIsLocked(shouldLock);
                 setIsLoaded(true);
               } catch (err) {
-                console.error("Firestore user loading error on refresh:", err);
+                console.error("MongoDB user loading error on refresh:", err);
                 await loadLocalStorageData(parsed.id);
                 setIsLoaded(true);
               }
@@ -485,12 +484,8 @@ export default function RupeeLedger() {
             return;
           }
         }
-        setUser(null);
-        setShowLogin(true);
-        setIsLoaded(true);
       }
     });
-
     // 2. Load Razorpay Script dynamically
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -547,18 +542,20 @@ export default function RupeeLedger() {
       localStorage.setItem("rupee_ledger_cloud_backup_enabled", JSON.stringify(cloudBackupEnabled));
       if (user) {
         localStorage.setItem("rupee_ledger_user", JSON.stringify(user));
-        // Sync configuration states to Firestore if logged in and cloud backup is enabled
+        // Sync configuration states to MongoDB if logged in and cloud backup is enabled
         if (user.authMethod !== 'guest' && cloudBackupEnabled) {
           const syncConfig = async () => {
             try {
-              const userDocRef = doc(db, "users", user.id);
-              await setDoc(userDocRef, {
+              await pushSyncToMongoDB(
+                user.id,
+                accounts,
+                transactions,
                 businessProfile,
                 subscription,
                 securitySettings
-              }, { merge: true });
+              );
             } catch (err) {
-              console.error("Firestore config sync error:", err);
+              console.error("MongoDB config sync error:", err);
             }
           };
           syncConfig();
@@ -653,27 +650,37 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const userDocRef = doc(db, 'users', phoneId);
-        const userDoc = await getDoc(userDocRef);
+        const syncRes = await fetch('/api/ledger/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: phoneId, action: 'pull' })
+        });
         let shouldLock = false;
-        if (userDoc.exists()) {
-          const d = userDoc.data();
-          if (d.businessProfile) setBusinessProfile(d.businessProfile);
-          if (d.subscription) setSubscription(d.subscription);
-          if (d.securitySettings) {
-            const migrated = await migrateSecuritySettings(d.securitySettings, phoneId);
-            setSecuritySettings(migrated);
-            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+        let fetchedAccounts: Account[] = [];
+        let fetchedTxs: Transaction[] = [];
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.isOfflineFallback) {
+            await loadLocalStorageData(phoneId);
+          } else {
+            if (syncData.exists) {
+              if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+              if (syncData.subscription) setSubscription(syncData.subscription);
+              if (syncData.securitySettings) {
+                const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
+                setSecuritySettings(migrated);
+                if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+              }
+              fetchedAccounts = syncData.accounts || [];
+              fetchedTxs = syncData.transactions || [];
+            } else {
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+            }
           }
         } else {
-          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
+          await loadLocalStorageData(phoneId);
         }
-        const accsSnap = await getDocs(collection(db, 'users', phoneId, 'accounts'));
-        let fetchedAccounts: Account[] = [];
-        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
-        const txsSnap = await getDocs(collection(db, 'users', phoneId, 'transactions'));
-        let fetchedTxs: Transaction[] = [];
-        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
         setAccounts(fetchedAccounts);
         setTransactions(fetchedTxs);
         await fetchGeneratedKeys(phoneId);
@@ -686,7 +693,7 @@ export default function RupeeLedger() {
         setPhoneInput('');
         toast({ title: 'Verification Successful', description: 'Your phone number is authenticated.' });
       } catch (err) {
-        console.error('Firestore phone login error:', err);
+        console.error('MongoDB phone login error:', err);
         setUser(phoneUser);
         setShowLogin(false);
         await loadLocalStorageData(phoneId);
@@ -755,27 +762,37 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const userDocRef = doc(db, 'users', phoneId);
-        const userDoc = await getDoc(userDocRef);
+        const syncRes = await fetch('/api/ledger/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: phoneId, action: 'pull' })
+        });
         let shouldLock = false;
-        if (userDoc.exists()) {
-          const d = userDoc.data();
-          if (d.businessProfile) setBusinessProfile(d.businessProfile);
-          if (d.subscription) setSubscription(d.subscription);
-          if (d.securitySettings) {
-            const migrated = await migrateSecuritySettings(d.securitySettings, phoneId);
-            setSecuritySettings(migrated);
-            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+        let fetchedAccounts: Account[] = [];
+        let fetchedTxs: Transaction[] = [];
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.isOfflineFallback) {
+            await loadLocalStorageData(phoneId);
+          } else {
+            if (syncData.exists) {
+              if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+              if (syncData.subscription) setSubscription(syncData.subscription);
+              if (syncData.securitySettings) {
+                const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
+                setSecuritySettings(migrated);
+                if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+              }
+              fetchedAccounts = syncData.accounts || [];
+              fetchedTxs = syncData.transactions || [];
+            } else {
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+            }
           }
         } else {
-          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
+          await loadLocalStorageData(phoneId);
         }
-        const accsSnap = await getDocs(collection(db, 'users', phoneId, 'accounts'));
-        let fetchedAccounts: Account[] = [];
-        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
-        const txsSnap = await getDocs(collection(db, 'users', phoneId, 'transactions'));
-        let fetchedTxs: Transaction[] = [];
-        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
         setAccounts(fetchedAccounts);
         setTransactions(fetchedTxs);
         await fetchGeneratedKeys(phoneId);
@@ -786,15 +803,15 @@ export default function RupeeLedger() {
         setWhatsappOtpSent(false);
         setWhatsappOtpInput('');
         setWhatsappInput('');
-        toast({ title: 'Verification Successful', description: 'Your WhatsApp number is authenticated.' });
       } catch (err) {
-        console.error('Firestore whatsapp login error:', err);
+        console.error('MongoDB whatsapp login error:', err);
         setUser(whatsappUser);
         setShowLogin(false);
         await loadLocalStorageData(phoneId);
         setWhatsappOtpSent(false);
         setWhatsappOtpInput('');
         setWhatsappInput('');
+        toast({ title: 'Verification Successful', description: 'Your WhatsApp number is authenticated.' });
       }
     } catch (err) {
       toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
@@ -857,27 +874,37 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const userDocRef = doc(db, 'users', emailId);
-        const userDoc = await getDoc(userDocRef);
+        const syncRes = await fetch('/api/ledger/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: emailId, action: 'pull' })
+        });
         let shouldLock = false;
-        if (userDoc.exists()) {
-          const d = userDoc.data();
-          if (d.businessProfile) setBusinessProfile(d.businessProfile);
-          if (d.subscription) setSubscription(d.subscription);
-          if (d.securitySettings) {
-            const migrated = await migrateSecuritySettings(d.securitySettings, emailId);
-            setSecuritySettings(migrated);
-            if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+        let fetchedAccounts: Account[] = [];
+        let fetchedTxs: Transaction[] = [];
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.isOfflineFallback) {
+            await loadLocalStorageData(emailId);
+          } else {
+            if (syncData.exists) {
+              if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+              if (syncData.subscription) setSubscription(syncData.subscription);
+              if (syncData.securitySettings) {
+                const migrated = await migrateSecuritySettings(syncData.securitySettings, emailId);
+                setSecuritySettings(migrated);
+                if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+              }
+              fetchedAccounts = syncData.accounts || [];
+              fetchedTxs = syncData.transactions || [];
+            } else {
+              await pushSyncToMongoDB(emailId, [], [], businessProfile, subscription, securitySettings);
+            }
           }
         } else {
-          await setDoc(userDocRef, { businessProfile, subscription, securitySettings });
+          await loadLocalStorageData(emailId);
         }
-        const accsSnap = await getDocs(collection(db, 'users', emailId, 'accounts'));
-        let fetchedAccounts: Account[] = [];
-        accsSnap.forEach(s => fetchedAccounts.push(s.data() as Account));
-        const txsSnap = await getDocs(collection(db, 'users', emailId, 'transactions'));
-        let fetchedTxs: Transaction[] = [];
-        txsSnap.forEach(s => fetchedTxs.push(s.data() as Transaction));
         setAccounts(fetchedAccounts);
         setTransactions(fetchedTxs);
         await fetchGeneratedKeys(emailId);
@@ -890,7 +917,7 @@ export default function RupeeLedger() {
         setEmailInput('');
         toast({ title: 'Welcome!', description: `Signed in as ${emailUser.email}` });
       } catch (err) {
-        console.error('Firestore email OTP login error:', err);
+        console.error('MongoDB email OTP login error:', err);
         setUser(emailUser);
         setShowLogin(false);
         await loadLocalStorageData(emailId);
@@ -963,10 +990,7 @@ export default function RupeeLedger() {
       // Migrate local guest data to cloud
       toast({ title: 'Linking Account...', description: 'Migrating your ledger data to cloud.' });
       try {
-        await setDoc(doc(db, 'users', emailId), { businessProfile, subscription, securitySettings }, { merge: true });
-        if (accounts.length > 0 || transactions.length > 0) {
-          await commitBatchInChunks(emailId, accounts, transactions);
-        }
+        await pushSyncToMongoDB(emailId, accounts, transactions, businessProfile, subscription, securitySettings);
         toast({ title: 'Account Linked!', description: `Your ledger is now saved under ${guestUpgradeEmail}` });
       } catch (err) {
         console.error('Guest migration error:', err);
@@ -1134,11 +1158,11 @@ export default function RupeeLedger() {
       }
 
       const amount = duration === "annual" ? 1999 : 199;
-      const targetUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      const targetUrl = typeof window !== 'undefined' && window.location.origin.startsWith('http')
         ? ''
-        : 'https://v0-indian-payroll-website.vercel.app';
+        : 'https://www.rupeeledgerpro.com';
 
-      const verifyUrl = `/api/razorpay/verify`;
+      const verifyUrl = `${targetUrl}/api/razorpay/verify`;
 
       toast({
         title: "Initiating Payment Gateway...",
@@ -1278,26 +1302,13 @@ export default function RupeeLedger() {
   const fetchGeneratedKeys = async (userId: string) => {
     if (!isOwner) return;
     try {
-      const q = query(collection(db, "keys"), where("createdBy", "==", userId));
-      const querySnapshot = await getDocs(q);
-      interface ResellerKey {
-        key: string;
-        duration: string;
-        createdAt: number;
-        status: string;
+      const res = await fetch(`/api/keys?userId=${userId}`);
+      if (!res.ok) throw new Error('Failed to fetch generated keys');
+      const data = await res.json();
+      if (data.isOfflineFallback) {
+        return;
       }
-      const keys: ResellerKey[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        keys.push({
-          key: docSnap.id,
-          duration: data.durationDays === 365 ? "Annual" : "Monthly",
-          createdAt: data.createdAt || Date.now(),
-          status: data.status || "unused"
-        });
-      });
-      keys.sort((a, b) => b.createdAt - a.createdAt);
-      setGeneratedKeysList(keys);
+      setGeneratedKeysList(data.keys || []);
     } catch (err) {
       console.error("Error fetching generated keys:", err);
     }
@@ -1322,13 +1333,18 @@ export default function RupeeLedger() {
       const durationDays = vendorKeyDuration === "annual" ? 365 : 30;
       
       if (user && user.authMethod !== 'guest') {
-        await setDoc(doc(db, "keys", newKey), {
-          key: newKey,
-          durationDays,
-          status: "unused",
-          createdAt: Date.now(),
-          createdBy: user.id
+        const res = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: newKey,
+            durationDays,
+            createdBy: user.id
+          })
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save key');
+
         toast({
           title: "License Key Generated",
           description: `Key ${newKey} is saved to cloud keys database.`
@@ -1366,27 +1382,17 @@ export default function RupeeLedger() {
 
     if (user && user.authMethod !== 'guest') {
       try {
-        const keyDocRef = doc(db, "keys", keyStr);
-        const keyDoc = await getDoc(keyDocRef);
-        
-        if (keyDoc.exists()) {
-          const keyData = keyDoc.data();
-          if (keyData.status === "used") {
-            toast({
-              title: "Key Already Used",
-              description: `This license key was already activated by another profile.`,
-              variant: "destructive"
-            });
-            return;
-          }
-          
-          await setDoc(keyDocRef, {
-            status: "used",
-            usedBy: user.id,
-            usedAt: Date.now()
-          }, { merge: true });
-
-          const days = keyData.durationDays || 30;
+        const res = await fetch('/api/keys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: keyStr,
+            userId: user.id
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const days = data.durationDays || 30;
           const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
           const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
           const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
@@ -1403,6 +1409,13 @@ export default function RupeeLedger() {
           toast({
             title: "License Activated!",
             description: `Your ${days === 365 ? "annual" : "monthly"} Pro license is verified and active.`,
+          });
+          return;
+        } else {
+          toast({
+            title: "Verification Failed",
+            description: data.error || "The entered license key could not be verified.",
+            variant: "destructive"
           });
           return;
         }
@@ -1510,9 +1523,9 @@ export default function RupeeLedger() {
     localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(finalAccounts));
     localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(updatedTransactions));
 
-    if (user && user.authMethod !== 'guest') {
-      commitBatchInChunks(user.id, finalAccounts, updatedTransactions).catch(err => {
-        console.error("Firestore batch sync error:", err);
+    if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
+      pushSyncToMongoDB(user.id, finalAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
+        console.error("MongoDB batch sync error:", err);
       });
     }
   };
@@ -1557,27 +1570,18 @@ export default function RupeeLedger() {
   const deleteAccount = async () => {
     if (!accountToDelete) return;
 
-    if (user && user.authMethod !== 'guest') {
+    const updatedAccounts = accounts.filter(a => a.id !== accountToDelete);
+    const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
+    
+    if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
       try {
-        const accRef = doc(db, "users", user.id, "accounts", accountToDelete);
-        await deleteDoc(accRef);
-        
-        // Delete all transactions associated with this account from Firestore
-        const txsToDelete = transactions.filter(t => t.accountId === accountToDelete);
-        const batch = writeBatch(db);
-        txsToDelete.forEach(tx => {
-          const txRef = doc(db, "users", user.id, "transactions", tx.id);
-          batch.delete(txRef);
-        });
-        await batch.commit();
+        await pushSyncToMongoDB(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings);
       } catch (err) {
-        console.error("Firestore account deletion error:", err);
-        toast({ title: "Failed to delete from Cloud", description: "Offline/network error occurred.", variant: "destructive" });
+        console.error("MongoDB account deletion sync error:", err);
+        toast({ title: "Failed to sync deletion with cloud", description: "Operation queued locally.", variant: "destructive" });
       }
     }
 
-    const updatedAccounts = accounts.filter(a => a.id !== accountToDelete);
-    const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
     setAccounts(updatedAccounts);
     setTransactions(updatedTransactions);
     if (selectedAccountId === accountToDelete) setSelectedAccountId(null);
@@ -1678,17 +1682,17 @@ export default function RupeeLedger() {
   const deleteTransaction = async () => {
     if (!transactionToDelete) return;
 
-    if (user && user.authMethod !== 'guest') {
+    const updatedTransactions = transactions.filter(t => t.id !== transactionToDelete);
+
+    if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
       try {
-        const txRef = doc(db, "users", user.id, "transactions", transactionToDelete);
-        await deleteDoc(txRef);
+        await pushSyncToMongoDB(user.id, accounts, updatedTransactions, businessProfile, subscription, securitySettings);
       } catch (err) {
-        console.error("Firestore transaction deletion error:", err);
-        toast({ title: "Failed to delete from Cloud", description: "Offline/network error occurred.", variant: "destructive" });
+        console.error("MongoDB transaction deletion sync error:", err);
+        toast({ title: "Failed to sync deletion with cloud", description: "Operation queued locally.", variant: "destructive" });
       }
     }
 
-    const updatedTransactions = transactions.filter(t => t.id !== transactionToDelete);
     recalculateData(accounts, updatedTransactions);
     setTransactionToDelete(null);
     toast({ title: "Transaction deleted" });
@@ -1697,19 +1701,9 @@ export default function RupeeLedger() {
   const handleClearAllData = async () => {
     if (user && user.authMethod !== 'guest') {
       try {
-        const accountsSnapshot = await getDocs(collection(db, "users", user.id, "accounts"));
-        const txsSnapshot = await getDocs(collection(db, "users", user.id, "transactions"));
-        
-        const batch = writeBatch(db);
-        accountsSnapshot.forEach(docSnap => {
-          batch.delete(docSnap.ref);
-        });
-        txsSnapshot.forEach(docSnap => {
-          batch.delete(docSnap.ref);
-        });
-        await batch.commit();
+        await pushSyncToMongoDB(user.id, [], [], businessProfile, subscription, securitySettings);
       } catch (err) {
-        console.error("Firestore clear all data error:", err);
+        console.error("MongoDB clear all data error:", err);
         toast({ title: "Cloud Clear Failed", description: "Could not clear all records from cloud.", variant: "destructive" });
       }
     }
@@ -1730,15 +1724,9 @@ export default function RupeeLedger() {
       toast({ title: "Guest Mode", description: "Please log in to backup to the cloud.", variant: "destructive" });
       return;
     }
-    toast({ title: "Backing up...", description: "Uploading database to Firestore." });
+    toast({ title: "Backing up...", description: "Uploading database to MongoDB." });
     try {
-      await commitBatchInChunks(user.id, accounts, transactions);
-      const userDocRef = doc(db, "users", user.id);
-      await setDoc(userDocRef, {
-        businessProfile,
-        subscription,
-        securitySettings
-      }, { merge: true });
+      await pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, subscription, securitySettings);
       toast({ title: "Backup Successful", description: "All data is securely saved in the cloud." });
     } catch (err) {
       console.error("Manual cloud backup error:", err);
@@ -2658,7 +2646,8 @@ export default function RupeeLedger() {
                     <TransactionForm 
                       accounts={accounts}
                       defaultAccountId={selectedAccountId}
-                      onSuccess={handleTransactionAdd} 
+                      onSuccess={handleTransactionAdd}
+                      onCreateCustomer={() => setIsNewAccountOpen(true)}
                     />
                   </div>
                   <div className="space-y-4">
@@ -2960,7 +2949,8 @@ export default function RupeeLedger() {
                       <TransactionForm 
                         accounts={accounts}
                         defaultAccountId={selectedAccountId}
-                        onSuccess={handleTransactionAdd} 
+                        onSuccess={handleTransactionAdd}
+                        onCreateCustomer={() => setIsNewAccountOpen(true)}
                       />
                     </div>
                   </div>
@@ -3551,24 +3541,24 @@ export default function RupeeLedger() {
                         </Button>
                       </div>
 
-                      {/* Firebase SDK Config Check */}
+                      {/* MongoDB Config Check */}
                       {isOwner && (
                         <div className="pt-4 mt-2 border-t space-y-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Firebase Cloud SDK Bindings</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Database Engine</h4>
                           <div className="grid grid-cols-2 gap-2 text-xs p-3 bg-muted/40 rounded-lg border">
                             <div>
-                              <p className="text-slate-500 font-semibold">Project ID</p>
-                              <p className="font-mono text-slate-800 font-bold truncate" title={auth.app.options.projectId || ""}>
-                                {auth.app.options.projectId || "Not Configured"}
+                              <p className="text-slate-500 font-semibold">Active Engine</p>
+                              <p className="font-sans text-slate-800 font-bold truncate">
+                                MongoDB API
                               </p>
                             </div>
                             <div>
-                              <p className="text-slate-500 font-semibold">SDK Status</p>
+                              <p className="text-slate-500 font-semibold">Sync Status</p>
                               <p className="font-semibold mt-0.5">
                                 {user && user.authMethod !== 'guest' ? (
-                                  <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Active Synced</span>
+                                  <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Cloud Synced</span>
                                 ) : (
-                                  <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Mode</span>
+                                  <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Local</span>
                                 )}
                               </p>
                             </div>
@@ -3577,7 +3567,7 @@ export default function RupeeLedger() {
                       )}
                     </CardContent>
                   </Card>
-
+ 
                   {/* About Card */}
                   <Card className="shadow-sm border-slate-200/80">
                     <CardHeader>
@@ -3592,7 +3582,7 @@ export default function RupeeLedger() {
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Storage Engine</span>
-                            <span className="font-mono text-xs">browser.localStorage</span>
+                            <span className="font-mono text-xs">browser.localStorage + MongoDB</span>
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Privacy Status</span>
@@ -3786,7 +3776,8 @@ export default function RupeeLedger() {
                 onSuccess={(data) => { 
                   handleTransactionAdd(data); 
                   setIsNewInvoiceOpen(false); 
-                }} 
+                }}
+                onCreateCustomer={() => setIsNewAccountOpen(true)}
               />
             )}
           </div>

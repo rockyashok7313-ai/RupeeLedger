@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { getMongoDb, isMongoConfigured } from '@/lib/mongodb';
 import nodemailer from 'nodemailer';
 
 export async function POST(request: Request) {
@@ -24,17 +23,27 @@ export async function POST(request: Request) {
 
     const durationDays = duration === 'annual' ? 365 : 30;
 
-    // Helper to generate and save key in Firestore
+    // Helper to generate and save key in MongoDB
     const createAndSaveKey = async (payId: string) => {
       const newKeyStr = generateKeyString();
-      const keyDocRef = doc(db, "keys", newKeyStr);
-      await setDoc(keyDocRef, {
-        createdAt: Date.now(),
-        durationDays,
-        createdBy: userId || 'anonymous_buyer',
-        status: 'unused',
-        paymentId: payId
-      });
+      if (isMongoConfigured()) {
+        const db = await getMongoDb();
+        await db.collection('keys').updateOne(
+          { _id: newKeyStr as any },
+          {
+            $set: {
+              createdAt: Date.now(),
+              durationDays,
+              createdBy: userId || 'anonymous_buyer',
+              status: 'unused',
+              paymentId: payId
+            }
+          },
+          { upsert: true }
+        );
+      } else {
+        console.warn('MongoDB not configured. Mocking activation key save.');
+      }
       return newKeyStr;
     };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Account, TransactionType } from "@/lib/types";
 import { format, parse } from "date-fns";
-import { Sparkles, Loader2, PlusCircle, Landmark } from "lucide-react";
+import { Sparkles, Loader2, PlusCircle, Landmark, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -40,10 +40,13 @@ interface TransactionFormProps {
     customerName?: string;
     customerGstin?: string;
     gstCalculationType?: 'including' | 'excluding';
+    hsnCode?: string;
+    customerAddress?: string;
   }) => void;
+  onCreateCustomer?: () => void;
 }
 
-export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled, onSuccess }: TransactionFormProps) {
+export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled, onSuccess, onCreateCustomer }: TransactionFormProps) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [type, setType] = useState<TransactionType>("Debit");
   const [amount, setAmount] = useState("");
@@ -58,7 +61,34 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerGstin, setCustomerGstin] = useState("");
-  const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>("including");
+  const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>('including');
+  const [hsnCode, setHsnCode] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+
+  // Customer name autocomplete state
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const customerNameRef = useRef<HTMLDivElement>(null);
+
+  // Filter accounts matching the typed customer name
+  const customerSuggestions = useMemo(() => {
+    if (!customerName.trim()) return [];
+    const q = customerName.toLowerCase();
+    return accounts.filter(acc =>
+      acc.name.toLowerCase().includes(q) ||
+      (acc.gstin && acc.gstin.toLowerCase().includes(q))
+    );
+  }, [accounts, customerName]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerNameRef.current && !customerNameRef.current.contains(e.target as Node)) {
+        setShowCustomerSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Sync selected account when default changes
   useEffect(() => {
@@ -70,17 +100,13 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultAccountId, accounts]);
 
-  // Auto-prefill customer details when selectedAccountId changes
-  useEffect(() => {
-    const activeAcc = accounts.find(a => a.id === selectedAccountId);
-    if (activeAcc) {
-      setCustomerName(activeAcc.name || "");
-      setCustomerGstin(activeAcc.gstin || "");
-    } else {
-      setCustomerName("");
-      setCustomerGstin("");
-    }
-  }, [selectedAccountId, accounts]);
+  // Pick a customer from suggestions — auto-fill GSTIN and address
+  const handlePickCustomer = (acc: Account) => {
+    setCustomerName(acc.name || '');
+    setCustomerGstin(acc.gstin || '');
+    setCustomerAddress(acc.address || '');
+    setShowCustomerSuggestions(false);
+  };
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
@@ -193,6 +219,8 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
       customerName: gstEnabled ? customerName : undefined,
       customerGstin: gstEnabled ? customerGstin : undefined,
       gstCalculationType: gstEnabled ? gstCalculationType : undefined,
+      hsnCode: gstEnabled ? hsnCode : undefined,
+      customerAddress: gstEnabled ? customerAddress : undefined,
     });
 
     setAmount("");
@@ -202,6 +230,8 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
     setInvoiceNumber("");
     setCustomerName("");
     setCustomerGstin("");
+    setCustomerAddress("");
+    setHsnCode("");
     setGstCalculationType("including");
   };
 
@@ -321,6 +351,22 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
 
           {gstEnabled && (
             <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg animate-in slide-in-from-top-2 duration-300">
+
+              {/* Create Customer Ledger Button */}
+              {onCreateCustomer && (
+                <div className="pb-2 border-b border-slate-200">
+                  <button
+                    type="button"
+                    onClick={onCreateCustomer}
+                    className="w-full flex items-center justify-center gap-2 h-9 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-lg shadow-sm transition-all duration-200 active:scale-[0.98]"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Create Customer Ledger
+                  </button>
+                </div>
+              )}
+
+              {/* GST Calculation Mode Toggle */}
               <div className="space-y-1 pb-1 border-b border-slate-200">
                 <Label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">GST Calculation Mode</Label>
                 <div className="relative flex items-center bg-slate-200/60 p-0.5 rounded-full border border-slate-300/40 w-full h-8 select-none">
@@ -380,16 +426,47 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
                 </div>
               </div>
 
-              <div className="space-y-1">
+              {/* ===== CUSTOMER NAME with type-ahead autocomplete ===== */}
+              <div className="space-y-1 relative" ref={customerNameRef}>
                 <Label htmlFor="cust-name" className="text-xs">Customer Name</Label>
                 <Input 
                   id="cust-name" 
                   value={customerName} 
-                  onChange={(e) => setCustomerName(e.target.value)} 
-                  placeholder="e.g. Acme Corp" 
+                  onChange={(e) => {
+                    setCustomerName(e.target.value);
+                    setShowCustomerSuggestions(true);
+                  }}
+                  onFocus={() => {
+                    if (customerName.trim()) setShowCustomerSuggestions(true);
+                  }}
+                  placeholder="Type customer name to search..." 
                   className="h-8 text-xs bg-white"
                   required={gstEnabled}
+                  autoComplete="off"
                 />
+                {/* Autocomplete suggestion dropdown */}
+                {showCustomerSuggestions && customerSuggestions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-44 overflow-y-auto">
+                    {customerSuggestions.map(acc => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => handlePickCustomer(acc)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-emerald-50 transition-colors border-b border-slate-100 last:border-b-0"
+                      >
+                        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                          {acc.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 truncate">{acc.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {acc.gstin || 'No GSTIN'}{acc.address ? ` • ${acc.address}` : ''}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -415,6 +492,30 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* HSN Code */}
+              <div className="space-y-1">
+                <Label htmlFor="hsn-code" className="text-xs">HSN / SAC Code</Label>
+                <Input 
+                  id="hsn-code" 
+                  value={hsnCode} 
+                  onChange={(e) => setHsnCode(e.target.value)} 
+                  placeholder="e.g. 9983 or 8471" 
+                  className="h-8 text-xs font-mono bg-white"
+                />
+              </div>
+
+              {/* Customer Address */}
+              <div className="space-y-1">
+                <Label htmlFor="cust-addr" className="text-xs">Buyer Full Address</Label>
+                <Textarea
+                  id="cust-addr"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  placeholder="e.g. 123 MG Road, Bengaluru, Karnataka - 560001"
+                  className="min-h-[56px] text-xs bg-white resize-none"
+                />
               </div>
             </div>
           )}

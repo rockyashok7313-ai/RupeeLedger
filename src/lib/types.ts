@@ -34,6 +34,8 @@ export interface Transaction {
   customerName?: string;
   customerGstin?: string;
   gstCalculationType?: 'including' | 'excluding';
+  hsnCode?: string;
+  customerAddress?: string;
 }
 
 export interface BusinessProfile {
