@@ -9,24 +9,61 @@ if (!uri) {
   console.warn('WARNING: MONGODB_URI environment variable is not defined. MongoDB functionality will fall back to simulated local database operations.');
 }
 
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
 export async function getMongoClient(): Promise<MongoClient> {
   if (!uri) {
     throw new Error('MONGODB_URI is not set');
   }
 
-  if (client) {
-    return client;
-  }
+  if (process.env.NODE_ENV === 'development') {
+    // In development mode, use a global variable so that the value
+    // is preserved across module reloads caused by HMR.
+    if (!global._mongoClientPromise) {
+      client = new MongoClient(uri, {
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+      });
+      global._mongoClientPromise = client.connect().catch((err) => {
+        global._mongoClientPromise = undefined;
+        throw err;
+      });
+    }
+    return global._mongoClientPromise;
+  } else {
+    // In production, we still cache the promise but we must clear it if it fails
+    // or if the topology is closed, to prevent permanent 500 errors in Vercel Edge/Serverless.
+    if (!clientPromise) {
+      client = new MongoClient(uri, {
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+      });
+      clientPromise = client.connect().catch((err) => {
+        clientPromise = null;
+        client = null;
+        throw err;
+      });
+    }
+    
+    // Check if the client is closed before returning
+    const anyClient = client as any;
+    if (anyClient && anyClient.topology && anyClient.topology.isClosed()) {
+      clientPromise = null;
+      client = new MongoClient(uri, {
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+      });
+      clientPromise = client.connect().catch((err) => {
+        clientPromise = null;
+        client = null;
+        throw err;
+      });
+    }
 
-  if (!clientPromise) {
-    client = new MongoClient(uri, {
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-    });
-    clientPromise = client.connect();
+    return clientPromise;
   }
-
-  return clientPromise;
 }
 
 export async function getMongoDb() {
