@@ -10,14 +10,14 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    // Phone users (mock OTP) store data under "p_<phone>"
+    // Phone users: check if request.auth.token contains phone or if user's ID matches request.auth.uid
     function isPhonePath(userId) {
-      return userId.matches('p_.*');
+      return userId == 'p_' + request.auth.token.phone_number || userId == request.auth.uid;
     }
 
-    // Email OTP users store data under "e_<sanitized-email>"
+    // Email OTP users: check if request.auth.token.email matches sanitized email ID
     function isEmailOtpPath(userId) {
-      return userId.matches('e_.*');
+      return userId == 'e_' + request.auth.token.email || userId == request.auth.uid;
     }
 
     // User-scoped data: profiles, accounts, transactions, settings

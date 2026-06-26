@@ -47,3 +47,5 @@ firestore-debug.log
 .env*
 *-adminsdk-*.json
 serviceAccountKey.json
+
+.vercel
