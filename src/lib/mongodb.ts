@@ -31,10 +31,28 @@ export async function getMongoClient(): Promise<MongoClient> {
 
 export async function getMongoDb() {
   const client = await getMongoClient();
-  // Parse DB name from URI or default to "rupeeledger"
-  const dbName = uri && uri.includes('?') 
-    ? uri.substring(uri.lastIndexOf('/') + 1, uri.indexOf('?'))
-    : uri ? uri.substring(uri.lastIndexOf('/') + 1) : 'rupeeledger';
+  
+  // Safely parse DB name from URI or default to "rupeeledger"
+  let dbName = 'rupeeledger';
+  if (uri) {
+    try {
+      const parsedUri = new URL(uri);
+      // parsedUri.pathname will be '/' or '/dbname'
+      if (parsedUri.pathname && parsedUri.pathname.length > 1) {
+        dbName = parsedUri.pathname.substring(1); // remove leading slash
+      }
+    } catch (e) {
+      // Fallback manual parsing if URL parsing fails
+      const afterSlash = uri.includes('?') 
+        ? uri.substring(uri.lastIndexOf('/') + 1, uri.indexOf('?'))
+        : uri.substring(uri.lastIndexOf('/') + 1);
+        
+      if (afterSlash && !afterSlash.includes('.')) {
+        dbName = afterSlash;
+      }
+    }
+  }
+  
   return client.db(dbName || 'rupeeledger');
 }
 
