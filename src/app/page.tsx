@@ -1616,6 +1616,9 @@ export default function RupeeLedger() {
     customerName?: string;
     customerGstin?: string;
     gstCalculationType?: 'including' | 'excluding';
+    hsnCode?: string;
+    customerAddress?: string;
+    shippingAddress?: string;
   }) => {
     const newTx: Transaction = {
       id: Math.random().toString(36).substring(7),
@@ -1636,6 +1639,9 @@ export default function RupeeLedger() {
       customerName: data.customerName,
       customerGstin: data.customerGstin,
       gstCalculationType: data.gstCalculationType,
+      hsnCode: data.hsnCode,
+      customerAddress: data.customerAddress,
+      shippingAddress: data.shippingAddress,
     };
     recalculateData(accounts, [...transactions, newTx]);
     toast({ title: `Recorded for ${accounts.find(a => a.id === data.accountId)?.name}` });
