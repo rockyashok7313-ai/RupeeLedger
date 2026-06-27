@@ -37,7 +37,11 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         amount: amount * 100, // Razorpay expects paise (₹1 = 100 paise)
         currency: 'INR',
-        receipt: 'receipt_' + Date.now()
+        receipt: 'receipt_' + Date.now(),
+        notes: {
+          userId: body.userId || '',
+          duration: body.duration || 'annual'
+        }
       })
     });
 
