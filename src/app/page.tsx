@@ -3244,6 +3244,50 @@ export default function RupeeLedger() {
                             onChange={(e) => handleProfileChange('printFooter', e.target.value)} 
                           />
                         </div>
+
+                        {/* Bank Details Section */}
+                        <div className="pt-4 border-t border-slate-200 mt-2 space-y-4">
+                          <h4 className="text-sm font-bold text-slate-800">Bank Account Details (Optional)</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label htmlFor="bankName" className="text-xs font-semibold text-slate-700">Bank Name</Label>
+                              <Input 
+                                id="bankName" 
+                                value={businessProfile.bankName || ''} 
+                                placeholder="e.g. HDFC Bank" 
+                                onChange={(e) => handleProfileChange('bankName', e.target.value)} 
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="bankAccountNo" className="text-xs font-semibold text-slate-700">Account Number</Label>
+                              <Input 
+                                id="bankAccountNo" 
+                                value={businessProfile.bankAccountNumber || ''} 
+                                placeholder="e.g. 50100XXXXXXX" 
+                                onChange={(e) => handleProfileChange('bankAccountNumber', e.target.value)} 
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="bankIfsc" className="text-xs font-semibold text-slate-700">IFSC Code</Label>
+                              <Input 
+                                id="bankIfsc" 
+                                value={businessProfile.bankIfsc || ''} 
+                                placeholder="e.g. HDFC0001234" 
+                                onChange={(e) => handleProfileChange('bankIfsc', e.target.value.toUpperCase())} 
+                                className="uppercase"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="bankBranch" className="text-xs font-semibold text-slate-700">Branch Name</Label>
+                              <Input 
+                                id="bankBranch" 
+                                value={businessProfile.bankBranch || ''} 
+                                placeholder="e.g. MG Road Branch" 
+                                onChange={(e) => handleProfileChange('bankBranch', e.target.value)} 
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

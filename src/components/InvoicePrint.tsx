@@ -212,9 +212,6 @@ export function InvoicePrint({ transaction, account, businessProfile, onEdit }: 
                 <span className="inline-block px-2 py-1 bg-slate-100 text-slate-700 text-[10px] font-bold rounded uppercase">
                   GSTIN: {profile.gstin || 'Unregistered'}
                 </span>
-                <span className="inline-block px-2 py-1 bg-slate-100 text-slate-700 text-[10px] font-bold rounded uppercase">
-                  MSME NO: N/A
-                </span>
               </div>
             </div>
             <div className="text-right space-y-1">
@@ -234,22 +231,14 @@ export function InvoicePrint({ transaction, account, businessProfile, onEdit }: 
           </div>
 
           {/* Transportation & Logistics Row */}
-          <div className="grid grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100 mb-6 text-[10px] font-semibold uppercase">
-            <div>
-              <span className="block text-slate-400 mb-0.5">Ack. No</span>
-              <span className="text-slate-800">N/A</span>
-            </div>
-            <div>
-              <span className="block text-slate-400 mb-0.5">I.R.N</span>
-              <span className="text-slate-800">N/A</span>
-            </div>
+          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100 mb-6 text-[10px] font-semibold uppercase">
             <div>
               <span className="block text-slate-400 mb-0.5">EWAY BILL NO</span>
               <span className="text-slate-800">N/A</span>
             </div>
             <div>
-              <span className="block text-slate-400 mb-0.5">TRANSPORT</span>
-              <span className="text-slate-800">DIRECT A/C</span>
+              <span className="block text-slate-400 mb-0.5">VEHICLE NO</span>
+              <span className="text-slate-800">{transaction.vehicleNo || 'N/A'}</span>
             </div>
           </div>
           
@@ -329,15 +318,19 @@ export function InvoicePrint({ transaction, account, businessProfile, onEdit }: 
                 <div className="space-y-1.5 text-[11px] uppercase">
                   <div className="flex">
                     <span className="w-24 text-slate-500 font-semibold">Account No</span>
-                    <span className="font-bold text-slate-900">{account.bankAccountNumber || "N/A"}</span>
+                    <span className="font-bold text-slate-900">{profile.bankAccountNumber || "N/A"}</span>
                   </div>
                   <div className="flex">
                     <span className="w-24 text-slate-500 font-semibold">Bank Name</span>
-                    <span className="font-bold text-slate-900">{account.bankName || "N/A"}</span>
+                    <span className="font-bold text-slate-900">{profile.bankName || "N/A"}</span>
                   </div>
                   <div className="flex">
                     <span className="w-24 text-slate-500 font-semibold">IFSC Code</span>
-                    <span className="font-bold text-slate-900">{account.bankIfsc || "N/A"}</span>
+                    <span className="font-bold text-slate-900">{profile.bankIfsc || "N/A"}</span>
+                  </div>
+                  <div className="flex">
+                    <span className="w-24 text-slate-500 font-semibold">Branch</span>
+                    <span className="font-bold text-slate-900">{profile.bankBranch || "N/A"}</span>
                   </div>
                 </div>
               </div>

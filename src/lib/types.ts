@@ -41,6 +41,7 @@ export interface Transaction {
   hsnCode?: string;
   customerAddress?: string;
   shippingAddress?: string;
+  vehicleNo?: string;
 }
 
 export interface BusinessProfile {
@@ -49,6 +50,10 @@ export interface BusinessProfile {
   gstin: string;
   phone: string;
   printFooter: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  bankBranch?: string;
 }
 
 export interface Subscription {

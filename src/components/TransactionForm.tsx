@@ -42,6 +42,7 @@ interface TransactionFormProps {
     gstCalculationType?: 'including' | 'excluding';
     hsnCode?: string;
     customerAddress?: string;
+    vehicleNo?: string;
   }) => void;
   onCreateCustomer?: () => void;
 }
@@ -64,6 +65,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
   const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>('including');
   const [hsnCode, setHsnCode] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [vehicleNo, setVehicleNo] = useState('');
 
   // Customer name autocomplete state
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
@@ -221,6 +223,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
       gstCalculationType: gstEnabled ? gstCalculationType : undefined,
       hsnCode: gstEnabled ? hsnCode : undefined,
       customerAddress: gstEnabled ? customerAddress : undefined,
+      vehicleNo: gstEnabled ? vehicleNo : undefined,
     });
 
     setAmount("");
@@ -232,6 +235,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
     setCustomerGstin("");
     setCustomerAddress("");
     setHsnCode("");
+    setVehicleNo("");
     setGstCalculationType("including");
   };
 
@@ -515,6 +519,18 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   placeholder="e.g. 123 MG Road, Bengaluru, Karnataka - 560001"
                   className="min-h-[56px] text-xs bg-white resize-none"
+                />
+              </div>
+
+              {/* Vehicle Number */}
+              <div className="space-y-1">
+                <Label htmlFor="vehicle-no" className="text-xs">Vehicle Number</Label>
+                <Input 
+                  id="vehicle-no" 
+                  value={vehicleNo} 
+                  onChange={(e) => setVehicleNo(e.target.value)} 
+                  placeholder="e.g. MH 01 AB 1234" 
+                  className="h-8 text-xs font-mono uppercase bg-white"
                 />
               </div>
             </div>
