@@ -20,14 +20,14 @@ export const createAndSaveKey = async (payId: string, duration: string, userId: 
   // Idempotency: Check if a key was already generated for this payment ID
   const existingKey = await db.collection('keys').findOne({ paymentId: payId });
   if (existingKey) {
-    console.log(`Key already exists for payment ${payId}: ${existingKey._id}`);
-    return existingKey._id as string;
+    console.log(`Key already exists for payment ${payId}: ${existingKey.key || existingKey._id}`);
+    return (existingKey.key || existingKey._id) as string;
   }
 
   const newKeyStr = generateKeyString(duration);
   
   await db.collection('keys').updateOne(
-    { _id: newKeyStr as any },
+    { key: newKeyStr },
     {
       $set: {
         createdAt: Date.now(),

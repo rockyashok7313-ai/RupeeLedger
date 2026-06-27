@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
     const keys = await keysCollection.find({ createdBy: userId }).toArray();
     const mappedKeys = keys.map(k => ({
-      key: k._id.toString(),
+      key: k.key || k._id.toString(),
       duration: k.durationDays === 365 ? 'Annual' : 'Monthly',
       createdAt: k.createdAt || Date.now(),
       status: k.status || 'unused'
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const keysCollection = db.collection('keys');
 
     await keysCollection.updateOne(
-      { _id: key as any },
+      { key: key },
       {
         $set: {
           durationDays: durationDays || 30,
@@ -84,7 +84,9 @@ export async function PUT(request: Request) {
     const db = await getMongoDb();
     const keysCollection = db.collection('keys');
 
-    const keyDoc = await keysCollection.findOne({ _id: key as any });
+    const keyDoc = await keysCollection.findOne({ 
+      $or: [{ key: key }, { _id: key as any }] 
+    });
     if (!keyDoc) {
       return NextResponse.json({ error: 'Key not found.' }, { status: 404 });
     }
@@ -94,7 +96,7 @@ export async function PUT(request: Request) {
     }
 
     await keysCollection.updateOne(
-      { _id: key as any },
+      { $or: [{ key: key }, { _id: key as any }] },
       {
         $set: {
           status: 'used',
