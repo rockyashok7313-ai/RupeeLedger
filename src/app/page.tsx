@@ -1585,12 +1585,10 @@ export default function RupeeLedger() {
     const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
     
     if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      try {
-        await pushSyncToMongoDB(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings);
-      } catch (err) {
+      pushSyncToMongoDB(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
         console.error("MongoDB account deletion sync error:", err);
-        toast({ title: "Failed to sync deletion with cloud", description: "Operation queued locally.", variant: "destructive" });
-      }
+        // We do not toast here since it's background, or we could toast a warning.
+      });
     }
 
     setAccounts(updatedAccounts);
@@ -1700,15 +1698,6 @@ export default function RupeeLedger() {
     if (!transactionToDelete) return;
 
     const updatedTransactions = transactions.filter(t => t.id !== transactionToDelete);
-
-    if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      try {
-        await pushSyncToMongoDB(user.id, accounts, updatedTransactions, businessProfile, subscription, securitySettings);
-      } catch (err) {
-        console.error("MongoDB transaction deletion sync error:", err);
-        toast({ title: "Failed to sync deletion with cloud", description: "Operation queued locally.", variant: "destructive" });
-      }
-    }
 
     recalculateData(accounts, updatedTransactions);
     setTransactionToDelete(null);
