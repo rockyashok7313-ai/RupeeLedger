@@ -2597,7 +2597,7 @@ export default function RupeeLedger() {
 
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card className="shadow-sm">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm">
                   <CardContent className="pt-6">
                     <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Inflow</p>
                     <div className="text-2xl font-bold mt-1 text-green-600">
@@ -2605,7 +2605,7 @@ export default function RupeeLedger() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="shadow-sm">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm">
                   <CardContent className="pt-6">
                     <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Outflow</p>
                     <div className="text-2xl font-bold mt-1 text-destructive">
@@ -2613,7 +2613,7 @@ export default function RupeeLedger() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="shadow-sm hidden lg:block border-primary/10">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm hidden lg:block border-primary/10">
                   <CardContent className="pt-6">
                     <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Net Change</p>
                     <div className="text-2xl font-bold mt-1">
@@ -2827,7 +2827,7 @@ export default function RupeeLedger() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <Card className="bg-muted/10 shadow-sm relative group">
+                        <Card className="glass-card premium-glow premium-heading-card bg-muted/10 shadow-sm relative group">
                           <CardContent className="pt-6">
                             <div className="flex justify-between items-start">
                               <div>
@@ -2848,7 +2848,7 @@ export default function RupeeLedger() {
                             </div>
                           </CardContent>
                         </Card>
-                        <Card className="ring-1 ring-primary/20 border-primary shadow-md">
+                        <Card className="glass-card premium-glow premium-heading-card ring-1 ring-primary/20 border-primary shadow-md">
                           <CardContent className="pt-6">
                             <p className="text-xs text-primary uppercase font-bold tracking-wider">Net Balance</p>
                             <div className="text-2xl font-bold mt-1 text-primary">
@@ -2856,7 +2856,7 @@ export default function RupeeLedger() {
                             </div>
                           </CardContent>
                         </Card>
-                        <Card className="bg-muted/10 shadow-sm">
+                        <Card className="glass-card premium-glow premium-heading-card bg-muted/10 shadow-sm">
                           <CardContent className="pt-6">
                             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Entries</p>
                             <div className="text-2xl font-bold mt-1">
@@ -2994,26 +2994,26 @@ export default function RupeeLedger() {
 
               {/* Key Summary metrics for last 6 months */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="shadow-sm border-slate-200/80 bg-slate-50/50">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-slate-50/50">
                   <CardHeader className="py-4">
                     <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Inflow</CardDescription>
-                    <CardTitle className="text-2xl text-green-600 font-bold">
+                    <CardTitle className="premium-heading text-2xl text-green-600 font-bold">
                       <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.income, 0)} />
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="shadow-sm border-slate-200/80 bg-slate-50/50">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-slate-50/50">
                   <CardHeader className="py-4">
                     <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Outflow</CardDescription>
-                    <CardTitle className="text-2xl text-destructive font-bold">
+                    <CardTitle className="premium-heading text-2xl text-destructive font-bold">
                       <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.expenses, 0)} />
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="shadow-sm border-slate-200/80 bg-primary/5 border-primary/10">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-primary/5 border-primary/10">
                   <CardHeader className="py-4">
                     <CardDescription className="text-xs uppercase font-bold text-primary/80">Average Monthly Cash Flow</CardDescription>
-                    <CardTitle className="text-2xl font-bold">
+                    <CardTitle className="premium-heading text-2xl font-bold">
                       <CurrencyDisplay 
                         amount={
                           analyticsData.length > 0 
@@ -3030,7 +3030,7 @@ export default function RupeeLedger() {
               {/* Charts grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Cash Flow Line Chart */}
-                <Card className="shadow-md border-slate-200/80 p-6 space-y-4 lg:col-span-2">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4 lg:col-span-2">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Net Cash Flow Trend</h3>
                     <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
@@ -3064,7 +3064,7 @@ export default function RupeeLedger() {
                 </Card>
 
                 {/* Income vs Expenses Double Bar Chart */}
-                <Card className="shadow-md border-slate-200/80 p-6 space-y-4">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Monthly Inflow vs Outflow</h3>
                     <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
@@ -3094,7 +3094,7 @@ export default function RupeeLedger() {
                 </Card>
 
                 {/* Expense Graph */}
-                <Card className="shadow-md border-slate-200/80 p-6 space-y-4">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Monthly Expenses Trend</h3>
                     <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
@@ -3152,9 +3152,9 @@ export default function RupeeLedger() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* User Profile / Session Card */}
                   {user && (
-                    <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
                       <CardHeader>
-                        <CardTitle>User Profile & Session</CardTitle>
+                        <CardTitle className="premium-heading premium-heading">User Profile & Session</CardTitle>
                         <CardDescription>Manage your active authenticated cloud identity</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
@@ -3190,9 +3190,9 @@ export default function RupeeLedger() {
                   )}
 
                   {/* Business Profile Card */}
-                  <Card className="shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
                     <CardHeader>
-                      <CardTitle>Business Profile Settings</CardTitle>
+                      <CardTitle className="premium-heading premium-heading">Business Profile Settings</CardTitle>
                       <CardDescription>Configure custom headers for invoices, reports, and statements</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -3249,9 +3249,9 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Security Lock Card */}
-                  <Card className="shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
                     <CardHeader>
-                      <CardTitle>Security Lock</CardTitle>
+                      <CardTitle className="premium-heading premium-heading">Security Lock</CardTitle>
                       <CardDescription>Secure your local ledger with a 4-digit PIN code</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -3298,9 +3298,9 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Subscription & Billing Card */}
-                  <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
                     <CardHeader>
-                      <CardTitle>Subscription & Billing</CardTitle>
+                      <CardTitle className="premium-heading premium-heading">Subscription & Billing</CardTitle>
                       <CardDescription>Manage your business subscription and license tier</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -3376,9 +3376,9 @@ export default function RupeeLedger() {
 
                   {/* Reseller & License Selling Panel */}
                   {isOwner && (
-                    <Card className="shadow-sm border-slate-200/80 md:col-span-2">
+                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
                       <CardHeader>
-                        <CardTitle className="text-primary flex items-center gap-2">
+                        <CardTitle className="premium-heading text-primary flex items-center gap-2">
                           <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                           </svg>
@@ -3470,9 +3470,9 @@ export default function RupeeLedger() {
                   )}
 
                   {/* Data & Backups Card */}
-                  <Card className="shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
                     <CardHeader>
-                      <CardTitle>Data & Backups</CardTitle>
+                      <CardTitle className="premium-heading premium-heading">Data & Backups</CardTitle>
                       <CardDescription>Keep your financial data safe</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -3575,9 +3575,9 @@ export default function RupeeLedger() {
                   </Card>
  
                   {/* About Card */}
-                  <Card className="shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
                     <CardHeader>
-                      <CardTitle>About RupeeLedger</CardTitle>
+                      <CardTitle className="premium-heading premium-heading">About RupeeLedger</CardTitle>
                       <CardDescription>Application details</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -3756,7 +3756,7 @@ export default function RupeeLedger() {
 
       {/* Reports & Vouchers */}
       <Dialog open={!!selectedVoucher} onOpenChange={(open) => !open && setSelectedVoucher(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="glass-card max-w-3xl">
           <DialogHeader className="no-print">
             <DialogTitle>Voucher Document</DialogTitle>
           </DialogHeader>
@@ -3767,7 +3767,7 @@ export default function RupeeLedger() {
       </Dialog>
 
       <Dialog open={!!selectedInvoice} onOpenChange={(open) => !open && setSelectedInvoice(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="glass-card max-w-3xl">
           <DialogHeader className="no-print">
             <DialogTitle>Tax Invoice Document</DialogTitle>
           </DialogHeader>
@@ -3789,7 +3789,7 @@ export default function RupeeLedger() {
       </Dialog>
 
       <Dialog open={isNewInvoiceOpen} onOpenChange={setIsNewInvoiceOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass-card max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader className="no-print">
             <DialogTitle>Create GST Tax Invoice</DialogTitle>
           </DialogHeader>
@@ -3811,7 +3811,7 @@ export default function RupeeLedger() {
       </Dialog>
 
       <Dialog open={isReportOpen} onOpenChange={(open) => setIsReportOpen(open)}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="glass-card max-w-4xl">
           <DialogHeader className="no-print">
             <DialogTitle>Account Audit Statement</DialogTitle>
           </DialogHeader>
@@ -3822,7 +3822,7 @@ export default function RupeeLedger() {
       </Dialog>
 
       <Dialog open={isDailyReportOpen} onOpenChange={setIsDailyReportOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="glass-card max-w-4xl">
           <DialogHeader className="no-print">
             <DialogTitle>Chronological Daily Ledger</DialogTitle>
           </DialogHeader>
@@ -3903,7 +3903,7 @@ export default function RupeeLedger() {
 
       {/* Bought Key Dialog */}
       <Dialog open={!!boughtKey} onOpenChange={(open) => !open && setBoughtKey(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="glass-card max-w-md">
           <DialogHeader>
             <DialogTitle className="text-green-600 flex items-center gap-2">
               <CheckCircle className="h-5 w-5" />

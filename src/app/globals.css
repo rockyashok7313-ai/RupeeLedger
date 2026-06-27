@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 220 33% 97%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 142 70% 36%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 220 12% 92%;
-    --muted-foreground: 220 15% 45%;
-    --accent: 38 92% 50%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
+    --background: 222 47% 6%; /* Default to deep navy/midnight blue dark mode */
+    --foreground: 210 40% 98%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 43 53% 58%; /* Gold #c8a45e */
+    --primary-foreground: 222 47% 11%;
+    --secondary: 210 40% 15%; /* Charcoal */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 25% 18%;
+    --muted-foreground: 220 15% 70%;
+    --accent: 43 53% 58%; /* Gold */
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 62% 35%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 222 47% 11%;
+    --border: 222 25% 22%;
+    --input: 222 25% 22%;
+    --ring: 43 53% 58%;
     --radius: 0.75rem;
   }
   .dark {
@@ -32,20 +32,141 @@
     --card-foreground: 210 40% 98%;
     --popover: 222 47% 10%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
+    --primary: 43 53% 58%;
     --primary-foreground: 222 47% 11%;
-    --secondary: 142 70% 45%;
-    --secondary-foreground: 222 47% 6%;
+    --secondary: 210 40% 15%;
+    --secondary-foreground: 210 40% 98%;
     --muted: 222 25% 18%;
     --muted-foreground: 220 15% 70%;
-    --accent: 38 92% 50%;
+    --accent: 43 53% 58%;
     --accent-foreground: 222 47% 6%;
     --destructive: 0 62% 35%;
     --destructive-foreground: 0 0% 98%;
     --border: 222 25% 22%;
     --input: 222 25% 22%;
-    --ring: 38 92% 50%;
+    --ring: 43 53% 58%;
   }
+}
+
+@layer utilities {
+  .glass-card {
+    background: rgba(18, 25, 43, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(200, 164, 94, 0.15);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .premium-glow:hover {
+    box-shadow: 0 0 15px rgba(200, 164, 94, 0.4);
+    transform: translateY(-2px);
+    transition: all 0.3s ease;
+  }
+}
+
+/* 1. Cursor Glow Effect */
+.cursor-glow {
+    position: fixed;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200, 164, 94, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.3s;
+}
+
+/* 2. Scroll Progress Bar */
+.scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0%;
+    height: 4px;
+    background: linear-gradient(to right, #c8a45e, #2a6fc8);
+    z-index: 10005;
+    box-shadow: 0 0 10px rgba(200, 164, 94, 0.5);
+    transition: width 0.1s ease-out;
+}
+
+/* 3. Card Headline Underline Animation */
+.premium-heading-card h3, .premium-heading-card .premium-heading {
+    position: relative;
+    display: inline-block;
+    padding-bottom: 6px;
+}
+
+.premium-heading-card h3::after, .premium-heading-card .premium-heading::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0);
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(135deg, #c8a45e, #e8c96e);
+    transition: transform 0.4s ease;
+    transform-origin: center;
+}
+
+.premium-heading-card:hover h3::after, .premium-heading-card:hover .premium-heading::after {
+    transform: translateX(-50%) scaleX(1);
+}
+
+/* 4. CSS Ambient Floating Shapes */
+.shapes-container {
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    top: 0;
+    left: 0;
+    perspective: 1000px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.floating-shape {
+    position: absolute;
+    border: 1px solid rgba(200, 164, 94, 0.15);
+    border-radius: 20px;
+    animation: float3D 15s infinite ease-in-out;
+    backdrop-filter: blur(2px);
+}
+
+.shape-1 {
+    width: 200px;
+    height: 200px;
+    top: 10%;
+    left: 5%;
+    background: rgba(200, 164, 94, 0.03);
+    animation-delay: 0s;
+}
+
+.shape-2 {
+    width: 150px;
+    height: 150px;
+    top: 60%;
+    right: 10%;
+    background: rgba(42, 111, 200, 0.03);
+    border-color: rgba(42, 111, 200, 0.15);
+    animation-delay: -3s;
+}
+
+.shape-3 {
+    width: 300px;
+    height: 300px;
+    bottom: -5%;
+    left: 50%;
+    background: rgba(200, 164, 94, 0.02);
+    border-radius: 50%;
+    animation-delay: -7s;
+}
+
+@keyframes float3D {
+    0%, 100% { transform: translateY(0) rotateX(0) rotateY(0); }
+    50% { transform: translateY(-25px) rotateX(8deg) rotateY(-8deg); }
 }
 
 @layer base {
