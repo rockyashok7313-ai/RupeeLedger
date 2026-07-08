@@ -120,9 +120,13 @@ async function pushSyncToMongoDB(
   securitySettings?: SecuritySettings
 ) {
   try {
+    const token = await auth.currentUser?.getIdToken();
     const res = await fetch('/api/ledger/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({
         userId,
         accounts: accountsList,
@@ -308,9 +312,13 @@ export default function RupeeLedger() {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
           // Fetch user data via MongoDB Sync API route
+          const token = await firebaseUser.getIdToken();
           const syncRes = await fetch('/api/ledger/sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
           });
 
