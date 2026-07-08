@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile } from "@/lib/types";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -67,8 +67,6 @@ import { toast } from "@/hooks/use-toast";
 import { VoucherPrint } from "@/components/VoucherPrint";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
-import { GSTReportTab } from "@/components/GSTReportTab";
-import { InvoicePrint } from "@/components/InvoicePrint";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -150,7 +148,8 @@ export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "inventory" | "purchase" | "sales" | "maintenance" | "settings">("dashboard");
+  const [erpTab, setErpTab] = useState<"inventory" | "purchase" | "sales" | "returns" | "reports" | "maintenance">("inventory");
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [ledgerStartDate, setLedgerStartDate] = useState("");
   const [ledgerEndDate, setLedgerEndDate] = useState("");
@@ -2452,15 +2451,7 @@ export default function RupeeLedger() {
           >
             <CalendarDays className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
-            onClick={() => setActiveTab(activeTab === "gst" ? "dashboard" : "gst")}
-            title="GST & Invoices"
-          >
-            <FileText className="h-4 w-4" />
-          </Button>
+          
           <Button 
             variant="ghost" 
             size="icon" 
@@ -2908,11 +2899,11 @@ export default function RupeeLedger() {
                                     <CurrencyDisplay amount={t.balanceAfter} />
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex justify-end gap-1">
                                       <Button 
                                         size="icon" 
                                         variant="ghost" 
-                                        onClick={() => setSelectedVoucher({ t, a: selectedAccount! })}
+                                        onClick={() => setSelectedVoucher({ t, a: accounts.find(acc => acc.id === t.accountId)! })}
                                         className="h-8 w-8 text-accent hover:bg-accent/10"
                                       >
                                         <FileText className="h-4 w-4" />
@@ -2928,7 +2919,7 @@ export default function RupeeLedger() {
                                             <Pencil className="mr-2 h-4 w-4" /> Edit
                                           </DropdownMenuItem>
                                           {t.gstEnabled && (
-                                            <DropdownMenuItem onClick={() => setSelectedInvoice({ t, a: selectedAccount! })}>
+                                            <DropdownMenuItem onClick={() => setSelectedInvoice({ t, a: accounts.find(acc => acc.id === t.accountId)! })}>
                                               <FileText className="mr-2 h-4 w-4 text-primary" /> View Invoice
                                             </DropdownMenuItem>
                                           )}
@@ -3127,18 +3118,6 @@ export default function RupeeLedger() {
                   </div>
                 </Card>
               </div>
-            </div>
-          )}
-
-          {activeTab === "gst" && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
-              <GSTReportTab 
-                transactions={transactions}
-                accounts={accounts}
-                businessProfile={businessProfile}
-                onViewInvoice={(tx, acc) => setSelectedInvoice({ t: tx, a: acc })}
-                onCreateInvoice={() => setIsNewInvoiceOpen(true)}
-              />
             </div>
           )}
 
@@ -3805,7 +3784,7 @@ export default function RupeeLedger() {
             <DialogTitle>Voucher Document</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto pt-2">
-            {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} businessProfile={businessProfile} />}
+            {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
           </div>
         </DialogContent>
       </Dialog>
@@ -3816,18 +3795,7 @@ export default function RupeeLedger() {
             <DialogTitle>Tax Invoice Document</DialogTitle>
           </DialogHeader>
           <div className="max-h-[75vh] overflow-y-auto pt-2">
-            {selectedInvoice && <InvoicePrint 
-              transaction={selectedInvoice.t} 
-              account={selectedInvoice.a} 
-              businessProfile={businessProfile} 
-              onEdit={(updates) => {
-                const updatedTx = { ...selectedInvoice.t, ...updates };
-                const updatedTransactions = transactions.map(t => t.id === updatedTx.id ? updatedTx : t);
-                setTransactions(updatedTransactions);
-                setSelectedInvoice({ t: updatedTx, a: selectedInvoice.a });
-                recalculateData(accounts, updatedTransactions);
-              }}
-            />}
+            
           </div>
         </DialogContent>
       </Dialog>
@@ -3986,8 +3954,8 @@ export default function RupeeLedger() {
 
       {/* Print-only containers */}
       <div className="print-only fixed inset-0 z-[9999] bg-white overflow-visible">
-         {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} businessProfile={businessProfile} />}
-         {selectedInvoice && <InvoicePrint transaction={selectedInvoice.t} account={selectedInvoice.a} businessProfile={businessProfile} />}
+         
+         
          {isReportOpen && selectedAccount && <ReportPrint account={selectedAccount} transactions={accountTransactions} businessProfile={businessProfile} />}
          {isDailyReportOpen && (
            <DailyReport 

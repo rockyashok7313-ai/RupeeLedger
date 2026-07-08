@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb, isMongoConfigured } from '@/lib/mongodb';
+import { verifyIdToken, extractToken } from '@/lib/auth-verify';
 
 export async function GET(request: Request) {
   try {
@@ -8,6 +9,21 @@ export async function GET(request: Request) {
 
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId parameter.' }, { status: 400 });
+    }
+
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
+    }
+    const decodedToken = await verifyIdToken(token);
+    if (!decodedToken) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+    // Only allow admin or the user themselves to query their keys
+    const isAdmin = decodedToken.email === 'rockyashok7313@gmail.com';
+    const isOwner = decodedToken.uid === userId || (decodedToken.email && userId === `e_${decodedToken.email}`) || (decodedToken.phone_number && userId === `p_${decodedToken.phone_number}`);
+    if (!isAdmin && !isOwner) {
+      return NextResponse.json({ error: 'Forbidden: You do not have permission to access these keys.' }, { status: 403 });
     }
 
     if (!isMongoConfigured()) {
@@ -39,6 +55,21 @@ export async function POST(request: Request) {
 
     if (!key || !createdBy) {
       return NextResponse.json({ error: 'Missing parameters.' }, { status: 400 });
+    }
+
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
+    }
+    const decodedToken = await verifyIdToken(token);
+    if (!decodedToken) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+    // Only allow admin to generate new keys
+    const isAdmin = decodedToken.email === 'rockyashok7313@gmail.com';
+    if (!isAdmin) {
+      console.warn(`Unauthorized key generation attempt by ${decodedToken.uid}`);
+      return NextResponse.json({ error: 'Forbidden: Only administrators can generate keys.' }, { status: 403 });
     }
 
     if (!isMongoConfigured()) {
@@ -75,6 +106,15 @@ export async function PUT(request: Request) {
 
     if (!key || !userId) {
       return NextResponse.json({ error: 'Missing parameters.' }, { status: 400 });
+    }
+
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
+    }
+    const decodedToken = await verifyIdToken(token);
+    if (!decodedToken) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
 
     if (!isMongoConfigured()) {

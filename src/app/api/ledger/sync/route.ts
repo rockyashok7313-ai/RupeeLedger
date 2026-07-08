@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb, isMongoConfigured } from '@/lib/mongodb';
+import { verifyIdToken, extractToken } from '@/lib/auth-verify';
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,27 @@ export async function POST(request: Request) {
 
     if (!userId || !action) {
       return NextResponse.json({ error: 'Missing userId or action.' }, { status: 400 });
+    }
+
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 });
+    }
+
+    const decodedToken = await verifyIdToken(token);
+    if (!decodedToken) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+
+    // Verify that the token owner is the one requested (or it's the admin, or phone matches)
+    const isOwner = decodedToken.uid === userId;
+    const isPhoneUser = decodedToken.phone_number && userId === `p_${decodedToken.phone_number}`;
+    const isEmailUser = decodedToken.email && userId === `e_${decodedToken.email}`;
+    const isAdmin = decodedToken.email === 'rockyashok7313@gmail.com';
+
+    if (!isOwner && !isPhoneUser && !isEmailUser && !isAdmin) {
+      console.error(`Unauthorized sync attempt. Token uid: ${decodedToken.uid}, Target: ${userId}`);
+      return NextResponse.json({ error: 'Forbidden: You do not have permission to access this data.' }, { status: 403 });
     }
 
     // Fallback if MongoDB is not configured

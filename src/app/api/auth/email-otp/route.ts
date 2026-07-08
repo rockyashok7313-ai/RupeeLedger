@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { signAppToken } from '@/lib/auth-verify';
 import nodemailer from 'nodemailer';
 
 // In-memory OTP store: email -> { otp, expiresAt }
@@ -89,10 +90,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ verified: false, error: 'OTP has expired. Please request a new one.' }, { status: 400 });
       }
       if (submittedOtp.trim() !== record.otp) {
-        return NextResponse.json({ verified: false, error: 'Incorrect OTP. Please try again.' }, { status: 400 });
+        return NextResponse.json({ verified: false, error: 'Incorrect OTP.' }, { status: 400 });
       }
-      otpStore.delete(normalizedEmail); // Single-use
-      return NextResponse.json({ verified: true });
+      otpStore.delete(normalizedEmail);
+      const appToken = signAppToken('e_' + normalizedEmail);
+      return NextResponse.json({ verified: true, token: appToken });
     }
 
     return NextResponse.json({ error: 'Invalid action.' }, { status: 400 });

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { signAppToken } from '@/lib/auth-verify';
 
 // In-memory OTP store: phone -> { otp, expiresAt }
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
@@ -59,8 +60,10 @@ export async function POST(request: Request) {
       if (submittedOtp.trim() !== record.otp) {
         return NextResponse.json({ verified: false, error: 'Incorrect OTP. Please try again.' }, { status: 400 });
       }
-      otpStore.delete(normalizedPhone); // Single-use
-      return NextResponse.json({ verified: true });
+      
+      otpStore.delete(normalizedPhone);
+      const appToken = signAppToken('p_' + normalizedPhone);
+      return NextResponse.json({ verified: true, token: appToken });
     }
 
     return NextResponse.json({ error: 'Invalid action.' }, { status: 400 });

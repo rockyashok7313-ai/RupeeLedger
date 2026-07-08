@@ -1,28 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 
-import React, { useRef, useState } from 'react';
-import { Transaction, Account, BusinessProfile } from '@/lib/types';
-import { CurrencyDisplay } from './CurrencyDisplay';
-import { format } from 'date-fns';
-import { Printer, Download, Loader2 } from 'lucide-react';
-import { Button } from './ui/button';
-import { toast } from '@/hooks/use-toast';
+const filePath = path.resolve('C:/Users/AK/Downloads/KUNJU/PETTY/src/components/ReportPrint.tsx');
+let content = fs.readFileSync(filePath, 'utf8');
 
-export function ReportPrint({ 
-  account, 
-  transactions,
-  businessProfile
-}: { 
-  account: Account; 
-  transactions: Transaction[];
-  businessProfile: BusinessProfile;
-}) {
-  const [isExporting, setIsExporting] = useState(false);
-  const reportRef = useRef<HTMLDivElement>(null);
-  
-  const handlePrint = () => {
-    window.print();
-  };
-
+const newLogic = `
   const handleDownloadPDF = async () => {
     if (!reportRef.current) return;
     
@@ -39,7 +21,7 @@ export function ReportPrint({
       for (let i = 0; i < pages.length; i++) {
         if (i > 0) pdf.addPage();
         
-        const canvas = await html2canvas(pages[i] as HTMLElement, {
+        const canvas = await html2canvas(pages[i], {
           scale: 2,
           useCORS: true,
           logging: false,
@@ -56,10 +38,23 @@ export function ReportPrint({
         const ratio = imgProps.width / imgProps.height;
         const printHeight = maxWidth / ratio;
         
-        pdf.addImage(imgData, 'PNG', margin, margin, maxWidth, printHeight);
+        // Center vertically if it's smaller than page height, otherwise align to top margin
+        const maxHeight = pageHeight - (margin * 2);
+        let yOffset = margin;
+        if (printHeight < maxHeight) {
+            yOffset = margin + (maxHeight - printHeight) / 2;
+        }
+
+        pdf.addImage(imgData, 'PNG', margin, yOffset, maxWidth, printHeight);
+        
+        // Add Page Number
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(\`Page \${i + 1} of \${pages.length}\`, pageWidth / 2, pageHeight - 5, { align: "center" });
       }
       
-      pdf.save(`Account_Statement_${account.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+      pdf.save(\`Account_Statement_\${account.name.replace(/\\s+/g, '_')}_\${format(new Date(), 'yyyyMMdd')}.pdf\`);
       toast({ title: "PDF downloaded successfully" });
     } catch (error) {
       console.error(error);
@@ -68,79 +63,17 @@ export function ReportPrint({
       setIsExporting(false);
     }
   };
+`;
 
-  const sortedTransactions = [...transactions].sort((a, b) => a.date - b.date);
+// Replace handleDownloadPDF
+content = content.replace(/const handleDownloadPDF = async \(\) => \{[\s\S]*?^\s*\};\n/m, newLogic + "\n");
 
-  const PAGE_1_MAX = 25;
-  const PAGE_OTHER_MAX = 35;
-  
-  const chunkedTransactions = [];
-  let runningIndex = 0;
-  
-  if (sortedTransactions.length === 0) {
-    chunkedTransactions.push({ rows: [], isLast: true, bf: 0, cf: 0, pageNum: 1 });
-  } else {
-    let pageNum = 1;
-    while (runningIndex < sortedTransactions.length) {
-      const isFirstPage = pageNum === 1;
-      const maxRows = isFirstPage ? PAGE_1_MAX : PAGE_OTHER_MAX;
-      
-      const chunk = sortedTransactions.slice(runningIndex, runningIndex + maxRows);
-      
-      let bf = 0;
-      if (isFirstPage) {
-        bf = account.initialBalance;
-      } else {
-        bf = sortedTransactions[runningIndex - 1].balanceAfter;
-      }
-      
-      runningIndex += maxRows;
-      const isLast = runningIndex >= sortedTransactions.length;
-      
-      let cf = 0;
-      if (!isLast) {
-        cf = chunk[chunk.length - 1].balanceAfter;
-      }
-      
-      chunkedTransactions.push({ rows: chunk, isLast, bf, cf, pageNum });
-      pageNum++;
-    }
-  }
+// Rewrite the JSX return
+const jsxStart = content.indexOf('return (');
+const oldJsx = content.slice(jsxStart);
 
-  const totals = transactions.reduce((acc, t) => {
-    if (t.type === 'Credit') acc.credit += t.amount;
-    else acc.debit += t.amount;
-    return acc;
-  }, { credit: 0, debit: 0 });
-
-  return (
+const newJsx = `return (
     <div className="space-y-6">
-      <style>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-          }
-          .pdf-page {
-            width: 210mm !important;
-            height: 297mm !important;
-            margin: 0 !important;
-            padding: 15mm !important;
-            border: none !important;
-            box-shadow: none !important;
-            page-break-after: always !important;
-            page-break-inside: avoid !important;
-          }
-        }
-        .pdf-page tr {
-          page-break-inside: avoid;
-        }
-      `}</style>
       <div className="flex gap-2 no-print">
         <Button onClick={handlePrint} className="flex-1 sm:flex-none">
           <Printer className="mr-2 h-4 w-4" /> Print
@@ -155,10 +88,10 @@ export function ReportPrint({
         {chunkedTransactions.map((chunk, index) => (
           <div 
             key={index} 
-            className="pdf-page relative p-8 bg-white text-black font-sans w-[210mm] shadow-lg border border-gray-300 break-after-page flex flex-col"
+            className="pdf-page relative p-8 bg-white text-black font-sans w-[210mm] min-h-[297mm] shadow-lg border border-gray-300 break-after-page flex flex-col"
           >
             {/* HEADER */}
-            <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-black pb-4 mb-6 gap-4 shrink-0">
+            <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-black pb-4 mb-6 gap-4">
               <div>
                 <h1 className="text-2xl font-bold uppercase tracking-wider text-black">
                   {businessProfile.companyName || "RupeeLedger"}
@@ -180,7 +113,7 @@ export function ReportPrint({
 
             {/* SUMMARY ONLY ON FIRST PAGE */}
             {index === 0 && (
-              <div className="flex justify-between items-center border border-black mb-8 shrink-0">
+              <div className="flex justify-between items-center border border-black mb-8">
                 <div className="flex-1 p-3 text-center border-r border-black bg-gray-50">
                   <p className="text-xs uppercase font-bold text-gray-700">Opening Balance</p>
                   <div className="text-lg font-bold text-black mt-1">
@@ -209,7 +142,7 @@ export function ReportPrint({
             )}
 
             {/* TABLE CHUNK */}
-            <div className="border-t-2 border-l-2 border-r-2 border-black border-b-2 flex-grow flex flex-col">
+            <div className="border-t-2 border-l-2 border-r-2 border-black border-b-2 flex-grow">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-200 border-b-2 border-black">
@@ -221,24 +154,14 @@ export function ReportPrint({
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Brought Forward for intermediate pages */}
-                  {chunk.pageNum > 1 && (
-                    <tr className="border-b-2 border-black bg-gray-50 font-bold">
-                      <td colSpan={4} className="py-2 px-3 text-right text-black border-r-2 border-black">BALANCE B/F:</td>
-                      <td className="py-2 px-3 text-right text-black">
-                        <CurrencyDisplay amount={chunk.bf} />
-                      </td>
-                    </tr>
-                  )}
-
-                  {chunk.rows.length === 0 ? (
+                  {chunk.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="text-center py-8 text-gray-600 font-semibold">
                         No transactions recorded.
                       </td>
                     </tr>
                   ) : (
-                    chunk.rows.map((t: Transaction) => (
+                    chunk.map((t) => (
                       <tr key={t.id} className="border-b border-gray-400 font-semibold last:border-b-0">
                         <td className="py-2 px-3 whitespace-nowrap text-black border-r-2 border-black">
                           {format(t.date, "dd-MMM-yyyy")}
@@ -261,29 +184,18 @@ export function ReportPrint({
                 </tbody>
                 
                 {/* FOOTER TOTALS ONLY ON LAST PAGE */}
-                {chunk.isLast ? (
-                  chunk.rows.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-gray-100 font-bold border-t-2 border-black">
-                        <td colSpan={2} className="py-2 px-3 text-right text-black border-r-2 border-black">TOTALS / CLOSING:</td>
-                        <td className="py-2 px-3 text-right text-black border-r-2 border-black">
-                          <CurrencyDisplay amount={totals.debit} />
-                        </td>
-                        <td className="py-2 px-3 text-right text-black border-r-2 border-black">
-                          <CurrencyDisplay amount={totals.credit} />
-                        </td>
-                        <td className="py-2 px-3 text-right text-black text-base">
-                          <CurrencyDisplay amount={account.currentBalance} />
-                        </td>
-                      </tr>
-                    </tfoot>
-                  )
-                ) : (
+                {index === chunkedTransactions.length - 1 && chunk.length > 0 && (
                   <tfoot>
-                    <tr className="bg-gray-50 font-bold border-t-2 border-black">
-                      <td colSpan={4} className="py-2 px-3 text-right text-black border-r-2 border-black italic">PAGE CONTINUE (BALANCE C/F) ...</td>
-                      <td className="py-2 px-3 text-right text-black">
-                        <CurrencyDisplay amount={chunk.cf} />
+                    <tr className="bg-gray-100 font-bold border-t-2 border-black">
+                      <td colSpan={2} className="py-2 px-3 text-right text-black border-r-2 border-black">TOTALS / CLOSING:</td>
+                      <td className="py-2 px-3 text-right text-black border-r-2 border-black">
+                        <CurrencyDisplay amount={totals.debit} />
+                      </td>
+                      <td className="py-2 px-3 text-right text-black border-r-2 border-black">
+                        <CurrencyDisplay amount={totals.credit} />
+                      </td>
+                      <td className="py-2 px-3 text-right text-black text-base">
+                        <CurrencyDisplay amount={account.currentBalance} />
                       </td>
                     </tr>
                   </tfoot>
@@ -291,19 +203,14 @@ export function ReportPrint({
               </table>
             </div>
 
-            {/* FOOTER & PAGE NUMBERS */}
-            <div className="mt-auto pt-4 flex justify-between items-end text-xs font-semibold text-gray-700 italic shrink-0">
-              <div>
-                {businessProfile.printFooter && (
-                  <p className="font-bold text-black mb-1">{businessProfile.printFooter}</p>
-                )}
-                <p>
-                  ** This is a computer generated report from {businessProfile.companyName || "RupeeLedger"} **
-                </p>
-              </div>
-              <div className="text-right text-black font-bold text-sm">
-                Page {chunk.pageNum} of {chunkedTransactions.length}
-              </div>
+            {/* FOOTER */}
+            <div className="mt-8 text-center text-xs font-semibold text-gray-700 italic pt-4 space-y-1">
+              {businessProfile.printFooter && (
+                <p className="font-bold text-black mb-1">{businessProfile.printFooter}</p>
+              )}
+              <p>
+                ** End of Statement Page \${index + 1} - This is a computer generated report from {businessProfile.companyName || "RupeeLedger"} and does not require a physical signature **
+              </p>
             </div>
           </div>
         ))}
@@ -311,3 +218,8 @@ export function ReportPrint({
     </div>
   );
 }
+`;
+
+content = content.replace(oldJsx, newJsx);
+fs.writeFileSync(filePath, content, 'utf8');
+console.log("Rewrite completed successfully!");

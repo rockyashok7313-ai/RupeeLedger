@@ -26,22 +26,20 @@ export interface Transaction {
   description: string;
   date: number;
   balanceAfter: number;
-  // GST & Invoice extensions
   gstEnabled?: boolean;
   gstRate?: number;
-  gstType?: 'CGST+SGST' | 'IGST';
+  gstType?: 'Intra-State' | 'Inter-State' | 'CGST+SGST' | 'IGST' | '';
+  taxableAmount?: number;
   cgst?: number;
   sgst?: number;
   igst?: number;
-  taxableAmount?: number;
   invoiceNumber?: string;
   customerName?: string;
   customerGstin?: string;
-  gstCalculationType?: 'including' | 'excluding';
+  gstCalculationType?: 'excluding' | 'including';
+  shippingAddress?: string;
   hsnCode?: string;
   customerAddress?: string;
-  shippingAddress?: string;
-  vehicleNo?: string;
 }
 
 export interface BusinessProfile {

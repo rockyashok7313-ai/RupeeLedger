@@ -180,7 +180,7 @@ export function DailyReport({
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       
-      const margin = 10;
+      const margin = 12.7;
       const maxWidth = pageWidth - (margin * 2);
       const maxHeightFirst = pageHeight - (margin * 2);
       const headerHeight = 40; // 40mm header space (to accommodate summary row, table headers, and 5mm empty space)

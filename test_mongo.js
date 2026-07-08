@@ -1,1 +1,11 @@
-const { MongoClient } = require('mongodb'); async function run() { const client = new MongoClient('mongodb+srv://rockyashok7313_db_user:pSbbADBoxxvjXuen@rupeeledgerpro.5ru0tkx.mongodb.net'); try { await client.connect(); console.log('Connected successfully to MongoDB server'); } catch(e) { console.error('Error connecting to MongoDB:', e); } finally { await client.close(); } } run();  
+require('dotenv').config();
+const { MongoClient } = require('mongodb');
+async function run() {
+  const client = new MongoClient(process.env.MONGODB_URI);
+  await client.connect();
+  console.log('MongoDB is Connected and Active!');
+  const collections = await client.db().listCollections().toArray();
+  console.log('Active Collections:', collections.map(c => c.name));
+  await client.close();
+}
+run().catch(console.error);
