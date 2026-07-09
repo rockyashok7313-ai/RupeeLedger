@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'RupeeLedger - Private Personal Finance',
+  title: 'RupeeLedger Pro - Private Personal Finance',
   description: 'Secure, local-first financial ledger with AI-powered narrations.',
 };
 

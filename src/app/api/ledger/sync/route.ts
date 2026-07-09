@@ -11,7 +11,13 @@ export async function POST(request: Request) {
       transactions, 
       businessProfile, 
       subscription, 
-      securitySettings, 
+      securitySettings,
+      clients,
+      inventory,
+      invoices,
+      expenses,
+      recurringTemplates,
+      receipts,
       action 
     } = body;
 
@@ -47,9 +53,15 @@ export async function POST(request: Request) {
     }
 
     const db = await getMongoDb();
-    const usersCollection = db.collection('users');
+const usersCollection = db.collection('users');
     const accountsCollection = db.collection('accounts');
     const transactionsCollection = db.collection('transactions');
+    const clientsCollection = db.collection('clients');
+    const inventoryCollection = db.collection('inventory');
+    const invoicesCollection = db.collection('invoices');
+    const expensesCollection = db.collection('expenses');
+    const recurringCollection = db.collection('recurringTemplates');
+    const receiptsCollection = db.collection('receipts');
 
     if (action === 'pull') {
       // Fetch user settings profile doc
@@ -69,7 +81,26 @@ export async function POST(request: Request) {
         return { id: _id.toString(), ...rest };
       });
 
+      // Fetch GST Module Data
+      const mapDocs = (docs: any[]) => docs.map(d => {
+        const { _id, userId, ...rest } = d;
+        return { id: _id.toString(), ...rest };
+      });
+
+      const userClients = await clientsCollection.find({ userId }).toArray();
+      const userInventory = await inventoryCollection.find({ userId }).toArray();
+      const userInvoices = await invoicesCollection.find({ userId }).toArray();
+      const userExpenses = await expensesCollection.find({ userId }).toArray();
+      const userRecurring = await recurringCollection.find({ userId }).toArray();
+      const userReceipts = await receiptsCollection.find({ userId }).toArray();
+
       return NextResponse.json({
+        clients: mapDocs(userClients),
+        inventory: mapDocs(userInventory),
+        invoices: mapDocs(userInvoices),
+        expenses: mapDocs(userExpenses),
+        recurringTemplates: mapDocs(userRecurring),
+        receipts: mapDocs(userReceipts),
         exists: !!userDoc,
         businessProfile: userDoc?.businessProfile || null,
         subscription: userDoc?.subscription || null,
@@ -133,6 +164,28 @@ export async function POST(request: Request) {
           );
         }
       }
+
+// Helper function to sync arrays
+      const syncArray = async (collection, dataArray) => {
+        if (!Array.isArray(dataArray)) return;
+        const activeIds = dataArray.map(item => item.id);
+        await collection.deleteMany({ userId, _id: { $nin: activeIds } });
+        for (const item of dataArray) {
+          const { id, ...data } = item;
+          await collection.updateOne(
+            { _id: id, userId },
+            { $set: { ...data, userId } },
+            { upsert: true }
+          );
+        }
+      };
+
+      await syncArray(clientsCollection, clients);
+      await syncArray(inventoryCollection, inventory);
+      await syncArray(invoicesCollection, invoices);
+      await syncArray(expensesCollection, expenses);
+      await syncArray(recurringCollection, recurringTemplates);
+      await syncArray(receiptsCollection, receipts);
 
       return NextResponse.json({ success: true });
     }

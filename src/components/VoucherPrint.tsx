@@ -24,7 +24,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
       currency: 'INR',
     }).format(transaction.amount || 0);
     
-    const text = `*RupeeLedger Voucher*%0A--------------------------%0A*Type:* ${transaction.type || 'N/A'}%0A*Account:* ${account.name || 'N/A'}%0A*Date:* ${transaction.date ? format(transaction.date, 'PPP') : 'N/A'}%0A*Amount:* ${amount}%0A*Narration:* ${transaction.description || 'N/A'}%0A--------------------------%0A_Generated via RupeeLedger_`;
+    const text = `*RupeeLedger Pro Voucher*%0A--------------------------%0A*Type:* ${transaction.type || 'N/A'}%0A*Account:* ${account.name || 'N/A'}%0A*Date:* ${transaction.date ? format(new Date(transaction.date), 'PPP') : 'N/A'}%0A*Amount:* ${amount}%0A*Narration:* ${transaction.description || 'N/A'}%0A--------------------------%0A_Generated via RupeeLedger Pro_`;
     
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
@@ -34,7 +34,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
       <style>{`
         @media print {
           @page {
-            size: A5;
+            size: A5 landscape;
             margin: 0;
           }
           body {
@@ -42,8 +42,8 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
             padding: 0 !important;
           }
           .voucher-page {
-            width: 148mm !important;
-            height: 210mm !important;
+            width: 210mm !important;
+            height: 148mm !important;
             margin: 0 !important;
             padding: 10mm !important;
             border: none !important;
@@ -65,7 +65,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
       <div className="voucher-page print-only-reset border-2 border-primary p-8 bg-white text-black max-w-2xl mx-auto rounded-lg shadow-sm">
         <div className="flex justify-between items-start border-b-2 border-primary pb-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-black">RupeeLedger</h1>
+            <h1 className="text-3xl font-bold text-black">RupeeLedger Pro</h1>
             <p className="text-sm text-gray-600">Professional Financial Voucher</p>
           </div>
           <div className="text-right">
@@ -82,7 +82,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
           </div>
           <div className="text-right">
             <p className="text-xs uppercase font-semibold text-gray-500">Date</p>
-            <p className="text-lg font-semibold text-black">{transaction.date ? format(transaction.date, 'PPP') : 'N/A'}</p>
+            <p className="text-lg font-semibold text-black">{transaction.date ? format(new Date(transaction.date), 'PPP') : 'N/A'}</p>
           </div>
         </div>
 
@@ -112,7 +112,7 @@ export function VoucherPrint({ transaction, account }: { transaction: Transactio
         </div>
         
         <div className="mt-12 text-center text-[10px] text-gray-500 italic">
-          This is a computer-generated voucher from RupeeLedger.
+          This is a computer-generated voucher from RupeeLedger Pro.
         </div>
       </div>
     </div>

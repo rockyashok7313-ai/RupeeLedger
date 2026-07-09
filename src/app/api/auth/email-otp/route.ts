@@ -39,15 +39,15 @@ export async function POST(request: Request) {
       const smtpPort = process.env.SMTP_PORT;
       const smtpUser = process.env.SMTP_USER;
       const smtpPass = process.env.SMTP_PASS;
-      const smtpFrom = process.env.SMTP_FROM || 'noreply@rupeeledger.com';
+      const smtpFrom = process.env.SMTP_FROM || 'noreply@rupeeledgerpro.com';
 
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc;">
           <div style="text-align:center; margin-bottom: 20px;">
             <div style="display:inline-block; background:#1e3a5f; color:white; font-size:28px; font-weight:900; width:56px; height:56px; line-height:56px; border-radius:14px; text-align:center;">₹</div>
-            <h2 style="color:#0f172a; margin-top:12px;">RupeeLedger Login OTP</h2>
+            <h2 style="color:#0f172a; margin-top:12px;">RupeeLedger Pro Login OTP</h2>
           </div>
-          <p style="color:#475569;">Use the code below to log into your RupeeLedger account. This code expires in <strong>10 minutes</strong>.</p>
+          <p style="color:#475569;">Use the code below to log into your RupeeLedger Pro account. This code expires in <strong>10 minutes</strong>.</p>
           <div style="background:#fff; border: 2px dashed #cbd5e1; border-radius:8px; text-align:center; padding:20px; margin:20px 0;">
             <span style="font-size:36px; font-weight:900; letter-spacing:8px; font-family:monospace; color:#1e3a5f;">${otp}</span>
           </div>
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         await transporter.sendMail({
           from: smtpFrom,
           to: normalizedEmail,
-          subject: `${otp} — Your RupeeLedger Login Code`,
+          subject: `${otp} — Your RupeeLedger Pro Login Code`,
           html: htmlContent,
         });
         return NextResponse.json({ sent: true });

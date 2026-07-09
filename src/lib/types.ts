@@ -79,3 +79,86 @@ export interface UserProfile {
   authMethod: 'google' | 'phone' | 'email' | 'emailOtp' | 'guest' | 'whatsapp';
   createdAt: number;
 }
+
+export interface Client {
+  id: string;
+  name: string;
+  gstin: string;
+  address: string;
+  phone: string;
+  createdAt: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  hsnCode: string;
+  basePrice: number;
+  taxRate: number;
+  currentStock: number;
+  createdAt: number;
+}
+
+export interface InvoiceItem {
+  id: string;
+  inventoryId?: string;
+  name: string;
+  quantity: number;
+  rate: number;
+  taxPercent: number;
+  amount: number;
+  hsnCode?: string;
+}
+
+export interface Invoice {
+  id: string;
+  clientId: string;
+  clientName: string;
+  date: number;
+  dueDate: number;
+  items: InvoiceItem[];
+  subtotal: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  total: number;
+  status: 'draft' | 'sent' | 'paid' | 'overdue';
+  createdAt: number;
+  customerAddress?: string;
+  customerGstin?: string;
+  vehicleNo?: string;
+  gstCalculationType?: 'including' | 'excluding';
+  gstType?: 'CGST+SGST' | 'IGST';
+}
+
+export interface Expense {
+  id: string;
+  vendorName: string;
+  gstin: string;
+  date: number;
+  amount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  category: string;
+  createdAt: number;
+}
+
+export interface RecurringTemplate {
+  id: string;
+  clientId: string;
+  interval: 'weekly' | 'monthly' | 'yearly';
+  nextRun: number;
+  items: InvoiceItem[];
+  active: boolean;
+  createdAt: number;
+}
+
+export interface Receipt {
+  id: string;
+  invoiceId: string;
+  amount: number;
+  date: number;
+  paymentMethod: string;
+  createdAt: number;
+}

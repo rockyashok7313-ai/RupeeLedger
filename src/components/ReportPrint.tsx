@@ -161,7 +161,7 @@ export function ReportPrint({
             <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-black pb-4 mb-6 gap-4 shrink-0">
               <div>
                 <h1 className="text-2xl font-bold uppercase tracking-wider text-black">
-                  {businessProfile.companyName || "RupeeLedger"}
+                  {businessProfile.companyName || "RupeeLedger Pro"}
                 </h1>
                 {index === 0 && businessProfile.address && (
                   <p className="text-sm font-semibold text-gray-800 mt-1 max-w-sm whitespace-pre-wrap">{businessProfile.address}</p>
@@ -298,7 +298,7 @@ export function ReportPrint({
                   <p className="font-bold text-black mb-1">{businessProfile.printFooter}</p>
                 )}
                 <p>
-                  ** This is a computer generated report from {businessProfile.companyName || "RupeeLedger"} **
+                  ** This is a computer generated report from {businessProfile.companyName || "RupeeLedger Pro"} **
                 </p>
               </div>
               <div className="text-right text-black font-bold text-sm">

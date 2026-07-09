@@ -48,7 +48,7 @@ export const sendEmailToCustomer = async (recipientEmail: string, licenseKey: st
   const smtpPort = process.env.SMTP_PORT;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
-  const smtpFrom = process.env.SMTP_FROM || "noreply@rupeeledger.com";
+  const smtpFrom = process.env.SMTP_FROM || "noreply@rupeeledgerpro.com";
 
   const subject = `Your RupeeLedger Pro Activation Key (${duration === 'annual' ? 'Annual' : 'Monthly'})`;
   const htmlContent = `
@@ -62,7 +62,7 @@ export const sendEmailToCustomer = async (recipientEmail: string, licenseKey: st
       <p><strong>Instructions:</strong></p>
       <ol>
         <li>Copy the code above.</li>
-        <li>Go to the settings section of the RupeeLedger application.</li>
+        <li>Go to the settings section of the RupeeLedger Pro application.</li>
         <li>Paste it in the <strong>"Activate Activation Key"</strong> field and click <strong>"Activate"</strong>.</li>
       </ol>
       <p style="margin-top: 30px; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 15px;">

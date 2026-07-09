@@ -22,7 +22,7 @@ import {
   CheckCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile } from "@/lib/types";
+import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { auth } from "@/lib/firebase";
 import { 
   signInWithPopup, 
@@ -65,8 +65,10 @@ import { format, isSameDay, parse, addDays } from "date-fns";
 import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { VoucherPrint } from "@/components/VoucherPrint";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
+import { GSTModule } from "@/components/gst/GSTModule";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -117,7 +119,13 @@ async function pushSyncToMongoDB(
   transactionsList: Transaction[],
   businessProfile?: BusinessProfile,
   subscription?: Subscription,
-  securitySettings?: SecuritySettings
+  securitySettings?: SecuritySettings,
+  clients?: Client[],
+  inventory?: InventoryItem[],
+  invoices?: Invoice[],
+  expenses?: Expense[],
+  recurringTemplates?: RecurringTemplate[],
+  receipts?: Receipt[]
 ) {
   try {
     const token = await auth.currentUser?.getIdToken();
@@ -134,6 +142,12 @@ async function pushSyncToMongoDB(
         businessProfile,
         subscription,
         securitySettings,
+        clients,
+        inventory,
+        invoices,
+        expenses,
+        recurringTemplates,
+        receipts,
         action: 'push'
       })
     });
@@ -151,6 +165,12 @@ async function pushSyncToMongoDB(
 export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "inventory" | "purchase" | "sales" | "maintenance" | "settings">("dashboard");
   const [erpTab, setErpTab] = useState<"inventory" | "purchase" | "sales" | "returns" | "reports" | "maintenance">("inventory");
@@ -277,6 +297,20 @@ export default function RupeeLedger() {
     if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
     else setTransactions([]);
 
+    const savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
+    const savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
+    const savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
+    const savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
+    const savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
+    const savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
+
+    if (savedClients) setClients(JSON.parse(savedClients)); else setClients([]);
+    if (savedInventory) setInventory(JSON.parse(savedInventory)); else setInventory([]);
+    if (savedInvoices) setInvoices(JSON.parse(savedInvoices)); else setInvoices([]);
+    if (savedExpenses) setExpenses(JSON.parse(savedExpenses)); else setExpenses([]);
+    if (savedRecurring) setRecurringTemplates(JSON.parse(savedRecurring)); else setRecurringTemplates([]);
+    if (savedReceipts) setReceipts(JSON.parse(savedReceipts)); else setReceipts([]);
+
     const savedCloudBackup = localStorage.getItem("rupee_ledger_cloud_backup_enabled");
     if (savedCloudBackup !== null) {
       setCloudBackupEnabled(JSON.parse(savedCloudBackup));
@@ -348,6 +382,12 @@ export default function RupeeLedger() {
                 }
                 fetchedAccounts = syncData.accounts || [];
                 fetchedTxs = syncData.transactions || [];
+                if (syncData.clients) setClients(syncData.clients);
+                if (syncData.inventory) setInventory(syncData.inventory);
+                if (syncData.invoices) setInvoices(syncData.invoices);
+                if (syncData.expenses) setExpenses(syncData.expenses);
+                if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
+                if (syncData.receipts) setReceipts(syncData.receipts);
               } else {
                 const initialSubscription: Subscription = {
                   status: "active",
@@ -364,7 +404,8 @@ export default function RupeeLedger() {
                   [],
                   businessProfile,
                   initialSubscription,
-                  securitySettings
+                  securitySettings,
+                  clients, inventory, invoices, expenses, recurringTemplates, receipts
                 );
               }
             }
@@ -389,7 +430,7 @@ export default function RupeeLedger() {
                   title: "Migrating Local Data", 
                   description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
                 });
-                await pushSyncToMongoDB(firebaseUser.uid, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings);
+                await pushSyncToMongoDB(firebaseUser.uid, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
                 fetchedAccounts = parsedAccs;
                 fetchedTxs = parsedTxs;
               }
@@ -477,6 +518,12 @@ export default function RupeeLedger() {
                     }
                     setAccounts(syncData.accounts || []);
                     setTransactions(syncData.transactions || []);
+                    if (syncData.clients) setClients(syncData.clients);
+                    if (syncData.inventory) setInventory(syncData.inventory);
+                    if (syncData.invoices) setInvoices(syncData.invoices);
+                    if (syncData.expenses) setExpenses(syncData.expenses);
+                    if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
+                    if (syncData.receipts) setReceipts(syncData.receipts);
                   }
                 } else {
                   await loadLocalStorageData(parsed.id);
@@ -546,6 +593,12 @@ export default function RupeeLedger() {
       const storageSuffix = user ? user.id : "guest_local";
       localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(accounts));
       localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(transactions));
+      localStorage.setItem(`rupee_ledger_clients_${storageSuffix}`, JSON.stringify(clients));
+      localStorage.setItem(`rupee_ledger_inventory_${storageSuffix}`, JSON.stringify(inventory));
+      localStorage.setItem(`rupee_ledger_invoices_${storageSuffix}`, JSON.stringify(invoices));
+      localStorage.setItem(`rupee_ledger_expenses_${storageSuffix}`, JSON.stringify(expenses));
+      localStorage.setItem(`rupee_ledger_recurring_${storageSuffix}`, JSON.stringify(recurringTemplates));
+      localStorage.setItem(`rupee_ledger_receipts_${storageSuffix}`, JSON.stringify(receipts));
       localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(businessProfile));
       localStorage.setItem("rupee_ledger_subscription", JSON.stringify(subscription));
       localStorage.setItem("rupee_ledger_security", JSON.stringify(securitySettings));
@@ -574,7 +627,7 @@ export default function RupeeLedger() {
         localStorage.removeItem("rupee_ledger_user");
       }
     }
-  }, [accounts, transactions, businessProfile, subscription, securitySettings, user, isLoaded, cloudBackupEnabled]);
+  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, businessProfile, subscription, securitySettings, user, isLoaded, cloudBackupEnabled]);
 
   // User Authentication Logic
   const handleGuestLogin = () => {
@@ -3151,6 +3204,29 @@ export default function RupeeLedger() {
             </div>
           )}
 
+          {activeTab === "gst" && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <ErrorBoundary>
+                <GSTModule
+                  businessProfile={businessProfile}
+                  setBusinessProfile={setBusinessProfile}
+                  clients={clients}
+                  setClients={setClients}
+                  inventory={inventory}
+                  setInventory={setInventory}
+                  invoices={invoices}
+                  setInvoices={setInvoices}
+                  expenses={expenses}
+                  setExpenses={setExpenses}
+                  recurringTemplates={recurringTemplates}
+                  setRecurringTemplates={setRecurringTemplates}
+                  receipts={receipts}
+                  setReceipts={setReceipts}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
+
           {activeTab === "settings" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
                <div>
@@ -3814,7 +3890,11 @@ export default function RupeeLedger() {
             <DialogTitle>Voucher Document</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto pt-2">
-            {selectedVoucher && <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />}
+            {selectedVoucher && (
+              <ErrorBoundary>
+                <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />
+              </ErrorBoundary>
+            )}
           </div>
         </DialogContent>
       </Dialog>

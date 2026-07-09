@@ -54,8 +54,8 @@ export async function getMongoClient(): Promise<MongoClient> {
 export async function getMongoDb() {
   const client = await getMongoClient();
   
-  // Safely parse DB name from URI or default to "rupeeledger"
-  let dbName = 'rupeeledger';
+  // Safely parse DB name from URI or default to "rupeeledgerpro"
+  let dbName = 'rupeeledgerpro';
   if (uri) {
     try {
       const parsedUri = new URL(uri);
@@ -75,7 +75,7 @@ export async function getMongoDb() {
     }
   }
   
-  return client.db(dbName || 'rupeeledger');
+  return client.db(dbName || 'rupeeledgerpro');
 }
 
 export function isMongoConfigured(): boolean {
