@@ -2431,15 +2431,28 @@ export default function RupeeLedger() {
       {/* Mobile Top Bar */}
       <header className="flex md:hidden items-center justify-between p-4 bg-primary text-primary-foreground shadow-md border-b">
         <div className="flex items-center space-x-3">
-          {user ? (
-            <img 
-              src={user.avatarUrl || "/logo.png"} 
-              alt="User Profile" 
-              className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10" 
-            />
-          ) : (
-            <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="cursor-pointer">
+                {user ? (
+                  <img 
+                    src={user.avatarUrl || "/logo.png"} 
+                    alt="User Profile" 
+                    className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10 hover:opacity-80 transition-opacity" 
+                  />
+                ) : (
+                  <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
+                )}
+              </div>
+            </DropdownMenuTrigger>
+            {user && (
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600 font-bold cursor-pointer">
+                  Sign Out {user.authMethod === 'guest' ? 'Guest' : 'Session'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            )}
+          </DropdownMenu>
           <div className="min-w-0">
             <h1 className="text-base font-bold tracking-tight leading-tight">RupeeLedger</h1>
             {user && (
@@ -2491,22 +2504,31 @@ export default function RupeeLedger() {
 
           {/* User Profile Card */}
           {user && (
-            <div className="flex items-center space-x-3 p-3 bg-primary-foreground/5 border border-primary-foreground/10 rounded-xl mb-6 shadow-sm">
-              <img 
-                src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
-                alt="User Avatar" 
-                className="h-10 w-10 rounded-full border border-primary-foreground/20 bg-primary-foreground/10" 
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate text-white">{user.name}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping shrink-0" />
-                  <p className="text-[10px] text-primary-foreground/70 font-semibold truncate uppercase tracking-wider">
-                    {user.authMethod === 'guest' ? 'Local Guest' : 'Cloud Synced'}
-                  </p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center space-x-3 p-3 bg-primary-foreground/5 border border-primary-foreground/10 rounded-xl mb-6 shadow-sm cursor-pointer hover:bg-primary-foreground/10 transition-colors">
+                  <img 
+                    src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
+                    alt="User Avatar" 
+                    className="h-10 w-10 rounded-full border border-primary-foreground/20 bg-primary-foreground/10" 
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate text-white">{user.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping shrink-0" />
+                      <p className="text-[10px] text-primary-foreground/70 font-semibold truncate uppercase tracking-wider">
+                        {user.authMethod === 'guest' ? 'Local Guest' : 'Cloud Synced'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600 font-bold cursor-pointer">
+                  Sign Out {user.authMethod === 'guest' ? 'Guest' : 'Session'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <nav className="space-y-2">
