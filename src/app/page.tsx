@@ -2249,6 +2249,27 @@ export default function RupeeLedger() {
           <p className="text-[10px] text-center text-muted-foreground mt-4 leading-relaxed">
             By authenticating, you agree to our terms. All sessions require a verified login and maintain a secure cloud ledger bridge.
           </p>
+
+          <div className="pt-2 border-t border-slate-800">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const profile: UserProfile = {
+                  id: 'guest_' + Math.random().toString(36).substring(2, 9),
+                  name: "Offline User",
+                  authMethod: 'guest',
+                  createdAt: Date.now()
+                };
+                setUser(profile);
+                setShowLogin(false);
+                setIsLoaded(true);
+                localStorage.setItem("rupee_ledger_user", JSON.stringify(profile));
+              }}
+              className="w-full text-slate-400 hover:text-white hover:bg-slate-800 text-xs h-10"
+            >
+              Continue Offline (Guest Mode)
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -2484,28 +2505,17 @@ export default function RupeeLedger() {
       {/* Mobile Top Bar */}
       <header className="flex md:hidden items-center justify-between p-4 bg-primary text-primary-foreground shadow-md border-b">
         <div className="flex items-center space-x-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <div className="cursor-pointer">
-                {user ? (
-                  <img 
-                    src={user.avatarUrl || "/logo.png"} 
-                    alt="User Profile" 
-                    className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10 hover:opacity-80 transition-opacity" 
-                  />
-                ) : (
-                  <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
-                )}
-              </div>
-            </DropdownMenuTrigger>
-            {user && (
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600 font-bold cursor-pointer">
-                  Sign Out {user.authMethod === 'guest' ? 'Guest' : 'Session'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
+          <div className="cursor-pointer">
+            {user ? (
+              <img 
+                src={user.avatarUrl || "/logo.png"} 
+                alt="User Profile" 
+                className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10" 
+              />
+            ) : (
+              <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
             )}
-          </DropdownMenu>
+          </div>
           <div className="min-w-0">
             <h1 className="text-base font-bold tracking-tight leading-tight">RupeeLedger</h1>
             {user && (
@@ -2515,7 +2525,18 @@ export default function RupeeLedger() {
             )}
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
+          {user && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-xs text-red-200 hover:text-red-100 hover:bg-red-900/30 px-2 h-9 font-bold"
+              onClick={handleLogout}
+              title="Sign Out"
+            >
+              Sign Out
+            </Button>
+          )}
           <Button 
             variant="ghost" 
             size="icon" 
