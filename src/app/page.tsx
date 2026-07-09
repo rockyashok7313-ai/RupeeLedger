@@ -541,6 +541,9 @@ export default function RupeeLedger() {
             return;
           }
         }
+        // If we reach here, there is no valid Firebase user and no valid local saved user.
+        // We MUST set isLoaded to true so that the Login screen can render!
+        setIsLoaded(true);
       }
     });
     // 2. Load Razorpay Script dynamically
@@ -1948,7 +1951,20 @@ export default function RupeeLedger() {
       }, { credit: 0, debit: 0 });
   }, [transactions]);
 
-  if (showLogin && isLoaded) {
+  if (!isLoaded) {
+    return (
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100">
+        <div className="animate-pulse flex flex-col items-center">
+          <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 border border-primary/20 mb-4">
+            <span className="text-3xl font-extrabold text-white">₹</span>
+          </div>
+          <p className="text-sm text-slate-400 font-medium">Loading RupeeLedger...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showLogin) {
     return (
       <>
       <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 overflow-y-auto p-4 animate-in fade-in duration-300">
