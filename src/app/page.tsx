@@ -2667,7 +2667,7 @@ export default function RupeeLedger() {
                 Sign Out Session
               </Button>
             )}
-            <p className="text-[10px] text-primary-foreground/40 text-center">v1.2.0 - Private Ledger</p>
+            <p className="text-[10px] text-primary-foreground/40 text-center">v1.2.1 - Private Ledger</p>
           </div>
         </aside>
 
