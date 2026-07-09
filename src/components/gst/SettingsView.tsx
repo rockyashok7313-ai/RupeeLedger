@@ -103,7 +103,16 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4">
+          <div className="flex justify-end pt-4 gap-4">
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                localStorage.removeItem("rupee_ledger_user");
+                window.location.reload();
+              }} 
+            >
+              Force Sign Out
+            </Button>
             <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
               <Save className="h-4 w-4 mr-2" /> Save Settings
             </Button>
