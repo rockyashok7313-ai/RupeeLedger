@@ -165,8 +165,8 @@ const usersCollection = db.collection('users');
         }
       }
 
-// Helper function to sync arrays
-      const syncArray = async (collection, dataArray) => {
+      // Helper function to sync arrays
+      const syncArray = async (collection: any, dataArray: any[]) => {
         if (!Array.isArray(dataArray)) return;
         const activeIds = dataArray.map(item => item.id);
         await collection.deleteMany({ userId, _id: { $nin: activeIds } });
