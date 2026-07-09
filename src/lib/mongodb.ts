@@ -1,4 +1,5 @@
 import { MongoClient } from 'mongodb';
+import { attachDatabasePool } from "@vercel/functions";
 
 const uri = process.env.MONGODB_URI?.trim();
 
@@ -26,6 +27,7 @@ export async function getMongoClient(): Promise<MongoClient> {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       });
+      attachDatabasePool(client);
       global._mongoClientPromise = client.connect().catch((err) => {
         global._mongoClientPromise = undefined;
         throw err;
@@ -40,6 +42,7 @@ export async function getMongoClient(): Promise<MongoClient> {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       });
+      attachDatabasePool(client);
       clientPromise = client.connect().catch((err) => {
         clientPromise = null;
         client = null;
