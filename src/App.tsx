@@ -2759,7 +2759,7 @@ export default function RupeeLedger() {
             <div className="flex items-center gap-4">
               <div 
                 className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-md cursor-pointer hover:bg-slate-200 transition-colors"
-                onClick={() => handleFeatureAccess("Multi-Branch Support", "YEARLY", () => {})}
+                onClick={() => handleFeatureAccess("Multi-Branch Support", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Multi-Branch Support will be available in the next update." }))}
               >
                 <div className="h-2 w-2 rounded-full bg-green-500"></div>
                 <span className="text-sm font-semibold text-slate-700">HQ / Main Branch</span>
@@ -3809,7 +3809,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => {})}>Configure WhatsApp</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "WhatsApp Integration will be available in the next update." }))}>Configure WhatsApp</Button>
                         </div>
 
                         
@@ -3822,7 +3822,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => {})}>Edit Branding</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Custom Branding will be available in the next update." }))}>Edit Branding</Button>
                         </div>
 
                         <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
@@ -3833,7 +3833,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => {})}>Contact Manager</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Dedicated Account Manager will be available in the next update." }))}>Contact Manager</Button>
                         </div>
 
                       </div>
@@ -4054,7 +4054,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => {})}>Configure WhatsApp</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "WhatsApp Integration will be available in the next update." }))}>Configure WhatsApp</Button>
                         </div>
 
                         <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
@@ -4065,7 +4065,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Generate API keys to connect RupeeLedger data with your own internal tools, dashboards, or external e-commerce platforms.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("API Access", "YEARLY", () => {})}>Generate API Keys</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("API Access", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "API Access will be available in the next update." }))}>Generate API Keys</Button>
                         </div>
 
                         <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
@@ -4076,7 +4076,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => {})}>Edit Branding</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Custom Branding will be available in the next update." }))}>Edit Branding</Button>
                         </div>
 
                         <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
@@ -4087,7 +4087,7 @@ export default function RupeeLedger() {
                             </div>
                             <p className="text-sm text-slate-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
                           </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => {})}>Contact Manager</Button>
+                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Dedicated Account Manager will be available in the next update." }))}>Contact Manager</Button>
                         </div>
 
                       </div>
