@@ -167,6 +167,14 @@ async function pushSyncToMongoDB(
   }
 }
 
+
+export const getDerivedTier = (sub: Subscription): "FREE" | "MONTHLY" | "YEARLY" => {
+  if (sub.tier) return sub.tier;
+  if (!sub.licenseKey || sub.licenseKey === "FREE-TRIAL" || sub.plan.includes("Free")) return "FREE";
+  if (sub.plan.toLowerCase().includes("annual") || sub.price.toLowerCase().includes("year")) return "YEARLY";
+  return "MONTHLY";
+};
+
 export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -273,7 +281,7 @@ export default function RupeeLedger() {
   const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
 
   const handleFeatureAccess = (featureName: string, requiredTier: "MONTHLY" | "YEARLY", onAllow: () => void) => {
-    const tier = subscription.tier || "MONTHLY";
+    const tier = getDerivedTier(subscription);
     
     if (requiredTier === "YEARLY" && tier !== "YEARLY") {
       setUpgradeFeatureName(featureName);
@@ -1717,7 +1725,7 @@ export default function RupeeLedger() {
     customerAddress?: string;
     shippingAddress?: string;
   }) => {
-    if (subscription.tier === "FREE") {
+    if (getDerivedTier(subscription) === "FREE") {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
       const thisMonthTx = transactions.filter(t => {
@@ -3497,8 +3505,8 @@ export default function RupeeLedger() {
                         <div>
                           <p className="font-semibold text-sm text-slate-800">Active Users</p>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            {subscription.tier === 'FREE' ? '1 / 1 User' : 
-                             subscription.tier === 'MONTHLY' ? '1 / 5 Users' : 
+                            {getDerivedTier(subscription) === 'FREE' ? '1 / 1 User' : 
+                             getDerivedTier(subscription) === 'MONTHLY' ? '1 / 5 Users' : 
                              '1 / Unlimited Users'}
                           </p>
                         </div>
@@ -3506,9 +3514,9 @@ export default function RupeeLedger() {
                           variant="outline" 
                           size="sm"
                           onClick={() => {
-                            if (subscription.tier === 'FREE') {
+                            if (getDerivedTier(subscription) === 'FREE') {
                               handleFeatureAccess("Add Team Member", "MONTHLY", () => {});
-                            } else if (subscription.tier === 'MONTHLY' /* imagine we reached 5 */) {
+                            } else if (getDerivedTier(subscription) === 'MONTHLY' /* imagine we reached 5 */) {
                               toast({ title: "Invite Sent", description: "Team member invitation sent." });
                               // We could add logic for max 5, but for now we just allow action
                             } else {
@@ -3536,8 +3544,8 @@ export default function RupeeLedger() {
                         <div>
                           <p className="font-semibold text-sm text-slate-800">Your Support Level</p>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            {subscription.tier === 'FREE' ? 'Email Support' : 
-                             subscription.tier === 'MONTHLY' ? 'Priority Support' : 
+                            {getDerivedTier(subscription) === 'FREE' ? 'Email Support' : 
+                             getDerivedTier(subscription) === 'MONTHLY' ? 'Priority Support' : 
                              'Dedicated Account Manager'}
                           </p>
                         </div>
@@ -3545,9 +3553,9 @@ export default function RupeeLedger() {
                           variant="outline" 
                           size="sm"
                           onClick={() => {
-                            if (subscription.tier === 'FREE') {
+                            if (getDerivedTier(subscription) === 'FREE') {
                               toast({ title: "Email Support", description: "Please email us at support@rupeeledger.com" });
-                            } else if (subscription.tier === 'MONTHLY') {
+                            } else if (getDerivedTier(subscription) === 'MONTHLY') {
                               toast({ title: "Priority Support", description: "You have priority queue access. Opening chat..." });
                             } else {
                               toast({ title: "Dedicated Manager", description: "Connecting to your dedicated account manager..." });
