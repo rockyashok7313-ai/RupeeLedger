@@ -21,7 +21,11 @@ export function ReportPrint({
   const reportRef = useRef<HTMLDivElement>(null);
   
   const handlePrint = () => {
-    window.print();
+    setIsExporting(true);
+    setTimeout(() => {
+      window.print();
+      setIsExporting(false);
+    }, 150);
   };
 
   const handleDownloadPDF = async () => {
@@ -73,8 +77,8 @@ export function ReportPrint({
 
   const sortedTransactions = [...transactions].sort((a, b) => a.date - b.date);
 
-  const PAGE_1_MAX = 16;
-  const PAGE_OTHER_MAX = 16;
+  const PAGE_1_MAX = isExporting ? 16 : 999999;
+  const PAGE_OTHER_MAX = isExporting ? 16 : 999999;
   
   const chunkedTransactions = [];
   let runningIndex = 0;
@@ -154,35 +158,7 @@ export function ReportPrint({
           </Button>
         </div>
         
-        <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-md border border-slate-200 w-full sm:w-auto justify-between">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                const newPage = Math.max(1, currentPage - 1);
-                setCurrentPage(newPage);
-                document.getElementById(`pdf-page-${newPage}`)?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              disabled={currentPage === 1 || isExporting}
-            >
-              Prev Page
-            </Button>
-            <span className="text-sm font-semibold text-slate-700">
-              Page {currentPage} of {chunkedTransactions.length}
-            </span>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                const newPage = Math.min(chunkedTransactions.length, currentPage + 1);
-                setCurrentPage(newPage);
-                document.getElementById(`pdf-page-${newPage}`)?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              disabled={currentPage === chunkedTransactions.length || isExporting}
-            >
-              Next Page
-            </Button>
-          </div>
+        
       </div>
 
       <div ref={reportRef} className="print-only-reset flex flex-col items-center gap-8 bg-gray-100 p-4 rounded-md">
@@ -190,7 +166,7 @@ export function ReportPrint({
           <div 
             key={index} 
             id={`pdf-page-${index + 1}`}
-            className="pdf-page scroll-mt-20 relative p-8 bg-white text-black font-sans w-[210mm] h-[297mm] shadow-lg border border-gray-300 break-after-page flex flex-col"
+            className={`pdf-page scroll-mt-20 relative p-8 bg-white text-black font-sans w-[210mm] shadow-lg border border-gray-300 break-after-page flex flex-col ${isExporting ? "h-[297mm]" : "min-h-[297mm]"}`}
           >
             {/* HEADER */}
             <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-black pb-4 mb-6 gap-4 shrink-0">
