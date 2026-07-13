@@ -2,14 +2,17 @@ import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Calculator, Info } from 'lucide-react';
+import { generateGSTR1JSON } from '@/lib/gstExport';
+import { BusinessProfile } from '@/lib/types';
 import { Invoice, Expense } from '@/lib/types';
 
 interface Props {
   invoices?: Invoice[];
   expenses?: Expense[];
+  businessProfile: BusinessProfile;
 }
 
-export function GSTReturns({ invoices = [], expenses = [] }: Props) {
+export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Props) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -69,9 +72,34 @@ export function GSTReturns({ invoices = [], expenses = [] }: Props) {
     return { sales, itc, payable };
   }, [invoices, expenses, selectedMonth]);
 
-  const handleDownloadExcel = (type: string) => {
-    alert(`Downloading ${type} Excel format is not implemented in this demo. Normally, this would generate a CSV matching the offline utility format.`);
+
+  const handleDownloadJSON = (type: string) => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    let data = {};
+    if (type === 'GSTR-1') {
+      data = generateGSTR1JSON(invoices, businessProfile, year, month);
+    } else {
+      data = {
+        gstin: businessProfile.gstin,
+        ret_period: `${String(month).padStart(2, '0')}${year}`,
+        sup_details: {
+          osup_det: { txval: stats.sales.taxableAmount, iamt: stats.sales.igst, camt: stats.sales.cgst, samt: stats.sales.sgst }
+        },
+        itc_elg: {
+          itc_avl: { txval: 0, iamt: stats.itc.igst, camt: stats.itc.cgst, samt: stats.itc.sgst }
+        }
+      };
+    }
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_${selectedMonth}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="space-y-6">
@@ -156,8 +184,8 @@ export function GSTReturns({ invoices = [], expenses = [] }: Props) {
             <CardDescription>Export outward supplies for the GST offline utility</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => handleDownloadExcel('GSTR-1')} variant="outline" className="w-full justify-start text-blue-700 border-blue-200 hover:bg-blue-50">
-              <Download className="h-4 w-4 mr-2" /> Download GSTR-1 Excel
+            <Button onClick={() => handleDownloadJSON('GSTR-1')} variant="outline" className="w-full justify-start text-blue-700 border-blue-200 hover:bg-blue-50">
+              <Download className="h-4 w-4 mr-2" /> Download GSTR-1 JSON
             </Button>
           </CardContent>
         </Card>
@@ -170,8 +198,8 @@ export function GSTReturns({ invoices = [], expenses = [] }: Props) {
             <CardDescription>Export monthly summary return data</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => handleDownloadExcel('GSTR-3B')} variant="outline" className="w-full justify-start text-emerald-700 border-emerald-200 hover:bg-emerald-50">
-              <Download className="h-4 w-4 mr-2" /> Download GSTR-3B Excel
+            <Button onClick={() => handleDownloadJSON('GSTR-3B')} variant="outline" className="w-full justify-start text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+              <Download className="h-4 w-4 mr-2" /> Download GSTR-3B JSON
             </Button>
           </CardContent>
         </Card>

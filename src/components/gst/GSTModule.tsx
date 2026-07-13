@@ -82,7 +82,7 @@ export function GSTModule({
         {activeTab === 'recurring' && <RecurringInvoices recurringTemplates={recurringTemplates} setRecurringTemplates={setRecurringTemplates} />}
         {activeTab === 'receipts' && <ReceiptVoucher receipts={receipts} setReceipts={setReceipts} />}
         {activeTab === 'reports' && <ReportsView invoices={invoices} expenses={expenses} />}
-        {activeTab === 'returns' && <GSTReturns invoices={invoices} expenses={expenses} />}
+        {activeTab === 'returns' && <GSTReturns invoices={invoices} expenses={expenses} businessProfile={businessProfile} />}
         {activeTab === 'settings' && <SettingsView businessProfile={businessProfile} setBusinessProfile={setBusinessProfile} />}
       </div>
     </div>

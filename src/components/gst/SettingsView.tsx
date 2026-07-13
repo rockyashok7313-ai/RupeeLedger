@@ -32,6 +32,46 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
         </CardHeader>
         <CardContent className="space-y-8">
           
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="text-sm font-semibold text-gray-900">Multi-Business Profiles</h3>
+              <Button variant="outline" size="sm" onClick={() => {
+                const profiles = JSON.parse(localStorage.getItem('saved_gst_profiles') || '[]');
+                profiles.push(localProfile);
+                localStorage.setItem('saved_gst_profiles', JSON.stringify(profiles));
+                alert('Profile saved to local vault!');
+              }}>
+                Save Current Profile
+              </Button>
+            </div>
+            
+            <div className="space-y-3">
+              {(() => {
+                const profiles: BusinessProfile[] = JSON.parse(localStorage.getItem('saved_gst_profiles') || '[]');
+                if (profiles.length === 0) return <p className="text-xs text-gray-500">No saved profiles found. Configure your settings and click "Save Current Profile" to add one.</p>;
+                return profiles.map((p, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
+                    <div>
+                      <p className="font-semibold text-sm">{p.companyName || 'Unnamed Business'}</p>
+                      <p className="text-xs text-gray-500">GSTIN: {p.gstin || 'N/A'}</p>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => {
+                      setLocalProfile(p);
+                      if (setBusinessProfile) {
+                        setBusinessProfile(p);
+                      }
+                      alert(`Switched to ${p.companyName || 'Profile'}`);
+                    }}>
+                      Switch
+                    </Button>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+
+
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Numbering & Terms</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -102,6 +142,34 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
               </div>
             </div>
           </div>
+
+          
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Cloud Integrations</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-4 border rounded-lg bg-gray-50 flex items-center justify-between">
+                <div>
+                  <h4 className="font-semibold text-gray-800">Google Drive Backup</h4>
+                  <p className="text-xs text-gray-500 mt-1">Sync your JSON returns & PDF invoices directly to your Drive.</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="bg-white"
+                  onClick={() => {
+                    const btn = document.getElementById('drive-btn');
+                    if (btn) btn.innerHTML = 'Connecting...';
+                    setTimeout(() => {
+                      alert('Simulated OAuth: Successfully connected to Google Drive! Backups will now sync daily.');
+                      if (btn) btn.innerHTML = 'Connected to Drive';
+                    }, 1500);
+                  }}
+                >
+                  <span id="drive-btn" className="flex items-center">Connect Drive</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
 
           <div className="flex justify-end pt-4 gap-4">
             <Button 

@@ -17,6 +17,7 @@ export function ReportPrint({
   businessProfile: BusinessProfile;
 }) {
   const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const reportRef = useRef<HTMLDivElement>(null);
   
   const handlePrint = () => {
@@ -27,6 +28,7 @@ export function ReportPrint({
     if (!reportRef.current) return;
     
     setIsExporting(true);
+    await new Promise(r => setTimeout(r, 150));
     try {
       const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
@@ -71,8 +73,8 @@ export function ReportPrint({
 
   const sortedTransactions = [...transactions].sort((a, b) => a.date - b.date);
 
-  const PAGE_1_MAX = 25;
-  const PAGE_OTHER_MAX = 35;
+  const PAGE_1_MAX = 16;
+  const PAGE_OTHER_MAX = 16;
   
   const chunkedTransactions = [];
   let runningIndex = 0;
@@ -141,21 +143,54 @@ export function ReportPrint({
           page-break-inside: avoid;
         }
       `}</style>
-      <div className="flex gap-2 no-print">
-        <Button onClick={handlePrint} className="flex-1 sm:flex-none">
-          <Printer className="mr-2 h-4 w-4" /> Print
-        </Button>
-        <Button variant="outline" onClick={handleDownloadPDF} disabled={isExporting} className="flex-1 sm:flex-none">
-          {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-          Download PDF
-        </Button>
+      <div className="sticky top-0 z-50 flex flex-col sm:flex-row gap-4 no-print items-start sm:items-center justify-between mb-4 bg-slate-100 p-3 shadow-md rounded-b-md">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={handlePrint} className="flex-1 sm:flex-none">
+            <Printer className="mr-2 h-4 w-4" /> Print
+          </Button>
+          <Button variant="outline" onClick={handleDownloadPDF} disabled={isExporting} className="flex-1 sm:flex-none">
+            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Download PDF
+          </Button>
+        </div>
+        
+        <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm px-4 py-2 rounded-md border border-slate-200 w-full sm:w-auto justify-between">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                const newPage = Math.max(1, currentPage - 1);
+                setCurrentPage(newPage);
+                document.getElementById(`pdf-page-${newPage}`)?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              disabled={currentPage === 1 || isExporting}
+            >
+              Prev Page
+            </Button>
+            <span className="text-sm font-semibold text-slate-700">
+              Page {currentPage} of {chunkedTransactions.length}
+            </span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                const newPage = Math.min(chunkedTransactions.length, currentPage + 1);
+                setCurrentPage(newPage);
+                document.getElementById(`pdf-page-${newPage}`)?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              disabled={currentPage === chunkedTransactions.length || isExporting}
+            >
+              Next Page
+            </Button>
+          </div>
       </div>
 
       <div ref={reportRef} className="print-only-reset flex flex-col items-center gap-8 bg-gray-100 p-4 rounded-md">
         {chunkedTransactions.map((chunk, index) => (
           <div 
             key={index} 
-            className="pdf-page relative p-8 bg-white text-black font-sans w-[210mm] shadow-lg border border-gray-300 break-after-page flex flex-col"
+            id={`pdf-page-${index + 1}`}
+            className="pdf-page scroll-mt-20 relative p-8 bg-white text-black font-sans w-[210mm] h-[297mm] shadow-lg border border-gray-300 break-after-page flex flex-col"
           >
             {/* HEADER */}
             <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-black pb-4 mb-6 gap-4 shrink-0">
@@ -188,13 +223,13 @@ export function ReportPrint({
                   </div>
                 </div>
                 <div className="flex-1 p-3 text-center border-r border-black bg-gray-50">
-                  <p className="text-xs uppercase font-bold text-gray-700">Total Deposits (Cr)</p>
+                  <p className="text-xs uppercase font-bold text-gray-700">Total Credit (Cr)</p>
                   <div className="text-lg font-bold text-black mt-1">
                     <CurrencyDisplay amount={totals.credit} />
                   </div>
                 </div>
                 <div className="flex-1 p-3 text-center border-r border-black bg-gray-50">
-                  <p className="text-xs uppercase font-bold text-gray-700">Total Withdrawals (Dr)</p>
+                  <p className="text-xs uppercase font-bold text-gray-700">Total Debit (Dr)</p>
                   <div className="text-lg font-bold text-black mt-1">
                     <CurrencyDisplay amount={totals.debit} />
                   </div>
@@ -215,12 +250,25 @@ export function ReportPrint({
                   <tr className="bg-gray-200 border-b-2 border-black">
                     <th className="py-2 px-3 text-left font-bold text-black border-r-2 border-black w-28">Date</th>
                     <th className="py-2 px-3 text-left font-bold text-black border-r-2 border-black">Particulars / Narration</th>
-                    <th className="py-2 px-3 text-right font-bold text-black border-r-2 border-black w-32">Withdrawals (Dr)</th>
-                    <th className="py-2 px-3 text-right font-bold text-black border-r-2 border-black w-32">Deposits (Cr)</th>
+                    <th className="py-2 px-3 text-right font-bold text-black border-r-2 border-black w-32">Debit (Dr)</th>
+                    <th className="py-2 px-3 text-right font-bold text-black border-r-2 border-black w-32">Credit (Cr)</th>
                     <th className="py-2 px-3 text-right font-bold text-black w-36">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Opening Balance for first page */}
+                  {chunk.pageNum === 1 && (
+                    <tr className="border-b border-gray-400 font-bold bg-gray-50">
+                      <td className="py-2 px-3 text-black border-r-2 border-black">-</td>
+                      <td className="py-2 px-3 text-black border-r-2 border-black">OPENING BALANCE</td>
+                      <td className="py-2 px-3 text-black border-r-2 border-black"></td>
+                      <td className="py-2 px-3 text-black border-r-2 border-black"></td>
+                      <td className="py-2 px-3 text-right text-black">
+                        <CurrencyDisplay amount={account.initialBalance} />
+                      </td>
+                    </tr>
+                  )}
+
                   {/* Brought Forward for intermediate pages */}
                   {chunk.pageNum > 1 && (
                     <tr className="border-b-2 border-black bg-gray-50 font-bold">

@@ -1,0 +1,17 @@
+Patch App.tsx handleGenerateLicenseKey to include Auth header
+Add auth token to POST /api/keys
+Update the grid in App.tsx to display more cards per row, making the cards smaller in width.
+Import LandingPage
+Add showLanding state
+Render LandingPage and add Back button
+Add tier to initial subscription state
+Import UpgradeModal
+Add state for UpgradeModal
+Use handleFeatureAccess for GST tab
+Render UpgradeModal in App.tsx
+Add Integrations & API card to Settings
+Fix double Card tag
+Add Multi-Branch Support UI
+Add limit to handleAccountSubmit
+Remove setIsNewTransactionOpen
+Add password visibility toggle in the login page

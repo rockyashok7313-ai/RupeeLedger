@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash, FileText, CheckCircle2 } from 'lucide-react';
-import { BusinessProfile, Client, InventoryItem, Invoice, InvoiceItem } from '@/lib/types';
+import { BusinessProfile, Client, InventoryItem, Invoice, InvoiceItem, InvoiceType } from '@/lib/types';
+import { currencies } from '@/lib/currency';
+import { UQC_LIST, generateInvoiceNumber, getCurrentFinancialYear } from '@/lib/invoiceUtils';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Props {
@@ -24,10 +26,22 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
   const [vehicleNo, setVehicleNo] = useState('');
   const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>('excluding');
   const [gstType, setGstType] = useState<'CGST+SGST' | 'IGST'>('CGST+SGST');
-  const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18 }]);
+  const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
+
+  const termsTemplates = {
+    'general': '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed by more than 30 days.',
+    'it_services': '1. Payment terms: Net 15 days.\n2. Intellectual property transfers upon full payment.\n3. Late fees: 1.5% per month on overdue balances.',
+    'ecommerce': '1. Returns accepted within 7 days of delivery.\n2. Subject to local jurisdiction.\n3. Warranty applies as per manufacturer terms.',
+    'consulting': '1. Invoice payable upon receipt.\n2. Retainer fees are non-refundable.\n3. Subject to NDA terms signed.'
+  };
+  const [terms, setTerms] = useState<string>('');
+
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>('Tax Invoice');
+  const [currency, setCurrency] = useState('INR');
+  const [exchangeRate, setExchangeRate] = useState(1);
   
   const handleAddItem = () => {
-    setItems([...items, { name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18 }]);
+    setItems([...items, { name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -65,6 +79,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
 
   const handleSaveInvoice = () => {
     if (!clientName) return alert('Please enter a client name.');
+    if (gstType === 'IGST' && !customerAddress) return alert('Inter-state supply requires Customer Address to determine Place of Supply.');
     
     let subtotal = 0;
     let cgst = 0;
@@ -115,7 +130,14 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
 
     const total = subtotal + cgst + sgst + igst;
 
+    const invoiceNum = generateInvoiceNumber(invoices.length + 1, 'INV', getCurrentFinancialYear());
     const newInvoice: Invoice = {
+      terms,
+      invoiceNumber: invoiceNum,
+      type: invoiceType,
+      currency,
+      exchangeRate,
+      financialYear: getCurrentFinancialYear(),
       id: uuidv4(),
       clientId: clientId || uuidv4(),
       clientName,
@@ -148,6 +170,25 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         <CardDescription>Generate a B2B or B2C GST Invoice and save to your ledger</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="space-y-2">
+            <Label>Invoice Type</Label>
+            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={invoiceType} onChange={e => setInvoiceType(e.target.value as InvoiceType)}>
+              <option value="Tax Invoice">Tax Invoice</option>
+              <option value="Proforma">Proforma / Estimate</option>
+              <option value="Bill of Supply">Bill of Supply</option>
+              <option value="Credit Note">Credit Note</option>
+              <option value="Delivery Challan">Delivery Challan</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Currency</Label>
+            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={currency} onChange={e => setCurrency(e.target.value)}>
+              {currencies.map(c => <option key={c.code} value={c.code}>{c.code} - {c.name}</option>)}
+            </select>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Client</Label>
@@ -277,6 +318,33 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
           <Button variant="outline" size="sm" onClick={handleAddItem} className="mt-2">
             <Plus className="h-4 w-4 mr-2" /> Add Another Item
           </Button>
+        </div>
+
+        
+        <div className="space-y-4 pt-4 border-t">
+          <h3 className="font-semibold border-b pb-2">Terms & Conditions (Rich Text)</h3>
+          <div className="flex gap-4">
+            <div className="w-1/3 space-y-2">
+              <Label>Starter Templates</Label>
+              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" onChange={e => setTerms(termsTemplates[e.target.value as keyof typeof termsTemplates] || '')}>
+                <option value="">-- Select Template --</option>
+                <option value="general">General Business</option>
+                <option value="it_services">IT & Software Services</option>
+                <option value="ecommerce">E-Commerce / Retail</option>
+                <option value="consulting">Consulting Services</option>
+              </select>
+              <p className="text-xs text-muted-foreground mt-2">Select a preset to auto-fill your terms. You can then edit them in the text area.</p>
+            </div>
+            <div className="w-2/3 space-y-2">
+              <Label>Custom Terms</Label>
+              <textarea 
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px]"
+                placeholder="Enter your terms and conditions here..."
+                value={terms}
+                onChange={e => setTerms(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="pt-4 border-t flex justify-end gap-3">

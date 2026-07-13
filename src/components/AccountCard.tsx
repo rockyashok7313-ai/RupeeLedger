@@ -57,26 +57,26 @@ export function AccountCard({ account, onClick, onEdit, onDelete, isActive }: Ac
         </DropdownMenu>
       </div>
 
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium truncate pr-8">{account.name}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
+        <CardTitle className="text-xs font-semibold uppercase tracking-wider truncate pr-8">{account.name}</CardTitle>
+        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">
+      <CardContent className="p-4 pt-0">
+        <div className="text-xl font-bold">
           <CurrencyDisplay amount={account.currentBalance} />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
-          <Badge variant="outline" className="font-normal">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 mt-1.5">
+          <Badge variant="outline" className="font-normal text-[10px] px-1.5 py-0 h-4">
             {account.type}
           </Badge>
           {account.gstin && (
-            <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+            <span className="text-[9px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
               GST: {account.gstin}
             </span>
           )}
         </div>
         {(account.phone || account.address) && (
-          <div className="mt-3 pt-2 border-t border-muted/50 text-[11px] text-muted-foreground space-y-0.5">
+          <div className="mt-2 pt-1.5 border-t border-muted/50 text-[10px] text-muted-foreground space-y-0.5">
             {account.phone && (
               <div className="truncate flex items-center gap-1">
                 <span className="font-semibold opacity-75">Phone:</span> {account.phone}

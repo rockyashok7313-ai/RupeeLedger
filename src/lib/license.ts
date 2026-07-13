@@ -1,4 +1,4 @@
-import { getMongoDb, isMongoConfigured } from '@/lib/mongodb';
+import { getMongoDb, isMongoConfigured } from '../lib/mongodb';
 import nodemailer from 'nodemailer';
 
 export const generateKeyString = (duration: string) => {

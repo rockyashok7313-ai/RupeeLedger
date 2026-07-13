@@ -6,7 +6,7 @@
  * - AiNarrationSuggesterOutput - The return type for the suggestNarration function.
  */
 
-import { ai } from '@/ai/genkit';
+import { ai } from '../../ai/genkit';
 import { z } from 'genkit';
 
 const AiNarrationSuggesterInputSchema = z.object({

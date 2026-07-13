@@ -42,6 +42,21 @@ export interface Transaction {
   customerAddress?: string;
 }
 
+export interface InvoiceSettings {
+  theme: 'Classic' | 'Modern' | 'Minimal';
+  color: string;
+  fontScale: number;
+  showLogo: boolean;
+  showHsn: boolean;
+  showBankDetails: boolean;
+  showAmountInWords: boolean;
+  labels: {
+    title: string;
+    billTo: string;
+    itemDesc: string;
+  };
+}
+
 export interface BusinessProfile {
   companyName: string;
   address: string;
@@ -52,12 +67,14 @@ export interface BusinessProfile {
   bankAccountNumber?: string;
   bankIfsc?: string;
   bankBranch?: string;
+  invoiceSettings?: InvoiceSettings;
 }
 
 export interface Subscription {
   status: 'active' | 'expired';
   plan: string;
   price: string;
+  tier?: 'FREE' | 'MONTHLY' | 'YEARLY';
   renewalDate: string;
   licenseKey: string;
   /** Timestamp (ms) when plan was purchased — used for guest 7-day grace period. */
@@ -97,6 +114,7 @@ export interface InventoryItem {
   taxRate: number;
   currentStock: number;
   createdAt: number;
+  unit?: string; // UQC (Unit Quantity Code)
 }
 
 export interface InvoiceItem {
@@ -108,10 +126,19 @@ export interface InvoiceItem {
   taxPercent: number;
   amount: number;
   hsnCode?: string;
+  unit?: string; // e.g. kg, ltr, pcs
 }
+
+export type InvoiceType = 'Tax Invoice' | 'Proforma' | 'Bill of Supply' | 'Credit Note' | 'Delivery Challan';
 
 export interface Invoice {
   id: string;
+  invoiceNumber?: string;
+  type?: InvoiceType; // Default to Tax Invoice if missing
+  prefix?: string;
+  financialYear?: string;
+  currency?: string; // e.g., 'INR', 'USD'
+  exchangeRate?: number;
   clientId: string;
   clientName: string;
   date: number;
@@ -129,6 +156,7 @@ export interface Invoice {
   vehicleNo?: string;
   gstCalculationType?: 'including' | 'excluding';
   gstType?: 'CGST+SGST' | 'IGST';
+  terms?: string; // Rich-text terms
 }
 
 export interface Expense {
