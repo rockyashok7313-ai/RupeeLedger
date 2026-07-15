@@ -26,15 +26,9 @@ import {
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
-import { auth } from "@/lib/firebase";
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from "firebase/auth";
+import { supabase } from "@/lib/supabase";
+import { pushSyncToSupabase, pullSyncFromSupabase } from "@/lib/supabaseSync";
+// Migrated to Supabase Auth
 // Removed Firestore imports to migrate fully to MongoDB API endpoints
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
@@ -133,34 +127,10 @@ async function pushSyncToMongoDB(
   receipts?: Receipt[]
 ) {
   try {
-    const token = await auth.currentUser?.getIdToken();
-    const res = await fetch('/api/ledger/sync', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        userId,
-        accounts: accountsList,
-        transactions: transactionsList,
-        businessProfile,
-        subscription,
-        securitySettings,
-        clients,
-        inventory,
-        invoices,
-        expenses,
-        recurringTemplates,
-        receipts,
-        action: 'push'
-      })
-    });
-    if (!res.ok) {
-      throw new Error(`Sync request failed with status ${res.status}`);
-    }
-    const data = await res.json();
-    return data;
+    const { data: { session } } = await supabase.auth.getSession(); const token = session?.access_token;
+    
+      await pushSyncToSupabase(userId, accountsList, transactionsList, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
+      return { success: true };
   } catch (err) {
     console.error("MongoDB backup sync error:", err);
     throw err;
@@ -379,12 +349,20 @@ export default function RupeeLedger() {
 
   useEffect(() => {
     // 1. Setup Auth Observer
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const firebaseUser = session?.user ? { 
+        uid: session.user.id, 
+        email: session.user.email, 
+        displayName: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+        photoURL: session.user.user_metadata?.avatar_url,
+        phoneNumber: session.user.phone,
+        providerData: [{ providerId: session.user.app_metadata?.provider || 'email' }]
+      } : null;
       if (firebaseUser) {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
           // Fetch user data via MongoDB Sync API route
-          const token = await firebaseUser.getIdToken();
+          const token = session?.access_token || "";
           const syncRes = await fetch('/api/ledger/sync', {
             method: 'POST',
             headers: { 
@@ -591,7 +569,7 @@ export default function RupeeLedger() {
     document.body.appendChild(script);
 
     return () => {
-      unsubscribe();
+      authListener.unsubscribe();
       if (document.body.contains(script)) {
         document.body.removeChild(script);
       }
@@ -689,8 +667,7 @@ export default function RupeeLedger() {
   const handleGoogleLogin = async () => {
     toast({ title: "Connecting to Google...", description: "Opening Google Auth popup." });
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' }); if (error) throw error;
     } catch (error) {
       console.error("Google Auth error:", error);
       toast({
@@ -1127,13 +1104,13 @@ export default function RupeeLedger() {
     }
     toast({ title: "Authenticating...", description: "Checking credentials." });
     try {
-      await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+      const { error } = await supabase.auth.signInWithPassword({ email: emailInput, password: passwordInput }); if (error) throw error;
     } catch (err: unknown) {
       const authErr = err as { code?: string; message?: string };
       if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/cannot-find-user') {
         toast({ title: "Registering...", description: "Creating a new account." });
         try {
-          await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+          const { error } = await supabase.auth.signUp({ email: emailInput, password: passwordInput }); if (error) throw error;
         } catch (createErr) {
           console.error("Firebase signup error:", createErr);
           toast({
@@ -1163,7 +1140,7 @@ export default function RupeeLedger() {
     // Firebase Auth users (Google, email/password)
     if (method === 'google' || method === 'email') {
       try {
-        await signOut(auth);
+        await supabase.auth.signOut();
       } catch (err) {
         console.error('Signout error:', err);
       }
@@ -1406,7 +1383,7 @@ export default function RupeeLedger() {
   const fetchGeneratedKeys = async (userId: string) => {
     if (!isOwner) return;
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const { data: { session } } = await supabase.auth.getSession(); const token = session?.access_token;
       const res = await fetch(`/api/keys?userId=${userId}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
@@ -1440,7 +1417,7 @@ export default function RupeeLedger() {
       const durationDays = vendorKeyDuration === "annual" ? 365 : 30;
       
       if (user && user.authMethod !== 'guest') {
-        const token = await auth.currentUser?.getIdToken();
+        const { data: { session } } = await supabase.auth.getSession(); const token = session?.access_token;
         const res = await fetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
@@ -1490,7 +1467,7 @@ export default function RupeeLedger() {
 
     if (user && user.authMethod !== 'guest') {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const { data: { session } } = await supabase.auth.getSession(); const token = session?.access_token;
         const res = await fetch('/api/keys', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },

@@ -1,0 +1,949 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { 
+  Plus, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  LayoutDashboard, 
+  History, 
+  Settings as SettingsIcon,
+  FileText,
+  Printer,
+  Pencil,
+  Trash2,
+  MoreVertical,
+  ChevronLeft,
+  CalendarDays,
+  AlertTriangle,
+  Download,
+  Trash,
+  TrendingUp,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  UserPlus
+} from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
+import { auth } from "@/lib/firebase";
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
+// Removed Firestore imports to migrate fully to MongoDB API endpoints
+import { AccountCard } from "@/components/AccountCard";
+import { TransactionForm } from "@/components/TransactionForm";
+import { CurrencyDisplay } from "@/components/CurrencyDisplay";
+import { LandingPage } from "@/components/LandingPage";
+import { UpgradeModal } from "@/components/UpgradeModal";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { format, isSameDay, parse, addDays } from "date-fns";
+import { Toaster } from "@/components/ui/toaster";
+import { toast } from "@/hooks/use-toast";
+import { VoucherPrint } from "@/components/VoucherPrint";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ReportPrint } from "@/components/ReportPrint";
+import { DailyReport } from "@/components/DailyReport";
+import { GSTModule } from "@/components/gst/GSTModule";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+
+async function hashPin(pin: string, userId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + "_rupee_ledger_salt_" + userId);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function migrateSecuritySettings(sec: SecuritySettings, userId: string): Promise<SecuritySettings> {
+  if (sec.pinCode && sec.pinCode.length === 4 && !sec.hashedPinCode) {
+    try {
+      const hash = await hashPin(sec.pinCode, userId);
+      return {
+        ...sec,
+        pinCode: "",
+        hashedPinCode: hash
+      };
+    } catch (err) {
+      console.error("Failed to migrate security PIN:", err);
+    }
+  }
+  return sec;
+}
+
+
+async function pushSyncToMongoDB(
+  userId: string,
+  accountsList: Account[],
+  transactionsList: Transaction[],
+  businessProfile?: BusinessProfile,
+  subscription?: Subscription,
+  securitySettings?: SecuritySettings,
+  clients?: Client[],
+  inventory?: InventoryItem[],
+  invoices?: Invoice[],
+  expenses?: Expense[],
+  recurringTemplates?: RecurringTemplate[],
+  receipts?: Receipt[]
+) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    const res = await fetch('/api/ledger/sync', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        userId,
+        accounts: accountsList,
+        transactions: transactionsList,
+        businessProfile,
+        subscription,
+        securitySettings,
+        clients,
+        inventory,
+        invoices,
+        expenses,
+        recurringTemplates,
+        receipts,
+        action: 'push'
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`Sync request failed with status ${res.status}`);
+    }
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("MongoDB backup sync error:", err);
+    throw err;
+  }
+}
+
+export default function RupeeLedger() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "inventory" | "purchase" | "sales" | "maintenance" | "settings">("dashboard");
+  const [erpTab, setErpTab] = useState<"inventory" | "purchase" | "sales" | "returns" | "reports" | "maintenance">("inventory");
+  const [ledgerSearch, setLedgerSearch] = useState("");
+  const [ledgerStartDate, setLedgerStartDate] = useState("");
+  const [ledgerEndDate, setLedgerEndDate] = useState("");
+  const [analyticsAccountId, setAnalyticsAccountId] = useState<string>("all");
+  
+  // Modals state
+  const [isNewAccountOpen, setIsNewAccountOpen] = useState(false);
+  const [newAccountContext, setNewAccountContext] = useState<'buyer' | 'company'>('company');
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<string | null>(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<{t: Transaction, a: Account} | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<{t: Transaction, a: Account} | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [isNewInvoiceOpen, setIsNewInvoiceOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [isClearDataAlertOpen, setIsClearDataAlertOpen] = useState(false);
+  const [boughtKey, setBoughtKey] = useState<{ key: string, duration: string } | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [dailyReportDateInput, setDailyReportDateInput] = useState<string>(
+    format(new Date(), "dd-MM-yyyy")
+  );
+
+  const dailyReportDate = useMemo(() => {
+    const parsed = parse(dailyReportDateInput, "dd-MM-yyyy", new Date());
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  }, [dailyReportDateInput]);
+
+  const [dailyReportMode, setDailyReportMode] = useState<"daily" | "monthly">("daily");
+  const [dailyReportMonth, setDailyReportMonth] = useState<number>(new Date().getMonth());
+  const [dailyReportYear, setDailyReportYear] = useState<number>(new Date().getFullYear());
+
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>({
+    companyName: "",
+    address: "",
+    gstin: "",
+    phone: "",
+    printFooter: ""
+  });
+
+  const [subscription, setSubscription] = useState<Subscription>({
+    status: "active",
+    plan: "Free Trial (7 Days)",
+    price: "₹199 / month",
+    renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+    licenseKey: "FREE-TRIAL",
+    purchasedAt: Date.now()
+  });
+
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
+    pinEnabled: false,
+    pinCode: ""
+  });
+
+  // Authentication States
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [showLanding, setShowLanding] = useState(true);
+  const [showLogin, setShowLogin] = useState(true);
+  const [loginTab, setLoginTab] = useState<"google" | "phone" | "email" | "whatsapp">("google");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState("");
+
+  // WhatsApp OTP states
+  const [whatsappInput, setWhatsappInput] = useState("");
+  const [whatsappOtpInput, setWhatsappOtpInput] = useState("");
+  const [whatsappOtpSent, setWhatsappOtpSent] = useState(false);
+  const [whatsappOtpLoading, setWhatsappOtpLoading] = useState(false);
+  const [whatsappGeneratedOtp, setWhatsappGeneratedOtp] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  // Email OTP login states
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpInput, setEmailOtpInput] = useState("");
+  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  // Guest upgrade modal states
+  const [showGuestUpgradeModal, setShowGuestUpgradeModal] = useState(false);
+  const [guestUpgradeEmail, setGuestUpgradeEmail] = useState("");
+  const [guestUpgradeOtpSent, setGuestUpgradeOtpSent] = useState(false);
+  const [guestUpgradeOtp, setGuestUpgradeOtp] = useState("");
+  const [guestUpgradeDevOtp, setGuestUpgradeDevOtp] = useState("");
+  const [guestUpgradeLoading, setGuestUpgradeLoading] = useState(false);
+  const [emailLoginMode, setEmailLoginMode] = useState<"otp" | "password">("otp");
+
+  const [isLocked, setIsLocked] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeFeatureName, setUpgradeFeatureName] = useState("");
+  const [upgradeRequiredTier, setUpgradeRequiredTier] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+
+  const handleFeatureAccess = (featureName: string, requiredTier: "MONTHLY" | "YEARLY", onAllow: () => void) => {
+    const tier = subscription.tier || "MONTHLY";
+    
+    if (requiredTier === "YEARLY" && tier !== "YEARLY") {
+      setUpgradeFeatureName(featureName);
+      setUpgradeRequiredTier("YEARLY");
+      setUpgradeModalOpen(true);
+      return;
+    }
+    
+    if (requiredTier === "MONTHLY" && tier === "FREE") {
+      setUpgradeFeatureName(featureName);
+      setUpgradeRequiredTier("MONTHLY");
+      setUpgradeModalOpen(true);
+      return;
+    }
+    
+    onAllow();
+  };
+
+  // Reseller / Key Generation States
+  const [vendorKeyDuration, setVendorKeyDuration] = useState<"monthly" | "annual">("annual");
+  const [generatedKeysList, setGeneratedKeysList] = useState<{key: string; duration: string; createdAt: number; status: string}[]>([]);
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+
+  // Owner Authorization Settings
+  const OWNER_EMAILS = useMemo(() => [
+    "rockyashok7313@gmail.com",
+    "ak@rupeeledger.com",
+    "admin@rupeeledger.com"
+  ], []);
+
+  const isOwner = useMemo(() => {
+    return !!(user && user.authMethod !== 'guest' && user.email && 
+      OWNER_EMAILS.includes(user.email.toLowerCase()));
+  }, [user, OWNER_EMAILS]);
+
+  const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
+    let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
+    let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
+    
+    // Backward compatibility fallback
+    if (!savedAccounts && guestUserId === "guest_local") {
+      savedAccounts = localStorage.getItem("rupee_ledger_accounts");
+    }
+    if (!savedTransactions && guestUserId === "guest_local") {
+      savedTransactions = localStorage.getItem("rupee_ledger_transactions");
+    }
+
+    if (savedAccounts) setAccounts(JSON.parse(savedAccounts));
+    else setAccounts([]);
+    
+    if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
+    else setTransactions([]);
+
+    const savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
+    const savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
+    const savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
+    const savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
+    const savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
+    const savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
+
+    if (savedClients) setClients(JSON.parse(savedClients)); else setClients([]);
+    if (savedInventory) setInventory(JSON.parse(savedInventory)); else setInventory([]);
+    if (savedInvoices) setInvoices(JSON.parse(savedInvoices)); else setInvoices([]);
+    if (savedExpenses) setExpenses(JSON.parse(savedExpenses)); else setExpenses([]);
+    if (savedRecurring) setRecurringTemplates(JSON.parse(savedRecurring)); else setRecurringTemplates([]);
+    if (savedReceipts) setReceipts(JSON.parse(savedReceipts)); else setReceipts([]);
+
+    const savedCloudBackup = localStorage.getItem("rupee_ledger_cloud_backup_enabled");
+    if (savedCloudBackup !== null) {
+      setCloudBackupEnabled(JSON.parse(savedCloudBackup));
+    }
+
+    const savedProfile = localStorage.getItem("rupee_ledger_business_profile");
+    if (savedProfile) setBusinessProfile(JSON.parse(savedProfile));
+
+    const savedSub = localStorage.getItem("rupee_ledger_subscription");
+    if (savedSub) {
+      const parsedSub = JSON.parse(savedSub);
+      // Migrate old pricing to new pricing
+      if (parsedSub.price === '₹500 / month' || parsedSub.price === '₹500/month') parsedSub.price = '₹199 / month';
+      if (parsedSub.price === '₹5,000 / year' || parsedSub.price === '₹5000 / year') parsedSub.price = '₹1,999 / year';
+      setSubscription(parsedSub);
+    }
+
+    const savedSecurity = localStorage.getItem("rupee_ledger_security");
+    if (savedSecurity) {
+      const parsedSec = JSON.parse(savedSecurity);
+      const migrated = await migrateSecuritySettings(parsedSec, guestUserId);
+      setSecuritySettings(migrated);
+      if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+        setIsLocked(true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // 1. Setup Auth Observer
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+        try {
+          // Fetch user data via MongoDB Sync API route
+          const token = await firebaseUser.getIdToken();
+          const syncRes = await fetch('/api/ledger/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
+          });
+
+          let shouldLock = false;
+          let fetchedAccounts: Account[] = [];
+          let fetchedTxs: Transaction[] = [];
+
+          if (syncRes.ok) {
+            const syncData = await syncRes.json();
+            if (syncData.isOfflineFallback) {
+              await loadLocalStorageData(firebaseUser.uid);
+            } else {
+              if (syncData.exists) {
+                if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+                if (syncData.subscription) {
+                  const s = syncData.subscription;
+                  if (s.price === '₹500 / month') s.price = '₹199 / month';
+                  if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+                  setSubscription(s);
+                }
+                if (syncData.securitySettings) {
+                  const migrated = await migrateSecuritySettings(syncData.securitySettings, firebaseUser.uid);
+                  setSecuritySettings(migrated);
+                  if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                    shouldLock = true;
+                  }
+                }
+                fetchedAccounts = syncData.accounts || [];
+                fetchedTxs = syncData.transactions || [];
+                if (syncData.clients) setClients(syncData.clients);
+                if (syncData.inventory) setInventory(syncData.inventory);
+                if (syncData.invoices) setInvoices(syncData.invoices);
+                if (syncData.expenses) setExpenses(syncData.expenses);
+                if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
+                if (syncData.receipts) setReceipts(syncData.receipts);
+              } else {
+                const initialSubscription: Subscription = {
+                  status: "active",
+                  plan: "Free Trial (7 Days)",
+                  price: "₹199 / month",
+                  renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+                  licenseKey: "FREE-TRIAL",
+                  purchasedAt: Date.now()
+                };
+                setSubscription(initialSubscription);
+                await pushSyncToMongoDB(
+                  firebaseUser.uid,
+                  [],
+                  [],
+                  businessProfile,
+                  initialSubscription,
+                  securitySettings,
+                  clients, inventory, invoices, expenses, recurringTemplates, receipts
+                );
+              }
+            }
+          } else {
+            await loadLocalStorageData(firebaseUser.uid);
+          }
+
+          // Auto-migration check: If cloud database is empty, check for local data
+          if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
+            const guestAccs = localStorage.getItem(`rupee_ledger_accounts_${firebaseUser.uid}`) ||
+                              localStorage.getItem("rupee_ledger_accounts_guest_local") || 
+                              localStorage.getItem("rupee_ledger_accounts_");
+            const guestTxs = localStorage.getItem(`rupee_ledger_transactions_${firebaseUser.uid}`) ||
+                              localStorage.getItem("rupee_ledger_transactions_guest_local") || 
+                              localStorage.getItem("rupee_ledger_transactions_");
+            
+            if (guestAccs || guestTxs) {
+              const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
+              const parsedTxs: Transaction[] = guestTxs ? JSON.parse(guestTxs) : [];
+              if (parsedAccs.length > 0 || parsedTxs.length > 0) {
+                toast({ 
+                  title: "Migrating Local Data", 
+                  description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
+                });
+                await pushSyncToMongoDB(firebaseUser.uid, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
+                fetchedAccounts = parsedAccs;
+                fetchedTxs = parsedTxs;
+              }
+            }
+          }
+
+          setAccounts(fetchedAccounts);
+          setTransactions(fetchedTxs);
+          await fetchGeneratedKeys(firebaseUser.uid);
+
+          const profile: UserProfile = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
+            email: firebaseUser.email || undefined,
+            phone: firebaseUser.phoneNumber || undefined,
+            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
+            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            createdAt: Date.now()
+          };
+          setUser(profile);
+          setShowLogin(false);
+          setIsLocked(shouldLock);
+          setPinInput("");
+          setIsLoaded(true);
+        } catch (err) {
+          console.error("MongoDB loading error:", err);
+          toast({ title: "Cloud Sync Failure", description: "Loading backup cache from local storage.", variant: "destructive" });
+          await loadLocalStorageData(firebaseUser.uid);
+          
+          const profile: UserProfile = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
+            email: firebaseUser.email || undefined,
+            phone: firebaseUser.phoneNumber || undefined,
+            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
+            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            createdAt: Date.now()
+          };
+          setUser(profile);
+          setShowLogin(false);
+          setIsLoaded(true);
+        }
+      } else {
+        const savedUser = localStorage.getItem("rupee_ledger_user");
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          if (parsed.authMethod === 'guest') {
+            setUser(parsed);
+            setShowLogin(false);
+            await loadLocalStorageData(parsed.id);
+            setIsLoaded(true);
+            return;
+          } else if (parsed.authMethod === 'phone' || parsed.authMethod === 'whatsapp' || parsed.authMethod === 'emailOtp') {
+            setUser(parsed);
+            setShowLogin(false);
+            setIsLocked(false);
+            setPinInput("");
+            const loadUserData = async () => {
+              try {
+                toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
+                const syncRes = await fetch('/api/ledger/sync', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: parsed.id, action: 'pull' })
+                });
+                let shouldLock = false;
+                if (syncRes.ok) {
+                  const syncData = await syncRes.json();
+                  if (syncData.isOfflineFallback) {
+                    await loadLocalStorageData(parsed.id);
+                  } else if (syncData.exists) {
+                    if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+                    if (syncData.subscription) {
+                      const s = syncData.subscription;
+                      if (s.price === '₹500 / month') s.price = '₹199 / month';
+                      if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
+                      setSubscription(s);
+                    }
+                    if (syncData.securitySettings) {
+                      const migrated = await migrateSecuritySettings(syncData.securitySettings, parsed.id);
+                      setSecuritySettings(migrated);
+                      if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
+                        shouldLock = true;
+                      }
+                    }
+                    setAccounts(syncData.accounts || []);
+                    setTransactions(syncData.transactions || []);
+                    if (syncData.clients) setClients(syncData.clients);
+                    if (syncData.inventory) setInventory(syncData.inventory);
+                    if (syncData.invoices) setInvoices(syncData.invoices);
+                    if (syncData.expenses) setExpenses(syncData.expenses);
+                    if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
+                    if (syncData.receipts) setReceipts(syncData.receipts);
+                  }
+                } else {
+                  await loadLocalStorageData(parsed.id);
+                }
+                
+                setIsLocked(shouldLock);
+                setIsLoaded(true);
+              } catch (err) {
+                console.error("MongoDB user loading error on refresh:", err);
+                await loadLocalStorageData(parsed.id);
+                setIsLoaded(true);
+              }
+            };
+            loadUserData();
+            return;
+          }
+        }
+        // If we reach here, there is no valid Firebase user and no valid local saved user.
+        // We MUST set isLoaded to true so that the Login screen can render!
+        setIsLoaded(true);
+      }
+    });
+    // 2. Load Razorpay Script dynamically
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      unsubscribe();
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
+
+  // 7-day free trial plan expiry check for all logins
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    
+    // Check if the user is using a free trial or has no license key
+    const isTrial = !subscription.licenseKey || 
+                    subscription.licenseKey === "FREE-TRIAL" || 
+                    subscription.plan.toLowerCase().includes("trial");
+
+    if (isTrial && subscription.purchasedAt) {
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (Date.now() - subscription.purchasedAt > sevenDays) {
+        setIsTrialExpired(true);
+      } else {
+        setIsTrialExpired(false);
+      }
+    } else if (isTrial && !subscription.purchasedAt) {
+      // Fallback: If no purchasedAt exists, initialize it to now to start the 7 days trial
+      setSubscription(prev => ({
+        ...prev,
+        purchasedAt: Date.now()
+      }));
+    } else {
+      setIsTrialExpired(false);
+    }
+  }, [isLoaded, user, subscription]);
+
+  // Sync to local storage
+
+  useEffect(() => {
+    if (isLoaded) {
+      const storageSuffix = user ? user.id : "guest_local";
+      localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(accounts));
+      localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(transactions));
+      localStorage.setItem(`rupee_ledger_clients_${storageSuffix}`, JSON.stringify(clients));
+      localStorage.setItem(`rupee_ledger_inventory_${storageSuffix}`, JSON.stringify(inventory));
+      localStorage.setItem(`rupee_ledger_invoices_${storageSuffix}`, JSON.stringify(invoices));
+      localStorage.setItem(`rupee_ledger_expenses_${storageSuffix}`, JSON.stringify(expenses));
+      localStorage.setItem(`rupee_ledger_recurring_${storageSuffix}`, JSON.stringify(recurringTemplates));
+      localStorage.setItem(`rupee_ledger_receipts_${storageSuffix}`, JSON.stringify(receipts));
+      localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(businessProfile));
+      localStorage.setItem("rupee_ledger_subscription", JSON.stringify(subscription));
+      localStorage.setItem("rupee_ledger_security", JSON.stringify(securitySettings));
+      localStorage.setItem("rupee_ledger_cloud_backup_enabled", JSON.stringify(cloudBackupEnabled));
+      if (user) {
+        localStorage.setItem("rupee_ledger_user", JSON.stringify(user));
+        // Sync configuration states to MongoDB if logged in and cloud backup is enabled
+        if (user.authMethod !== 'guest' && cloudBackupEnabled) {
+          const syncConfig = async () => {
+            try {
+              await pushSyncToMongoDB(
+                user.id,
+                accounts,
+                transactions,
+                businessProfile,
+                subscription,
+                securitySettings
+              );
+            } catch (err) {
+              console.error("MongoDB config sync error:", err);
+            }
+          };
+          syncConfig();
+        }
+      } else {
+        localStorage.removeItem("rupee_ledger_user");
+      }
+    }
+  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, businessProfile, subscription, securitySettings, user, isLoaded, cloudBackupEnabled]);
+
+  // User Authentication Logic
+  const handleGuestLogin = () => {
+    const guestUser: UserProfile = {
+      id: "guest_" + Math.random().toString(36).substring(2, 10),
+      name: "Guest User",
+      authMethod: "guest",
+      avatarUrl: "https://api.dicebear.com/7.x/bottts/svg?seed=guest",
+      createdAt: Date.now()
+    };
+    setUser(guestUser);
+    setShowLogin(false);
+    setIsLocked(false);
+    setPinInput("");
+    toast({ title: "Logged in as Guest", description: "All data will remain saved locally." });
+  };
+
+  const handleGoogleLogin = async () => {
+    toast({ title: "Connecting to Google...", description: "Opening Google Auth popup." });
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Google Auth error:", error);
+      toast({
+        title: "Google Sign-In Failed",
+        description: error instanceof Error ? error.message : "Authentication aborted.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // ── Phone OTP (server-side) ─────────────────────────────────────
+  const handleSendOTP = async () => {
+    if (!phoneInput || phoneInput.length < 10) {
+      toast({ title: "Invalid Phone Number", description: "Please enter a valid 10-digit phone number.", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setOtpSent(true);
+      // In dev/demo mode the OTP is returned; store it in generatedOtp for display
+      if (data.devOtp) {
+        setGeneratedOtp(data.devOtp);
+        toast({ title: "OTP Sent (Demo)", description: `Your OTP: ${data.devOtp}` });
+      } else {
+        setGeneratedOtp("");
+        toast({ title: "OTP Sent", description: `SMS sent to +91 ${phoneInput}` });
+      }
+    } catch (err) {
+      toast({ title: "Failed to Send OTP", description: err instanceof Error ? err.message : "Server error.", variant: "destructive" });
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpInput || otpInput.length < 6) {
+      toast({ title: "Enter OTP", description: "Please enter the 6-digit OTP.", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput, action: 'verify', otp: otpInput })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const phoneId = 'p_' + phoneInput;
+      const phoneUser: UserProfile = {
+        id: phoneId,
+        name: `User ${phoneInput.slice(-4)}`,
+        phone: phoneInput,
+        authMethod: 'phone',
+        avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${phoneInput}`,
+        createdAt: Date.now()
+      };
+      toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
+      try {
+        const syncRes = await fetch('/api/ledger/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: phoneId, action: 'pull' })
+        });
+        let shouldLock = false;
+        let fetchedAccounts: Account[] = [];
+        let fetchedTxs: Transaction[] = [];
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.isOfflineFallback) {
+            await loadLocalStorageData(phoneId);
+          } else {
+            if (syncData.exists) {
+              if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+              if (syncData.subscription) setSubscription(syncData.subscription);
+              if (syncData.securitySettings) {
+                const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
+                setSecuritySettings(migrated);
+                if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+              }
+              fetchedAccounts = syncData.accounts || [];
+              fetchedTxs = syncData.transactions || [];
+            } else {
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+            }
+          }
+        } else {
+          await loadLocalStorageData(phoneId);
+        }
+        setAccounts(fetchedAccounts);
+        setTransactions(fetchedTxs);
+        await fetchGeneratedKeys(phoneId);
+        setUser(phoneUser);
+        setShowLogin(false);
+        setIsLocked(shouldLock);
+        setPinInput('');
+        setOtpSent(false);
+        setOtpInput('');
+        setPhoneInput('');
+        toast({ title: 'Verification Successful', description: 'Your phone number is authenticated.' });
+      } catch (err) {
+        console.error('MongoDB phone login error:', err);
+        setUser(phoneUser);
+        setShowLogin(false);
+        await loadLocalStorageData(phoneId);
+        setOtpSent(false);
+        setOtpInput('');
+        setPhoneInput('');
+      }
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    }
+  };
+
+  // ── WhatsApp OTP (server-side) ──────────────────────────────────
+  const handleSendWhatsappOTP = async () => {
+    if (!whatsappInput || whatsappInput.length < 10) {
+      toast({ title: "Invalid Phone Number", description: "Please enter a valid 10-digit WhatsApp number.", variant: "destructive" });
+      return;
+    }
+    setWhatsappOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/whatsapp-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: whatsappInput, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setWhatsappOtpSent(true);
+      if (data.devOtp) {
+        setWhatsappGeneratedOtp(data.devOtp);
+        toast({ title: "WhatsApp OTP Sent (Demo)", description: `Your OTP: ${data.devOtp}` });
+      } else {
+        setWhatsappGeneratedOtp("");
+        toast({ title: "WhatsApp OTP Sent", description: `OTP sent to WhatsApp +91 ${whatsappInput}` });
+      }
+    } catch (err) {
+      toast({ title: "Failed to Send OTP", description: err instanceof Error ? err.message : "Server error.", variant: "destructive" });
+    } finally {
+      setWhatsappOtpLoading(false);
+    }
+  };
+
+  const handleVerifyWhatsappOTP = async () => {
+    if (!whatsappOtpInput || whatsappOtpInput.length < 6) {
+      toast({ title: "Enter OTP", description: "Please enter the 6-digit OTP.", variant: "destructive" });
+      return;
+    }
+    setWhatsappOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/whatsapp-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: whatsappInput, action: 'verify', otp: whatsappOtpInput })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
+
+      const phoneId = 'p_' + whatsappInput;
+      const whatsappUser: UserProfile = {
+        id: phoneId,
+        name: `User ${whatsappInput.slice(-4)}`,
+        phone: whatsappInput,
+        authMethod: 'whatsapp',
+        avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${whatsappInput}`,
+        createdAt: Date.now()
+      };
+      toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
+      try {
+        const syncRes = await fetch('/api/ledger/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: phoneId, action: 'pull' })
+        });
+        let shouldLock = false;
+        let fetchedAccounts: Account[] = [];
+        let fetchedTxs: Transaction[] = [];
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.isOfflineFallback) {
+            await loadLocalStorageData(phoneId);
+          } else {
+            if (syncData.exists) {
+              if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
+              if (syncData.subscription) setSubscription(syncData.subscription);
+              if (syncData.securitySettings) {
+                const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
+                setSecuritySettings(migrated);
+                if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) shouldLock = true;
+              }
+              fetchedAccounts = syncData.accounts || [];
+              fetchedTxs = syncData.transactions || [];
+            } else {
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+            }
+          }
+        } else {
+          await loadLocalStorageData(phoneId);
+        }
+        setAccounts(fetchedAccounts);
+        setTransactions(fetchedTxs);
+        await fetchGeneratedKeys(phoneId);
+        setUser(whatsappUser);
+        setShowLogin(false);
+        setIsLocked(shouldLock);
+        setPinInput('');
+        setWhatsappOtpSent(false);
+        setWhatsappOtpInput('');
+        setWhatsappInput('');
+      } catch (err) {
+        console.error('MongoDB whatsapp login error:', err);
+        setUser(whatsappUser);
+        setShowLogin(false);
+        await loadLocalStorageData(phoneId);
+        setWhatsappOtpSent(false);
+        setWhatsappOtpInput('');
+        setWhatsappInput('');
+        toast({ title: 'Verification Successful', description: 'Your WhatsApp number is authenticated.' });
+      }
+    } catch (err) {
+      toast({ title: 'Incorrect OTP', description: err instanceof Error ? err.message : 'Verification failed.', variant: 'destructive' });
+    } finally {
+      setWhatsappOtpLoading(false);
+    }
+  };
+
+  // ── Email OTP login ──────────────────────────────────────────────
+  const handleSendEmailOtp = async () => {
+    if (!emailInput || !emailInput.includes('@')) {
+      toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
+      return;
+    }
+    setEmailOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput, action: 'send' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEmailOtpSent(true);
+      if (data.devOtp) {
+        toast({ title: 'OTP Sent (Demo)', description: `Your OTP: ${data.devOtp}` });
+      } else {
+        toast({ title: 'OTP Sent', description: `Check your inbox at ${emailInput}` });
+      }
+    } catch (err) {
+      toast({ title: 'Failed to Send OTP', description: err instanceof Error ? err.message : 'Server error.', variant: 'destructive' });
+    } finally {
+      setEmailOtpLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtpInput || emailOtpInput.length < 6) {
+      toast({ title: 'Enter OTP', description: 'Ple
