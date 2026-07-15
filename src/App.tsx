@@ -1655,7 +1655,7 @@ export default function RupeeLedger() {
     if (activatedCloud) {
       const newRenewalStr = format(addDays(new Date(), durationDays), "dd-MM-yyyy");
       const planName = durationDays === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
-      const priceStr = durationDays === 365 ? "₹11,999 / year" : "₹1199 / month";
+      const priceStr = durationDays === 365 ? "₹1,999 / year" : "₹199 / month";
       
       setSubscription({
         status: "active",
@@ -1707,7 +1707,7 @@ export default function RupeeLedger() {
       
       const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
       const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
-      const priceStr = days === 365 ? "₹11,999 / year" : "₹1199 / month";
+      const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
       
       setSubscription({
         status: "active",
