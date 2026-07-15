@@ -3997,53 +3997,7 @@ export default function RupeeLedger() {
                     </Card>
                   )}
 
-                  {/* Integrations & API Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
-                    <CardHeader>
-                      <CardTitle className="premium-heading premium-heading">Enterprise Integrations & API</CardTitle>
-                      <CardDescription>Connect RupeeLedger with external services (Yearly Plan Required)</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
-                          <div>
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">WhatsApp Integration</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
-                            </div>
-                            <p className="text-sm text-slate-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
-                          </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "WhatsApp Integration will be available in the next update." }))}>Configure WhatsApp</Button>
-                        </div>
 
-                        
-
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
-                          <div>
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">Custom Branding</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
-                            </div>
-                            <p className="text-sm text-slate-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
-                          </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Custom Branding will be available in the next update." }))}>Edit Branding</Button>
-                        </div>
-
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
-                          <div>
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">Dedicated Account Manager</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
-                            </div>
-                            <p className="text-sm text-slate-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
-                          </div>
-                          <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Dedicated Account Manager will be available in the next update." }))}>Contact Manager</Button>
-                        </div>
-
-                      </div>
-                    </CardContent>
-                  </Card>
 
 {/* Data & Backups Card */}
                   <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
