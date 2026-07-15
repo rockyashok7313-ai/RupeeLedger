@@ -174,7 +174,8 @@ export async function pullSyncFromSupabase(userId: string) {
       invoices: mapDocs(invoices),
       expenses: mapDocs(expenses),
       recurringTemplates: mapDocs(recurring),
-      receipts: mapDocs(receipts)
+      receipts: mapDocs(receipts),
+      isOfflineFallback: false
     };
   } catch (error) {
     console.error('Error pulling from Supabase:', error);

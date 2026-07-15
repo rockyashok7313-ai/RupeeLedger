@@ -362,22 +362,12 @@ export default function RupeeLedger() {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
           // Fetch user data via MongoDB Sync API route
-          const token = session?.access_token || "";
-          const syncRes = await fetch('/api/ledger/sync', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
-          });
-
           let shouldLock = false;
           let fetchedAccounts: Account[] = [];
           let fetchedTxs: Transaction[] = [];
 
-          if (syncRes.ok) {
-            const syncData = await syncRes.json();
+          const syncData = await pullSyncFromSupabase(firebaseUser.uid);
+          if (syncData) {
             if (syncData.isOfflineFallback) {
               await loadLocalStorageData(firebaseUser.uid);
             } else {
@@ -507,14 +497,9 @@ export default function RupeeLedger() {
             const loadUserData = async () => {
               try {
                 toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
-                const syncRes = await fetch('/api/ledger/sync', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: parsed.id, action: 'pull' })
-                });
                 let shouldLock = false;
-                if (syncRes.ok) {
-                  const syncData = await syncRes.json();
+                const syncData = await pullSyncFromSupabase(parsed.id);
+                if (syncData) {
                   if (syncData.isOfflineFallback) {
                     await loadLocalStorageData(parsed.id);
                   } else if (syncData.exists) {
@@ -731,17 +716,11 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: phoneId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
-
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        const syncData = await pullSyncFromSupabase(phoneId);
+        if (syncData) {
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -843,17 +822,11 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: phoneId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
-
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        const syncData = await pullSyncFromSupabase(phoneId);
+        if (syncData) {
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -955,17 +928,11 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: emailId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
-
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        const syncData = await pullSyncFromSupabase(emailId);
+        if (syncData) {
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(emailId);
           } else {
