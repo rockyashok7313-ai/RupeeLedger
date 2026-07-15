@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { auth } from "@/lib/firebase";
+import { pushSyncToSupabase, pullSyncFromSupabase } from "@/lib/supabaseSync";
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -119,48 +120,25 @@ async function migrateSecuritySettings(sec: SecuritySettings, userId: string): P
 
 
 async function pushSyncToMongoDB(
-  userId: string,
-  accountsList: Account[],
-  transactionsList: Transaction[],
-  businessProfile?: BusinessProfile,
-  subscription?: Subscription,
-  securitySettings?: SecuritySettings,
-  clients?: Client[],
-  inventory?: InventoryItem[],
-  invoices?: Invoice[],
-  expenses?: Expense[],
-  recurringTemplates?: RecurringTemplate[],
-  receipts?: Receipt[]
+    userId: string,
+    accountsList: Account[],
+    transactionsList: Transaction[],
+    businessProfile?: BusinessProfile,
+    subscription?: Subscription,
+    securitySettings?: SecuritySettings,
+    clients?: Client[],
+    inventory?: InventoryItem[],
+    invoices?: Invoice[],
+    expenses?: Expense[],
+    recurringTemplates?: RecurringTemplate[],
+    receipts?: Receipt[]
 ) {
   try {
-    const token = await auth.currentUser?.getIdToken();
-    const res = await fetch('/api/ledger/sync', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        userId,
-        accounts: accountsList,
-        transactions: transactionsList,
-        businessProfile,
-        subscription,
-        securitySettings,
-        clients,
-        inventory,
-        invoices,
-        expenses,
-        recurringTemplates,
-        receipts,
-        action: 'push'
-      })
-    });
-    if (!res.ok) {
-      throw new Error(`Sync request failed with status ${res.status}`);
-    }
-    const data = await res.json();
-    return data;
+    // Write to Supabase ONLY!
+    await pushSyncToSupabase(
+      userId, accountsList, transactionsList, businessProfile, subscription, securitySettings,
+      clients, inventory, invoices, expenses, recurringTemplates, receipts
+    );
   } catch (err) {
     console.error("MongoDB backup sync error:", err);
     throw err;
@@ -384,22 +362,51 @@ export default function RupeeLedger() {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
           // Fetch user data via MongoDB Sync API route
-          const token = await firebaseUser.getIdToken();
-          const syncRes = await fetch('/api/ledger/sync', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
-          });
-
           let shouldLock = false;
           let fetchedAccounts: Account[] = [];
           let fetchedTxs: Transaction[] = [];
+          let syncData: any = null;
+          let fromMongo = false;
+          
+          try {
+              const supabaseData = await pullSyncFromSupabase(firebaseUser.uid);
+              if (supabaseData && supabaseData.exists) {
+                  syncData = supabaseData;
+                  syncData.isOfflineFallback = false;
+              }
+          } catch (e) {
+              console.log("Supabase pull failed, falling back to MongoDB");
+          }
 
-          if (syncRes.ok) {
-            const syncData = await syncRes.json();
+          if (!syncData) {
+              const token = await firebaseUser.getIdToken();
+              const syncRes = await fetch('/api/ledger/sync', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
+              });
+              if (syncRes.ok) {
+                syncData = await syncRes.json();
+                fromMongo = true;
+              }
+          }
+
+          if (syncData) {
+            if (fromMongo && syncData.exists) {
+               try {
+                   await pushSyncToSupabase(
+                     firebaseUser.uid, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
+                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
+                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
+                   );
+               } catch (e) {
+                   console.log("Failed to auto-migrate to Supabase", e);
+               }
+            }
+
             if (syncData.isOfflineFallback) {
               await loadLocalStorageData(firebaseUser.uid);
             } else {
@@ -754,17 +761,47 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: phoneId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
+        let syncData: any = null;
+        let fromMongo = false;
+        
+        try {
+            const supabaseData = await pullSyncFromSupabase(phoneId);
+            if (supabaseData && supabaseData.exists) {
+                syncData = supabaseData;
+                syncData.isOfflineFallback = false;
+            }
+        } catch (e) {
+            console.log("Supabase pull failed, falling back to MongoDB");
+        }
 
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        if (!syncData) {
+            const syncRes = await fetch('/api/ledger/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: phoneId, action: 'pull' })
+            });
+            if (syncRes.ok) {
+              syncData = await syncRes.json();
+              fromMongo = true;
+            }
+        }
+        
+        if (syncData) {
+            if (fromMongo && syncData.exists) {
+               try {
+                   await pushSyncToSupabase(
+                     phoneId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
+                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
+                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
+                   );
+               } catch (e) {
+                   console.log("Failed to auto-migrate to Supabase", e);
+               }
+            }
+
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -866,17 +903,47 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: phoneId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
+        let syncData: any = null;
+        let fromMongo = false;
+        
+        try {
+            const supabaseData = await pullSyncFromSupabase(phoneId);
+            if (supabaseData && supabaseData.exists) {
+                syncData = supabaseData;
+                syncData.isOfflineFallback = false;
+            }
+        } catch (e) {
+            console.log("Supabase pull failed, falling back to MongoDB");
+        }
 
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        if (!syncData) {
+            const syncRes = await fetch('/api/ledger/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: phoneId, action: 'pull' })
+            });
+            if (syncRes.ok) {
+              syncData = await syncRes.json();
+              fromMongo = true;
+            }
+        }
+        
+        if (syncData) {
+            if (fromMongo && syncData.exists) {
+               try {
+                   await pushSyncToSupabase(
+                     phoneId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
+                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
+                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
+                   );
+               } catch (e) {
+                   console.log("Failed to auto-migrate to Supabase", e);
+               }
+            }
+
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -978,17 +1045,47 @@ export default function RupeeLedger() {
       };
       toast({ title: 'Syncing with cloud...', description: 'Fetching ledger database.' });
       try {
-        const syncRes = await fetch('/api/ledger/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: emailId, action: 'pull' })
-        });
         let shouldLock = false;
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
+        let syncData: any = null;
+        let fromMongo = false;
+        
+        try {
+            const supabaseData = await pullSyncFromSupabase(emailId);
+            if (supabaseData && supabaseData.exists) {
+                syncData = supabaseData;
+                syncData.isOfflineFallback = false;
+            }
+        } catch (e) {
+            console.log("Supabase pull failed, falling back to MongoDB");
+        }
 
-        if (syncRes.ok) {
-          const syncData = await syncRes.json();
+        if (!syncData) {
+            const syncRes = await fetch('/api/ledger/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: emailId, action: 'pull' })
+            });
+            if (syncRes.ok) {
+              syncData = await syncRes.json();
+              fromMongo = true;
+            }
+        }
+        
+        if (syncData) {
+            if (fromMongo && syncData.exists) {
+               try {
+                   await pushSyncToSupabase(
+                     emailId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
+                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
+                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
+                   );
+               } catch (e) {
+                   console.log("Failed to auto-migrate to Supabase", e);
+               }
+            }
+
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(emailId);
           } else {
