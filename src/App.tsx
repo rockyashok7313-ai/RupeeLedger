@@ -1530,20 +1530,20 @@ export default function RupeeLedger() {
   };
 
   const fetchGeneratedKeys = async (userId: string) => {
-    if (!isOwner) return;
     try {
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch(`/api/keys?userId=${userId}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
-      if (!res.ok) throw new Error('Failed to fetch generated keys');
+      if (!res.ok) throw new Error('API failed');
       const data = await res.json();
       if (data.isOfflineFallback) {
         return;
       }
       setGeneratedKeysList(data.keys || []);
     } catch (err) {
-      console.error("Error fetching generated keys:", err);
+      console.warn("Backend keys fetch failed, using local keys.", err);
+      // Fallback to local keys not strictly needed here as they are in state, but we ignore the error
     }
   };
 
