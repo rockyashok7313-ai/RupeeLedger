@@ -1565,25 +1565,34 @@ export default function RupeeLedger() {
       
       const durationDays = vendorKeyDuration === "annual" ? 365 : 30;
       
+      let savedToCloud = false;
       if (user && user.authMethod !== 'guest') {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch('/api/keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-          body: JSON.stringify({
-            key: newKey,
-            durationDays,
-            createdBy: user.id
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to save key');
-
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          const res = await fetch('/api/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+            body: JSON.stringify({
+              key: newKey,
+              durationDays,
+              createdBy: user.id
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            savedToCloud = !data.isOfflineFallback;
+          }
+        } catch (e) {
+          console.warn("Cloud key generation failed, falling back to local mode", e);
+        }
+      }
+      
+      if (savedToCloud) {
         toast({
           title: "License Key Generated",
           description: `Key ${newKey} is saved to cloud keys database.`
         });
-        await fetchGeneratedKeys(user.id);
+        if (user) await fetchGeneratedKeys(user.id);
       } else {
         const newLocalKey = {
           key: newKey,
@@ -1601,7 +1610,7 @@ export default function RupeeLedger() {
       console.error("Error generating key:", err);
       toast({
         title: "Key Generation Failed",
-        description: "Could not write license key configuration to cloud.",
+        description: "An unexpected error occurred.",
         variant: "destructive"
       });
     } finally {
@@ -1614,6 +1623,9 @@ export default function RupeeLedger() {
     const keyStr = licenseInput.trim().toUpperCase();
     if (!keyStr) return;
 
+    let activatedCloud = false;
+    let durationDays = 30;
+
     if (user && user.authMethod !== 'guest') {
       try {
         const token = await auth.currentUser?.getIdToken();
@@ -1625,62 +1637,69 @@ export default function RupeeLedger() {
             userId: user.id
           })
         });
-        const data = await res.json();
         if (res.ok) {
-          const days = data.durationDays || 30;
-          const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
-          const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
-          const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
-          
-          setSubscription({
-            status: "active",
-            plan: planName,
-            price: priceStr,
-            renewalDate: newRenewalStr,
-            licenseKey: keyStr,
-            purchasedAt: Date.now()
-          });
-          setLicenseInput("");
-          toast({
-            title: "License Activated!",
-            description: `Your ${days === 365 ? "annual" : "monthly"} Pro license is verified and active.`,
-          });
-          return;
-        } else {
-          toast({
-            title: "Verification Failed",
-            description: data.error || "The entered license key could not be verified.",
-            variant: "destructive"
-          });
-          return;
+          const data = await res.json();
+          if (!data.error && !data.isOfflineFallback) {
+            activatedCloud = true;
+            durationDays = data.durationDays || 30;
+          } else if (data.error) {
+            toast({ title: "Activation Failed", description: data.error, variant: "destructive" });
+            return;
+          }
         }
-      } catch (err) {
-        console.error("Cloud key verification error, falling back:", err);
+      } catch (e) {
+        console.warn("Cloud activation failed, trying local", e);
       }
     }
 
-    if (keyStr === "RL-PRO-8742-9901-LOCK" || keyStr.startsWith("RL-PRO-")) {
-      const isAnnual = keyStr.includes("ANNUAL") || keyStr.length > 15;
-      const days = isAnnual ? 365 : 30;
-      const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
+    if (activatedCloud) {
+      const newRenewalStr = format(addDays(new Date(), durationDays), "dd-MM-yyyy");
+      const planName = durationDays === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
+      const priceStr = durationDays === 365 ? "₹11,999 / year" : "₹1199 / month";
+      
       setSubscription({
         status: "active",
-        plan: days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)",
-        price: days === 365 ? "₹1,999 / year" : "₹199 / month",
+        plan: planName,
+        price: priceStr,
         renewalDate: newRenewalStr,
         licenseKey: keyStr,
         purchasedAt: Date.now()
       });
+      toast({
+        title: "License Activated",
+        description: `Successfully upgraded to ${planName}!`
+      });
+      setLicenseInput("");
+    } else {
+      // Local validation logic
+      const localKeyObj = generatedKeysList.find(k => k.key === keyStr);
+      if (!localKeyObj) {
+        toast({
+          title: "Invalid Key",
+          description: "The license key you entered is invalid or not found.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (localKeyObj.status === "used") {
+        toast({
+          title: "Key Already Used",
+          description: "This license key has already been activated.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Mark local key as used
+      setGeneratedKeysList(prev => prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k));
+      
+      const days = localKeyObj.duration === "Annual" ? 365 : 30;
+      const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
       setLicenseInput("");
       toast({
         title: "License Activated (Offline Mode)",
         description: `License key verified under local policy rules.`,
-      });
-    } else {
-      toast({
-        title: "Invalid Key",
-        description: "The entered license key could not be verified.",
-        variant: "destructive"
       });
     }
   };
