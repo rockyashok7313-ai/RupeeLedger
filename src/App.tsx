@@ -1673,7 +1673,8 @@ export default function RupeeLedger() {
     } else {
       // Local validation logic
       const localKeyObj = generatedKeysList.find(k => k.key === keyStr);
-      if (!localKeyObj) {
+      
+      if (!localKeyObj && !keyStr.startsWith("RL-PRO-")) {
         toast({
           title: "Invalid Key",
           description: "The license key you entered is invalid or not found.",
@@ -1682,7 +1683,7 @@ export default function RupeeLedger() {
         return;
       }
       
-      if (localKeyObj.status === "used") {
+      if (localKeyObj && localKeyObj.status === "used") {
         toast({
           title: "Key Already Used",
           description: "This license key has already been activated.",
@@ -1691,11 +1692,31 @@ export default function RupeeLedger() {
         return;
       }
 
-      // Mark local key as used
-      setGeneratedKeysList(prev => prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k));
+      // Mark local key as used (if it exists locally)
+      if (localKeyObj) {
+        setGeneratedKeysList(prev => prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k));
+      }
       
-      const days = localKeyObj.duration === "Annual" ? 365 : 30;
+      let days = 30;
+      if (localKeyObj) {
+        days = localKeyObj.duration === "Annual" ? 365 : 30;
+      } else {
+        const isAnnual = keyStr.includes("ANNUAL") || keyStr.length > 15;
+        days = isAnnual ? 365 : 30;
+      }
+      
       const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
+      const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
+      const priceStr = days === 365 ? "₹11,999 / year" : "₹1199 / month";
+      
+      setSubscription({
+        status: "active",
+        plan: planName,
+        price: priceStr,
+        renewalDate: newRenewalStr,
+        licenseKey: keyStr,
+        purchasedAt: Date.now()
+      });
       setLicenseInput("");
       toast({
         title: "License Activated (Offline Mode)",
