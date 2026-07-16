@@ -140,7 +140,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
       let debit = 0;
       let credit = 0;
       
-      if (t.type === 'Income') {
+      if (t.type === 'Credit') {
         credit = t.amount; // Receipt from client
       } else {
         debit = t.amount; // Payment to vendor
