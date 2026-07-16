@@ -32,7 +32,64 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
         </CardHeader>
         <CardContent className="space-y-8">
           
-
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Business Details & Logo</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Company / Business Name</Label>
+                <Input 
+                  placeholder="Your Company Name" 
+                  value={localProfile.companyName || ''}
+                  onChange={(e) => setLocalProfile({...localProfile, companyName: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>GSTIN</Label>
+                <Input 
+                  placeholder="22AAAAA0000A1Z5" 
+                  value={localProfile.gstin || ''}
+                  onChange={(e) => setLocalProfile({...localProfile, gstin: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Business Address</Label>
+                <Input 
+                  placeholder="Complete Address" 
+                  value={localProfile.address || ''}
+                  onChange={(e) => setLocalProfile({...localProfile, address: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Business Logo (Appears on Print)</Label>
+                <div className="flex items-center gap-4">
+                  {localProfile.logoBase64 && (
+                    <img src={localProfile.logoBase64} alt="Logo Preview" className="h-16 w-16 object-contain border rounded" />
+                  )}
+                  <Input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) {
+                          alert('Logo image should be less than 2MB');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setLocalProfile({...localProfile, logoBase64: reader.result as string});
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  {localProfile.logoBase64 && (
+                    <Button variant="outline" size="sm" onClick={() => setLocalProfile({...localProfile, logoBase64: undefined})}>Remove</Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="text-sm font-semibold text-gray-900">Multi-Business Profiles</h3>
@@ -76,12 +133,17 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
             <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Numbering & Terms</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label>Invoice Prefix (Future update)</Label>
+                <Label>Invoice Prefix</Label>
                 <Input 
                   placeholder="e.g. INV-" 
-                  defaultValue="INV-" 
-                  disabled
-                  title="Will be supported in a future update"
+                  value={localProfile.invoiceSettings?.defaultPrefix || ''}
+                  onChange={(e) => setLocalProfile({
+                    ...localProfile,
+                    invoiceSettings: {
+                      ...(localProfile.invoiceSettings || { theme: 'Classic', color: '#000000', fontScale: 1, showLogo: true, showHsn: true, showBankDetails: true, showAmountInWords: true, labels: { title: 'TAX INVOICE', billTo: 'Bill To:', itemDesc: 'Item Description' } }),
+                      defaultPrefix: e.target.value
+                    }
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -98,8 +160,18 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
                 <textarea 
                   className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   placeholder="1. Payment due within 30 days.&#10;2. Goods once sold will not be taken back."
-                  value={localProfile.printFooter || ''}
-                  onChange={(e) => setLocalProfile({...localProfile, printFooter: e.target.value})}
+                  value={localProfile.invoiceSettings?.defaultTerms || localProfile.printFooter || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLocalProfile({
+                      ...localProfile, 
+                      printFooter: val,
+                      invoiceSettings: {
+                        ...(localProfile.invoiceSettings || { theme: 'Classic', color: '#000000', fontScale: 1, showLogo: true, showHsn: true, showBankDetails: true, showAmountInWords: true, labels: { title: 'TAX INVOICE', billTo: 'Bill To:', itemDesc: 'Item Description' } }),
+                        defaultTerms: val
+                      }
+                    });
+                  }}
                 />
               </div>
             </div>

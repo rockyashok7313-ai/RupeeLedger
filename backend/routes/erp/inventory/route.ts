@@ -1,6 +1,6 @@
-import { NextResponse } from '../../../next-response';
-import { getMongoDb } from '../../../../src/lib/mongodb';
-import { verifyAppToken, verifyIdToken, extractToken } from '../../../../src/lib/auth-verify';
+import { NextResponse } from '../../../next-response.ts';
+import { getMongoDb } from '../../../../src/lib/mongodb.ts';
+import { verifyAppToken, verifyIdToken, extractToken } from '../../../../src/lib/auth-verify.ts';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,3 +80,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

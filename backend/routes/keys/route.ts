@@ -1,6 +1,6 @@
-import { NextResponse } from '../../next-response';
-import { getMongoDb, isMongoConfigured } from '../../../src/lib/mongodb';
-import { verifyIdToken, extractToken } from '../../../src/lib/auth-verify';
+import { NextResponse } from '../../next-response.ts';
+import { getMongoDb, isMongoConfigured } from '../../../src/lib/mongodb.ts';
+import { verifyIdToken, extractToken } from '../../../src/lib/auth-verify.ts';
 
 export async function GET(request: Request) {
   try {
@@ -157,3 +157,4 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
+

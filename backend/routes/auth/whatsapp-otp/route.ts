@@ -1,5 +1,5 @@
-import { NextResponse } from '../../../next-response';
-import { signAppToken } from '../../../../src/lib/auth-verify';
+import { NextResponse } from '../../../next-response.ts';
+import { signAppToken } from '../../../../src/lib/auth-verify.ts';
 
 // In-memory WhatsApp OTP store: phone -> { otp, expiresAt }
 const whatsappOtpStore = new Map<string, { otp: string; expiresAt: number }>();
@@ -70,3 +70,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
+

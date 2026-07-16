@@ -1,4 +1,4 @@
-import { NextResponse } from '../../../next-response';
+import { NextResponse } from '../../../next-response.ts';
 
 export async function POST(request: Request) {
   try {
@@ -58,3 +58,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+

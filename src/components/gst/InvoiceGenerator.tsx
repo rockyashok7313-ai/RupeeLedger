@@ -16,17 +16,21 @@ interface Props {
   invoices: Invoice[];
   setInvoices: (i: Invoice[]) => void;
   setActiveTab: (t: 'preview' | string) => void;
+  editingInvoiceId?: string | null;
+  setEditingInvoiceId?: (id: string | null) => void;
 }
 
-export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab }: Props) {
+export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab, editingInvoiceId, setEditingInvoiceId }: Props) {
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerGstin, setCustomerGstin] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
+  const [orderNo, setOrderNo] = useState('');
+  const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>('excluding');
   const [gstType, setGstType] = useState<'CGST+SGST' | 'IGST'>('CGST+SGST');
-  const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
+  const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', pieceNo: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
 
   const termsTemplates = {
     'general': '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed by more than 30 days.',
@@ -34,11 +38,53 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
     'ecommerce': '1. Returns accepted within 7 days of delivery.\n2. Subject to local jurisdiction.\n3. Warranty applies as per manufacturer terms.',
     'consulting': '1. Invoice payable upon receipt.\n2. Retainer fees are non-refundable.\n3. Subject to NDA terms signed.'
   };
-  const [terms, setTerms] = useState<string>('');
+  const [terms, setTerms] = useState<string>(businessProfile.invoiceSettings?.defaultTerms || businessProfile.printFooter || termsTemplates.general);
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>('Tax Invoice');
   const [currency, setCurrency] = useState('INR');
   const [exchangeRate, setExchangeRate] = useState(1);
+  const [customPrefix, setCustomPrefix] = useState(businessProfile.invoiceSettings?.defaultPrefix || 'INV-');
+  const [customSequence, setCustomSequence] = useState<number | ''>(invoices.filter(i => i.type === 'Tax Invoice' || !i.type).length + 1);
+  const [deliveryChallanNo, setDeliveryChallanNo] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [agentCommissionPercent, setAgentCommissionPercent] = useState<number>(0);
+
+  React.useEffect(() => {
+    if (editingInvoiceId) {
+      const editingInvoice = invoices.find(i => i.id === editingInvoiceId);
+      if (editingInvoice) {
+        setClientId(editingInvoice.clientId || '');
+        setClientName(editingInvoice.clientName || '');
+        setCustomerAddress(editingInvoice.customerAddress || '');
+        setCustomerGstin(editingInvoice.customerGstin || '');
+        setVehicleNo(editingInvoice.vehicleNo || '');
+        setOrderNo(editingInvoice.orderNo || '');
+        if (editingInvoice.orderDate) {
+          setOrderDate(new Date(editingInvoice.orderDate).toISOString().split('T')[0]);
+        }
+        setGstCalculationType(editingInvoice.gstCalculationType || 'excluding');
+        setGstType(editingInvoice.gstType || 'CGST+SGST');
+        setItems(editingInvoice.items || []);
+        setTerms(editingInvoice.terms || '');
+        setInvoiceType(editingInvoice.type || 'Tax Invoice');
+        setCurrency(editingInvoice.currency || 'INR');
+        setExchangeRate(editingInvoice.exchangeRate || 1);
+        setCustomPrefix(editingInvoice.prefix || '');
+        
+        // Try to extract sequence from invoice number
+        const match = editingInvoice.invoiceNumber?.match(/\d+$/);
+        if (match) {
+          setCustomSequence(parseInt(match[0], 10));
+        } else {
+          setCustomSequence('');
+        }
+        
+        setDeliveryChallanNo(editingInvoice.deliveryChallanNo || '');
+        setAgentId(editingInvoice.agentId || '');
+        setAgentCommissionPercent(editingInvoice.agentCommissionPercent || 0);
+      }
+    }
+  }, [editingInvoiceId, invoices]);
   
   const handleAddItem = () => {
     setItems([...items, { name: '', hsnCode: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
@@ -116,6 +162,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         inventoryId: item.inventoryId,
         name: item.name || 'Item',
         hsnCode: item.hsnCode || '',
+        pieceNo: item.pieceNo || '',
         quantity: qty,
         rate: rate,
         taxPercent: taxPercent,
@@ -128,38 +175,93 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
     igst = Math.round(igst * 100) / 100;
 
 
-    const total = subtotal + cgst + sgst + igst;
+    let baseTotal = subtotal + cgst + sgst + igst;
+    
+    // Auto TCS Calculation (above 50L)
+    let tcsAmount = 0;
+    if (clientId) {
+      const clientInvoices = invoices.filter(i => i.clientId === clientId && i.type === 'Tax Invoice');
+      const totalTurnover = clientInvoices.reduce((sum, inv) => sum + inv.total, 0);
+      const newTotalWithThis = totalTurnover + baseTotal;
+      
+      if (newTotalWithThis > 5000000) {
+        const taxableForTcs = Math.max(0, newTotalWithThis - Math.max(5000000, totalTurnover));
+        tcsAmount = Math.round(taxableForTcs * 0.001 * 100) / 100; // 0.1% TCS
+      }
+    }
 
-    const invoiceNum = generateInvoiceNumber(invoices.length + 1, 'INV', getCurrentFinancialYear());
-    const newInvoice: Invoice = {
+    const total = baseTotal + tcsAmount;
+
+    // Agent Commission calculation based on Taxable Amount (subtotal)
+    let agentCommissionAmount = 0;
+    if (agentId && agentCommissionPercent > 0) {
+      agentCommissionAmount = Math.round(subtotal * (agentCommissionPercent / 100) * 100) / 100;
+    }
+    const selectedAgent = clients.find(c => c.id === agentId);
+
+    let invoiceNum = '';
+    const existingInvoice = editingInvoiceId ? invoices.find(i => i.id === editingInvoiceId) : null;
+    
+    if (existingInvoice) {
+      invoiceNum = existingInvoice.invoiceNumber || '';
+    } else if (invoiceType === 'Tax Invoice') {
+      const seqToUse = customSequence !== '' ? Number(customSequence) : invoices.length + 1;
+      invoiceNum = generateInvoiceNumber(seqToUse, customPrefix, getCurrentFinancialYear());
+    } else {
+      const prefixMap: Record<string, string> = {
+        'Delivery Challan': 'DC',
+        'Credit Note': 'CN',
+        'Proforma': 'EST',
+        'Bill of Supply': 'BOS'
+      };
+      invoiceNum = generateInvoiceNumber(invoices.length + 1, prefixMap[invoiceType] || 'INV', getCurrentFinancialYear());
+    }
+
+    const updatedInvoice: Invoice = {
+      ...existingInvoice,
       terms,
       invoiceNumber: invoiceNum,
+      prefix: invoiceType === 'Tax Invoice' ? customPrefix : undefined,
       type: invoiceType,
       currency,
       exchangeRate,
-      financialYear: getCurrentFinancialYear(),
-      id: uuidv4(),
-      clientId: clientId || uuidv4(),
+      financialYear: existingInvoice?.financialYear || getCurrentFinancialYear(),
+      id: existingInvoice?.id || uuidv4(),
+      clientId: clientId || existingInvoice?.clientId || uuidv4(),
       clientName,
       customerAddress,
       customerGstin,
       vehicleNo,
+      orderNo: orderNo.trim() !== '' ? orderNo : undefined,
+      orderDate: orderDate ? new Date(orderDate).getTime() : undefined,
       gstCalculationType,
       gstType,
-      date: Date.now(),
-      dueDate: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      date: existingInvoice?.date || Date.now(),
+      dueDate: existingInvoice?.dueDate || Date.now() + 7 * 24 * 60 * 60 * 1000,
       items: validatedItems,
       subtotal,
       cgst,
       sgst,
       igst,
+      tcsAmount,
       total,
-      status: 'draft',
-      createdAt: Date.now()
+      status: existingInvoice?.status || 'draft',
+      createdAt: existingInvoice?.createdAt || Date.now(),
+      deliveryChallanNo: deliveryChallanNo.trim() !== '' ? deliveryChallanNo : undefined,
+      agentId: agentId || undefined,
+      agentName: selectedAgent ? selectedAgent.name : undefined,
+      agentCommissionPercent: agentId ? agentCommissionPercent : undefined,
+      agentCommissionAmount: agentId ? agentCommissionAmount : undefined
     };
 
-    setInvoices([...invoices, newInvoice]);
-    alert('Invoice saved to database successfully!');
+    if (editingInvoiceId) {
+      setInvoices(invoices.map(i => i.id === editingInvoiceId ? updatedInvoice : i));
+      alert('Invoice updated successfully!');
+      if (setEditingInvoiceId) setEditingInvoiceId(null);
+    } else {
+      setInvoices([...invoices, updatedInvoice]);
+      alert('Invoice saved to database successfully!');
+    }
     setActiveTab('preview');
   };
 
@@ -187,6 +289,78 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
               {currencies.map(c => <option key={c.code} value={c.code}>{c.code} - {c.name}</option>)}
             </select>
           </div>
+        </div>
+
+        {invoiceType === 'Tax Invoice' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 border rounded-md bg-gray-50/50">
+            <div className="space-y-2">
+              <Label>Invoice Prefix</Label>
+              <Input 
+                value={customPrefix} 
+                onChange={e => setCustomPrefix(e.target.value)} 
+                placeholder="INV"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Invoice Number (Sequence)</Label>
+              <Input 
+                type="number"
+                value={customSequence === '' ? '' : customSequence} 
+                onChange={e => setCustomSequence(e.target.value === '' ? '' : parseInt(e.target.value))} 
+                placeholder="Auto-generated"
+              />
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="space-y-2">
+            <Label>Delivery Challan No (Optional)</Label>
+            <Input 
+              value={deliveryChallanNo} 
+              onChange={e => setDeliveryChallanNo(e.target.value)} 
+              placeholder="e.g. DC-101"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Order No (Optional)</Label>
+            <Input 
+              value={orderNo} 
+              onChange={e => setOrderNo(e.target.value)} 
+              placeholder="e.g. PO-2023"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Order Date</Label>
+            <Input 
+              type="date"
+              value={orderDate} 
+              onChange={e => setOrderDate(e.target.value)} 
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Agent / Broker</Label>
+            <select 
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+              value={agentId}
+              onChange={e => setAgentId(e.target.value)}
+            >
+              <option value="">-- No Agent --</option>
+              {clients.filter(c => c.type === 'agent' || c.type === 'both').map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          {agentId && (
+            <div className="space-y-2">
+              <Label>Agent Commission (%)</Label>
+              <Input 
+                type="number"
+                value={agentCommissionPercent === 0 ? '' : agentCommissionPercent} 
+                onChange={e => setAgentCommissionPercent(parseFloat(e.target.value) || 0)} 
+                placeholder="e.g. 5"
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -297,6 +471,10 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
               <div className="w-24 space-y-2">
                 <Label className="text-xs">HSN Code</Label>
                 <Input placeholder="HSN" value={item.hsnCode || ''} onChange={(e) => handleItemChange(index, 'hsnCode', e.target.value)} />
+              </div>
+              <div className="w-24 space-y-2">
+                <Label className="text-xs">Piece No</Label>
+                <Input placeholder="Piece" value={item.pieceNo || ''} onChange={(e) => handleItemChange(index, 'pieceNo', e.target.value)} />
               </div>
               <div className="w-20 space-y-2">
                 <Label className="text-xs">Qty</Label>

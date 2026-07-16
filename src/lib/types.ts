@@ -40,6 +40,8 @@ export interface Transaction {
   shippingAddress?: string;
   hsnCode?: string;
   customerAddress?: string;
+  vendorId?: string;
+  agentId?: string;
 }
 
 export interface InvoiceSettings {
@@ -50,6 +52,8 @@ export interface InvoiceSettings {
   showHsn: boolean;
   showBankDetails: boolean;
   showAmountInWords: boolean;
+  defaultPrefix?: string;
+  defaultTerms?: string;
   labels: {
     title: string;
     billTo: string;
@@ -68,6 +72,7 @@ export interface BusinessProfile {
   bankIfsc?: string;
   bankBranch?: string;
   invoiceSettings?: InvoiceSettings;
+  logoBase64?: string;
 }
 
 export interface Subscription {
@@ -104,6 +109,7 @@ export interface Client {
   address: string;
   phone: string;
   createdAt: number;
+  type?: 'client' | 'vendor' | 'agent' | 'both';
 }
 
 export interface InventoryItem {
@@ -127,6 +133,7 @@ export interface InvoiceItem {
   amount: number;
   hsnCode?: string;
   unit?: string; // e.g. kg, ltr, pcs
+  pieceNo?: string;
 }
 
 export type InvoiceType = 'Tax Invoice' | 'Proforma' | 'Bill of Supply' | 'Credit Note' | 'Delivery Challan';
@@ -136,6 +143,8 @@ export interface Invoice {
   invoiceNumber?: string;
   type?: InvoiceType; // Default to Tax Invoice if missing
   prefix?: string;
+  orderNo?: string;
+  orderDate?: number;
   financialYear?: string;
   currency?: string; // e.g., 'INR', 'USD'
   exchangeRate?: number;
@@ -157,11 +166,18 @@ export interface Invoice {
   gstCalculationType?: 'including' | 'excluding';
   gstType?: 'CGST+SGST' | 'IGST';
   terms?: string; // Rich-text terms
+  tcsAmount?: number;
+  deliveryChallanNo?: string;
+  agentId?: string;
+  agentName?: string;
+  agentCommissionPercent?: number;
+  agentCommissionAmount?: number;
 }
 
 export interface Expense {
   id: string;
   vendorName: string;
+  vendorId?: string;
   gstin: string;
   date: number;
   amount: number;

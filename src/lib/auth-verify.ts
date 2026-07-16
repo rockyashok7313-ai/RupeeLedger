@@ -1,9 +1,13 @@
 /**
- * Utility for verifying Firebase ID Tokens securely using the Firebase REST API.
- * This avoids needing the heavy firebase-admin SDK and service accounts in serverless environments.
+ * Utility for verifying Supabase JWT Tokens securely using the Supabase Client.
  */
 
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wxgzbfjosxficpeczgvj.supabase.co';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Xu8aNJh9hn2xk9Pop5x5mw_4iTy38We';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function verifyIdToken(idToken: string): Promise<{ uid: string; email?: string; phone_number?: string } | null> {
   // If it's our custom HMAC token (format: userId.signature)
@@ -12,45 +16,20 @@ export async function verifyIdToken(idToken: string): Promise<{ uid: string; ema
     if (verified) return verified;
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  
-  if (!apiKey) {
-    console.error('Missing NEXT_PUBLIC_FIREBASE_API_KEY environment variable.');
-    return null;
-  }
-
   try {
-    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        idToken
-      }),
-      // We don't want Next.js caching this auth lookup
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      console.error('Token verification failed with status:', response.status);
+    const { data: { user }, error } = await supabase.auth.getUser(idToken);
+    if (error || !user) {
+      console.error('Token verification failed:', error?.message);
       return null;
     }
-
-    const data = await response.json();
     
-    if (data && data.users && data.users.length > 0) {
-      const user = data.users[0];
-      return {
-        uid: user.localId,
-        email: user.email,
-        phone_number: user.phoneNumber
-      };
-    }
-    
-    return null;
+    return {
+      uid: user.id,
+      email: user.email,
+      phone_number: user.phone
+    };
   } catch (error) {
-    console.error('Error verifying Firebase ID token:', error);
+    console.error('Error verifying Supabase JWT:', error);
     return null;
   }
 }

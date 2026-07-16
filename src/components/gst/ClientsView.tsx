@@ -24,6 +24,7 @@ export function ClientsView({ clients = [], setClients }: Props) {
       gstin: newClient.gstin || '',
       address: newClient.address || '',
       phone: newClient.phone || '',
+      type: newClient.type || 'client',
       createdAt: Date.now(),
     };
     if (setClients) {
@@ -51,18 +52,18 @@ export function ClientsView({ clients = [], setClients }: Props) {
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="premium-heading flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" /> Client Ledger
+            <Users className="h-5 w-5 text-primary" /> Clients & Vendors Ledger
           </CardTitle>
-          <CardDescription>Manage your business clients and their GSTINs</CardDescription>
+          <CardDescription>Manage your business parties and their GSTINs</CardDescription>
         </div>
         <Button onClick={() => setIsAdding(!isAdding)} size="sm">
-          <Plus className="h-4 w-4 mr-2" /> Add Client
+          <Plus className="h-4 w-4 mr-2" /> Add Party
         </Button>
       </CardHeader>
       <CardContent>
         <div className="mb-4">
           <Input 
-            placeholder="Search clients by name or GSTIN..." 
+            placeholder="Search parties by name or GSTIN..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-md" 
@@ -73,8 +74,21 @@ export function ClientsView({ clients = [], setClients }: Props) {
           <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Client Name *</label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Party Name *</label>
                 <Input value={newClient.name || ''} onChange={e => setNewClient({...newClient, name: e.target.value})} placeholder="Acme Corp" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Party Type</label>
+                <select 
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={newClient.type || 'client'}
+                  onChange={e => setNewClient({...newClient, type: e.target.value as any})}
+                >
+                  <option value="client">Client (Customer)</option>
+                  <option value="vendor">Vendor (Supplier)</option>
+                  <option value="agent">Agent (Sundry Creditor)</option>
+                  <option value="both">Both (Client & Vendor)</option>
+                </select>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">GSTIN</label>
@@ -84,14 +98,14 @@ export function ClientsView({ clients = [], setClients }: Props) {
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Phone</label>
                 <Input value={newClient.phone || ''} onChange={e => setNewClient({...newClient, phone: e.target.value})} placeholder="+91 9876543210" />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Billing Address</label>
                 <Input value={newClient.address || ''} onChange={e => setNewClient({...newClient, address: e.target.value})} placeholder="123 Business Park, City, State" />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setIsAdding(false)}>Cancel</Button>
-              <Button onClick={handleAddClient}>Save Client</Button>
+              <Button onClick={handleAddClient}>Save Party</Button>
             </div>
           </div>
         )}
@@ -105,7 +119,8 @@ export function ClientsView({ clients = [], setClients }: Props) {
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Client Name</th>
+                  <th className="p-3 font-medium text-gray-500">Party Name</th>
+                  <th className="p-3 font-medium text-gray-500">Type</th>
                   <th className="p-3 font-medium text-gray-500">GSTIN</th>
                   <th className="p-3 font-medium text-gray-500">Phone</th>
                   <th className="p-3 font-medium text-gray-500">Address</th>
@@ -116,6 +131,16 @@ export function ClientsView({ clients = [], setClients }: Props) {
                 {filteredClients.map((client) => (
                   <tr key={client.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="p-3 font-medium">{client.name}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        client.type === 'vendor' ? 'bg-purple-100 text-purple-700' :
+                        client.type === 'agent' ? 'bg-emerald-100 text-emerald-700' :
+                        client.type === 'both' ? 'bg-indigo-100 text-indigo-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {client.type === 'vendor' ? 'Vendor' : client.type === 'agent' ? 'Agent' : client.type === 'both' ? 'Both' : 'Client'}
+                      </span>
+                    </td>
                     <td className="p-3 text-gray-500 font-mono text-xs">{client.gstin || '-'}</td>
                     <td className="p-3 text-gray-500">{client.phone || '-'}</td>
                     <td className="p-3 text-gray-500 truncate max-w-[200px]">{client.address || '-'}</td>

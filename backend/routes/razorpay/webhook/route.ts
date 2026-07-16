@@ -1,6 +1,6 @@
-import { NextResponse } from '../../../next-response';
+import { NextResponse } from '../../../next-response.ts';
 import crypto from 'crypto';
-import { createAndSaveKey, dispatchKeyToContact } from '../../../../src/lib/license';
+import { createAndSaveKey, dispatchKeyToContact } from '../../../../src/lib/license.ts';
 
 export async function POST(request: Request) {
   try {
@@ -68,3 +68,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+

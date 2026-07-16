@@ -1,5 +1,5 @@
-import { NextResponse } from '../../next-response';
-import { suggestNarration } from '../../../src/ai/flows/ai-narration-suggester-flow';
+import { NextResponse } from '../../next-response.ts';
+import { suggestNarration } from '../../../src/ai/flows/ai-narration-suggester-flow.ts';
 
 export async function POST(request: Request) {
   try {
@@ -15,3 +15,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

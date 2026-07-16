@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileDown, Plus, Trash2 } from 'lucide-react';
-import { Receipt } from '@/lib/types';
+import { Receipt, Client, Invoice } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Props {
   receipts?: Receipt[];
   setReceipts?: (r: Receipt[]) => void;
+  clients?: Client[];
+  invoices?: Invoice[];
 }
 
-export function ReceiptVoucher({ receipts = [], setReceipts }: Props) {
+export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoices = [] }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState('');
   const [newReceipt, setNewReceipt] = useState<Partial<Receipt>>({
     paymentMethod: 'Bank Transfer'
   });
@@ -32,7 +35,26 @@ export function ReceiptVoucher({ receipts = [], setReceipts }: Props) {
       setReceipts([...receipts, rec]);
     }
     setNewReceipt({ paymentMethod: 'Bank Transfer' });
+    setSelectedClientId('');
     setIsAdding(false);
+  };
+
+  const clientInvoices = selectedClientId ? invoices.filter(i => i.clientId === selectedClientId) : [];
+
+  const handleInvoiceSelect = (invId: string) => {
+    const inv = invoices.find(i => i.id === invId || i.invoiceNumber === invId);
+    if (inv) {
+      // Calculate remaining amount
+      const paid = receipts.filter(r => r.invoiceId === inv.invoiceNumber || r.invoiceId === inv.id).reduce((sum, r) => sum + r.amount, 0);
+      const remaining = inv.total - paid;
+      setNewReceipt({ 
+        ...newReceipt, 
+        invoiceId: inv.invoiceNumber || inv.id,
+        amount: remaining > 0 ? remaining : 0
+      });
+    } else {
+      setNewReceipt({ ...newReceipt, invoiceId: invId });
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -73,10 +95,38 @@ export function ReceiptVoucher({ receipts = [], setReceipts }: Props) {
 
         {isAdding && (
           <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Select Client (Optional)</label>
+                <select 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedClientId}
+                  onChange={e => setSelectedClientId(e.target.value)}
+                >
+                  <option value="">-- All Clients --</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Invoice ID *</label>
-                <Input value={newReceipt.invoiceId || ''} onChange={e => setNewReceipt({...newReceipt, invoiceId: e.target.value})} placeholder="INV-2024-001" />
+                {selectedClientId ? (
+                  <select 
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newReceipt.invoiceId || ''}
+                    onChange={e => handleInvoiceSelect(e.target.value)}
+                  >
+                    <option value="">-- Select Invoice --</option>
+                    {clientInvoices.map(inv => (
+                      <option key={inv.id} value={inv.invoiceNumber || inv.id}>
+                        {inv.invoiceNumber || inv.id.substring(0,8)} (₹{inv.total.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input value={newReceipt.invoiceId || ''} onChange={e => setNewReceipt({...newReceipt, invoiceId: e.target.value})} placeholder="INV-2024-001" />
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Amount Received (₹) *</label>

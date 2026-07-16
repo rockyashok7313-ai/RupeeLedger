@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PackageSearch, Plus, Trash2 } from 'lucide-react';
 import { InventoryItem } from '@/lib/types';
+import { UQC_LIST } from '@/lib/invoiceUtils';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Props {
@@ -16,7 +17,8 @@ export function InventoryView({ inventory = [], setInventory }: Props) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
     taxRate: 18,
-    currentStock: 0
+    currentStock: 0,
+    unit: 'NOS-NUMBERS'
   });
 
   const handleAddItem = () => {
@@ -28,12 +30,13 @@ export function InventoryView({ inventory = [], setInventory }: Props) {
       basePrice: Number(newItem.basePrice),
       taxRate: Number(newItem.taxRate || 0),
       currentStock: Number(newItem.currentStock || 0),
+      unit: newItem.unit || 'NOS-NUMBERS',
       createdAt: Date.now(),
     };
     if (setInventory) {
       setInventory([...inventory, item]);
     }
-    setNewItem({ taxRate: 18, currentStock: 0 });
+    setNewItem({ taxRate: 18, currentStock: 0, unit: 'NOS-NUMBERS' });
     setIsAdding(false);
   };
 
@@ -85,6 +88,18 @@ export function InventoryView({ inventory = [], setInventory }: Props) {
                 <Input value={newItem.hsnCode || ''} onChange={e => setNewItem({...newItem, hsnCode: e.target.value})} placeholder="8471" />
               </div>
               <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Unit (UQC) *</label>
+                <select 
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  value={newItem.unit || 'NOS-NUMBERS'}
+                  onChange={e => setNewItem({...newItem, unit: e.target.value})}
+                >
+                  {UQC_LIST.map(uqc => (
+                    <option key={uqc} value={uqc}>{uqc}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Base Price (₹) *</label>
                 <Input type="number" value={newItem.basePrice || ''} onChange={e => setNewItem({...newItem, basePrice: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
@@ -125,9 +140,9 @@ export function InventoryView({ inventory = [], setInventory }: Props) {
                   <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="p-3">
                       <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-xs text-gray-500 font-mono mt-0.5">HSN: {item.hsnCode || 'N/A'}</div>
+                      <div className="text-xs text-gray-500 font-mono mt-0.5">HSN: {item.hsnCode || 'N/A'} • {item.unit || 'NOS'}</div>
                     </td>
-                    <td className="p-3 text-right font-medium">{item.currentStock}</td>
+                    <td className="p-3 text-right font-medium">{item.currentStock} {item.unit ? item.unit.split('-')[0] : ''}</td>
                     <td className="p-3 text-right">₹{item.basePrice.toFixed(2)}</td>
                     <td className="p-3 text-right text-gray-500">{item.taxRate}%</td>
                     <td className="p-3 text-right">

@@ -148,15 +148,20 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
               <CardContent className="p-8 sm:p-12 space-y-8">
                 {/* Header */}
                 <div className="invoice-header flex flex-col sm:flex-row justify-between items-start pb-6">
-                  <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-blue-900">{businessProfile.companyName || 'Your Company Name'}</h1>
-                    <p className="text-sm text-gray-600 whitespace-pre-line mt-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(businessProfile.address || 'Your Company Address') }}></p>
-                    {businessProfile.gstin && (
-                      <p className="text-sm font-medium mt-1">GSTIN: {businessProfile.gstin}</p>
+                  <div className="flex gap-4 items-start">
+                    {businessProfile.logoBase64 && (
+                      <img src={businessProfile.logoBase64} alt="Logo" className="w-20 h-20 object-contain" />
                     )}
-                    {businessProfile.phone && (
-                      <p className="text-sm text-gray-600">Phone: {businessProfile.phone}</p>
-                    )}
+                    <div>
+                      <h1 className="text-3xl font-bold tracking-tight text-blue-900">{businessProfile.companyName || 'Your Company Name'}</h1>
+                      <p className="text-sm text-gray-600 whitespace-pre-line mt-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(businessProfile.address || 'Your Company Address') }}></p>
+                      {businessProfile.gstin && (
+                        <p className="text-sm font-medium mt-1">GSTIN: {businessProfile.gstin}</p>
+                      )}
+                      {businessProfile.phone && (
+                        <p className="text-sm text-gray-600">Phone: {businessProfile.phone}</p>
+                      )}
+                    </div>
                   </div>
                   <div className="text-left sm:text-right mt-6 sm:mt-0">
                     <h2 className="text-2xl font-bold text-gray-800 uppercase tracking-widest">{invoice.type || 'Tax Invoice'}</h2>
@@ -167,6 +172,27 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                       <span className="font-medium text-gray-500">Invoice Date:</span>
                       <span className="font-bold">{new Date(invoice.date).toLocaleDateString()}</span>
                       
+                      {invoice.orderNo && (
+                        <>
+                          <span className="font-medium text-gray-500">Order No:</span>
+                          <span className="font-bold">{invoice.orderNo}</span>
+                        </>
+                      )}
+
+                      {invoice.orderDate && (
+                        <>
+                          <span className="font-medium text-gray-500">Order Date:</span>
+                          <span className="font-bold">{new Date(invoice.orderDate).toLocaleDateString()}</span>
+                        </>
+                      )}
+
+                      {invoice.deliveryChallanNo && (
+                        <>
+                          <span className="font-medium text-gray-500">Delivery Challan No:</span>
+                          <span className="font-bold">{invoice.deliveryChallanNo}</span>
+                        </>
+                      )}
+
                       <span className="font-medium text-gray-500">Due Date:</span>
                       <span className="font-bold">{new Date(invoice.dueDate).toLocaleDateString()}</span>
                     </div>
@@ -189,6 +215,12 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                   </div>
                 </div>
 
+                {invoice.agentName && (
+                  <div className="text-sm text-gray-600 mb-2">
+                    <span className="font-bold text-gray-700">Agent / Sales Rep:</span> {invoice.agentName}
+                  </div>
+                )}
+
                 {/* Line Items Table */}
                 <div className="overflow-hidden border border-gray-200 rounded-lg">
                   <table className="w-full text-sm text-left">
@@ -197,6 +229,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                         <th className="p-3 font-bold">#</th>
                         <th className="p-3 font-bold">Item & Description</th>
                         {showHsn && <th className="p-3 font-bold">HSN</th>}
+                        <th className="p-3 font-bold text-center">Piece No</th>
                         <th className="p-3 font-bold text-center">Qty/Unit</th>
                         <th className="p-3 font-bold text-right">Rate</th>
                         <th className="p-3 font-bold text-right">GST %</th>
@@ -209,6 +242,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                           <td className="p-3 text-gray-500">{idx + 1}</td>
                           <td className="p-3 font-medium text-gray-900">{item.name}</td>
                           {showHsn && <td className="p-3 text-gray-600">{item.hsnCode || '-'}</td>}
+                          <td className="p-3 text-center">{item.pieceNo || '-'}</td>
                           <td className="p-3 text-center">{item.quantity} {item.unit?.split('-')[0] || ''}</td>
                           <td className="p-3 text-right">{formatCurrency(item.rate, invoice.currency || 'INR')}</td>
                           <td className="p-3 text-right text-gray-500">{item.taxPercent}%</td>
@@ -278,7 +312,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                 <div className="border-t-2 border-gray-100 pt-6 mt-8 flex flex-col sm:flex-row justify-between items-end gap-4">
                   <div className="text-xs text-gray-500 whitespace-pre-line flex-1">
                     <span className="font-bold text-gray-700 uppercase tracking-wider block mb-1">Terms & Conditions</span>
-                    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((invoice.terms || businessProfile.printFooter || '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed.').replace(/\n/g, '<br/>')) }} />
+                    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize((invoice.terms || businessProfile.invoiceSettings?.defaultTerms || businessProfile.printFooter || '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed.').replace(/\n/g, '<br/>')) }} />
                   </div>
                   {showSignatory && (
                     <div className="text-center sm:text-right mt-6 sm:mt-0 w-48">

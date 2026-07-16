@@ -126,9 +126,9 @@ export async function pullSyncFromSupabase(userId: string) {
       { data: accs },
       { data: txs }
     ] = await Promise.all([
-      supabase.from('business_profiles').select('*').eq('user_id', userId).single(),
-      supabase.from('subscriptions').select('*').eq('user_id', userId).single(),
-      supabase.from('security_settings').select('*').eq('user_id', userId).single(),
+      supabase.from('business_profiles').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('subscriptions').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('security_settings').select('*').eq('user_id', userId).maybeSingle(),
       supabase.from('accounts').select('*').eq('user_id', userId),
       supabase.from('transactions').select('*').eq('user_id', userId)
     ]);

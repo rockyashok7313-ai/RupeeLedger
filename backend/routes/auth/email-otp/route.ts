@@ -1,5 +1,5 @@
-import { NextResponse } from '../../../next-response';
-import { signAppToken } from '../../../../src/lib/auth-verify';
+import { NextResponse } from '../../../next-response.ts';
+import { signAppToken } from '../../../../src/lib/auth-verify.ts';
 import nodemailer from 'nodemailer';
 
 // In-memory OTP store: email -> { otp, expiresAt }
@@ -103,3 +103,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
+

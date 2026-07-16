@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
-import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { pushSyncToSupabase, pullSyncFromSupabase } from "@/lib/supabaseSync";
 import { 
   signInWithPopup, 
@@ -386,8 +386,9 @@ export default function RupeeLedger() {
 
   useEffect(() => {
     // 1. Setup Auth Observer
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const supabaseUser = session?.user;
+      if (supabaseUser) {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
           // Fetch user data via MongoDB Sync API route
@@ -398,7 +399,7 @@ export default function RupeeLedger() {
           let fromMongo = false;
           
           try {
-              const supabaseData = await pullSyncFromSupabase(firebaseUser.uid);
+              const supabaseData = await pullSyncFromSupabase(supabaseUser.id);
               if (supabaseData && supabaseData.exists) {
                   syncData = supabaseData;
                   syncData.isOfflineFallback = false;
@@ -408,14 +409,14 @@ export default function RupeeLedger() {
           }
 
           if (!syncData) {
-              const token = await firebaseUser.getIdToken();
+              const token = session.access_token;
               const syncRes = await fetch('/api/ledger/sync', {
                 method: 'POST',
                 headers: { 
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ userId: firebaseUser.uid, action: 'pull' })
+                body: JSON.stringify({ userId: supabaseUser.id, action: 'pull' })
               });
               if (syncRes.ok) {
                 syncData = await syncRes.json();
@@ -427,7 +428,7 @@ export default function RupeeLedger() {
             if (fromMongo && syncData.exists) {
                try {
                    await pushSyncToSupabase(
-                     firebaseUser.uid, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
+                     supabaseUser.id, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
                      syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
                      syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
                    );
@@ -437,7 +438,7 @@ export default function RupeeLedger() {
             }
 
             if (syncData.isOfflineFallback) {
-              await loadLocalStorageData(firebaseUser.uid);
+              await loadLocalStorageData(supabaseUser.id);
             } else {
               if (syncData.exists) {
                 if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
@@ -448,7 +449,7 @@ export default function RupeeLedger() {
                   setSubscription(s);
                 }
                 if (syncData.securitySettings) {
-                  const migrated = await migrateSecuritySettings(syncData.securitySettings, firebaseUser.uid);
+                  const migrated = await migrateSecuritySettings(syncData.securitySettings, supabaseUser.id);
                   setSecuritySettings(migrated);
                   if (migrated.pinEnabled && (migrated.hashedPinCode || migrated.pinCode)) {
                     shouldLock = true;
@@ -473,7 +474,7 @@ export default function RupeeLedger() {
                 };
                 setSubscription(initialSubscription);
                 await pushSyncToMongoDB(
-                  firebaseUser.uid,
+                  supabaseUser.id,
                   [],
                   [],
                   businessProfile,
@@ -484,15 +485,15 @@ export default function RupeeLedger() {
               }
             }
           } else {
-            await loadLocalStorageData(firebaseUser.uid);
+            await loadLocalStorageData(supabaseUser.id);
           }
 
           // Auto-migration check: If cloud database is empty, check for local data
           if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
-            const guestAccs = localStorage.getItem(`rupee_ledger_accounts_${firebaseUser.uid}`) ||
+            const guestAccs = localStorage.getItem(`rupee_ledger_accounts_${supabaseUser.id}`) ||
                               localStorage.getItem("rupee_ledger_accounts_guest_local") || 
                               localStorage.getItem("rupee_ledger_accounts_");
-            const guestTxs = localStorage.getItem(`rupee_ledger_transactions_${firebaseUser.uid}`) ||
+            const guestTxs = localStorage.getItem(`rupee_ledger_transactions_${supabaseUser.id}`) ||
                               localStorage.getItem("rupee_ledger_transactions_guest_local") || 
                               localStorage.getItem("rupee_ledger_transactions_");
             
@@ -504,7 +505,7 @@ export default function RupeeLedger() {
                   title: "Migrating Local Data", 
                   description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
                 });
-                await pushSyncToMongoDB(firebaseUser.uid, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
+                await pushSyncToMongoDB(supabaseUser.id, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
                 fetchedAccounts = parsedAccs;
                 fetchedTxs = parsedTxs;
               }
@@ -513,15 +514,15 @@ export default function RupeeLedger() {
 
           setAccounts(fetchedAccounts);
           setTransactions(fetchedTxs);
-          await fetchGeneratedKeys(firebaseUser.uid);
+          await fetchGeneratedKeys(supabaseUser.id);
 
           const profile: UserProfile = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
-            email: firebaseUser.email || undefined,
-            phone: firebaseUser.phoneNumber || undefined,
-            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
-            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || "Cloud User",
+            email: supabaseUser.email || undefined,
+            phone: supabaseUser.phone || undefined,
+            avatarUrl: supabaseUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${supabaseUser.email || supabaseUser.id}`,
+            authMethod: supabaseUser.app_metadata?.provider === 'google' ? 'google' : 'email',
             createdAt: Date.now()
           };
           setUser(profile);
@@ -532,15 +533,15 @@ export default function RupeeLedger() {
         } catch (err) {
           console.error("MongoDB loading error:", err);
           toast({ title: "Cloud Sync Failure", description: "Loading backup cache from local storage.", variant: "destructive" });
-          await loadLocalStorageData(firebaseUser.uid);
+          await loadLocalStorageData(supabaseUser.id);
           
           const profile: UserProfile = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || "Cloud User",
-            email: firebaseUser.email || undefined,
-            phone: firebaseUser.phoneNumber || undefined,
-            avatarUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${firebaseUser.email || firebaseUser.uid}`,
-            authMethod: firebaseUser.providerData[0]?.providerId === 'google.com' ? 'google' : 'email',
+            id: supabaseUser.id,
+            name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || "Cloud User",
+            email: supabaseUser.email || undefined,
+            phone: supabaseUser.phone || undefined,
+            avatarUrl: supabaseUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${supabaseUser.email || supabaseUser.id}`,
+            authMethod: supabaseUser.app_metadata?.provider === 'google' ? 'google' : 'email',
             createdAt: Date.now()
           };
           setUser(profile);
@@ -627,7 +628,7 @@ export default function RupeeLedger() {
     document.body.appendChild(script);
 
     return () => {
-      unsubscribe();
+      authSub.unsubscribe();
       if (document.body.contains(script)) {
         document.body.removeChild(script);
       }
@@ -725,8 +726,8 @@ export default function RupeeLedger() {
   const handleGoogleLogin = async () => {
     toast({ title: "Connecting to Google...", description: "Opening Google Auth popup." });
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
     } catch (error) {
       console.error("Google Auth error:", error);
       toast({
@@ -1253,13 +1254,15 @@ export default function RupeeLedger() {
     }
     toast({ title: "Authenticating...", description: "Checking credentials." });
     try {
-      await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: emailInput, password: passwordInput });
+      if (signInError) throw signInError;
     } catch (err: unknown) {
       const authErr = err as { code?: string; message?: string };
       if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/cannot-find-user') {
         toast({ title: "Registering...", description: "Creating a new account." });
         try {
-          await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+          const { error: signUpError } = await supabase.auth.signUp({ email: emailInput, password: passwordInput });
+          if (signUpError) throw signUpError;
         } catch (createErr) {
           console.error("Firebase signup error:", createErr);
           toast({
@@ -1280,34 +1283,21 @@ export default function RupeeLedger() {
   };
 
   const handleLogout = async () => {
+    toast({ title: "Logging out...", description: "Clearing session data." });
+    await supabase.auth.signOut();
+    localStorage.removeItem("rupee_ledger_user");
+    setUser(null);
     setAccounts([]);
     setTransactions([]);
-    setSelectedAccountId(null);
-
-    const method = user?.authMethod;
-
-    // Firebase Auth users (Google, email/password)
-    if (method === 'google' || method === 'email') {
-      try {
-        await signOut(auth);
-      } catch (err) {
-        console.error('Signout error:', err);
-      }
-    }
-
-    // All non-Firebase users (phone OTP, email OTP, guest) — clear manually
-    setUser(null);
+    setBusinessProfile(undefined as any);
+    setClients([]);
+    setInventory([]);
+    setInvoices([]);
+    setExpenses([]);
+    setRecurringTemplates([]);
+    setReceipts([]);
     setShowLogin(true);
     setIsLocked(false);
-    setPinInput('');
-    setOtpSent(false);
-    setOtpInput('');
-    setPhoneInput('');
-    setEmailOtpSent(false);
-    setEmailOtpInput('');
-    setEmailInput('');
-    localStorage.removeItem('rupee_ledger_user');
-    toast({ title: 'Signed Out', description: 'You have been logged out successfully.' });
   };
 
   // Business Profile and Security Handlers
@@ -1531,7 +1521,7 @@ export default function RupeeLedger() {
 
   const fetchGeneratedKeys = async (userId: string) => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
       const res = await fetch(`/api/keys?userId=${userId}`, {
         headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
@@ -1568,7 +1558,7 @@ export default function RupeeLedger() {
       let savedToCloud = false;
       if (user && user.authMethod !== 'guest') {
         try {
-          const token = await auth.currentUser?.getIdToken();
+          const token = (await supabase.auth.getSession()).data.session?.access_token;
           const res = await fetch('/api/keys', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
@@ -1628,7 +1618,7 @@ export default function RupeeLedger() {
 
     if (user && user.authMethod !== 'guest') {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
         const res = await fetch('/api/keys', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
@@ -3758,13 +3748,7 @@ export default function RupeeLedger() {
                           variant="outline" 
                           size="sm"
                           onClick={() => {
-                            if (getDerivedTier(subscription) === 'FREE') {
-                              toast({ title: "Email Support", description: "Please email us at support@rupeeledger.com" });
-                            } else if (getDerivedTier(subscription) === 'MONTHLY') {
-                              toast({ title: "Priority Support", description: "You have priority queue access. Opening chat..." });
-                            } else {
-                              toast({ title: "Dedicated Manager", description: "Connecting to your dedicated account manager..." });
-                            }
+                            window.location.href = "mailto:rockyashok7313@gmail.com";
                           }}
                         >
                           Contact Support
@@ -4138,7 +4122,7 @@ export default function RupeeLedger() {
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Owner / Support</span>
-                            <span className="font-bold text-slate-800 text-right">L.ASHOK KUMAR, COIMBATORE</span>
+                            <span className="font-bold text-slate-800 text-right">L.ASHOK KUMAR, COIMBATORE (9791335351)</span>
 </div>
                           <Button 
                             onClick={handleGenerateLicenseKey} 
