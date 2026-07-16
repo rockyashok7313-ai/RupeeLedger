@@ -123,6 +123,61 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
     }
   };
 
+  const calculatedTotals = React.useMemo(() => {
+    let subtotal = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    items.forEach(item => {
+      const qty = item.quantity || 1;
+      const rate = item.rate || 0;
+      const taxPercent = item.taxPercent || 0;
+      
+      let itemAmt = qty * rate;
+      let itemTax = 0;
+
+      if (gstCalculationType === 'including') {
+        const totalAmt = itemAmt;
+        itemAmt = Math.round((totalAmt / (1 + taxPercent / 100)) * 100) / 100;
+        itemTax = Math.round((totalAmt - itemAmt) * 100) / 100;
+      } else {
+        itemTax = Math.round((itemAmt * (taxPercent / 100)) * 100) / 100;
+      }
+      
+      subtotal += itemAmt;
+
+      if (gstType === 'CGST+SGST') {
+        cgst += itemTax / 2;
+        sgst += itemTax / 2;
+      } else {
+        igst += itemTax;
+      }
+    });
+    
+    cgst = Math.round(cgst * 100) / 100;
+    sgst = Math.round(sgst * 100) / 100;
+    igst = Math.round(igst * 100) / 100;
+
+    let baseTotal = subtotal + cgst + sgst + igst;
+    
+    let tcsAmount = 0;
+    if (clientId) {
+      const clientInvoices = invoices.filter(i => i.clientId === clientId && i.type === 'Tax Invoice');
+      const totalTurnover = clientInvoices.reduce((sum, inv) => sum + inv.total, 0);
+      const newTotalWithThis = totalTurnover + baseTotal;
+      
+      if (newTotalWithThis > 5000000) {
+        const taxableForTcs = Math.max(0, newTotalWithThis - Math.max(5000000, totalTurnover));
+        tcsAmount = Math.round(taxableForTcs * 0.001 * 100) / 100; 
+      }
+    }
+
+    const total = baseTotal + tcsAmount;
+
+    return { subtotal, cgst, sgst, igst, tcsAmount, total };
+  }, [items, gstCalculationType, gstType, clientId, invoices]);
+
   const handleSaveInvoice = () => {
     if (!clientName) return alert('Please enter a client name.');
     if (gstType === 'IGST' && !customerAddress) return alert('Inter-state supply requires Customer Address to determine Place of Supply.');
@@ -499,6 +554,30 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         </div>
 
         
+        <div className="space-y-4 pt-4 border-t">
+          <div className="bg-gray-50 p-4 rounded-lg border w-full md:w-1/2 ml-auto">
+            <h3 className="font-semibold text-sm border-b pb-2 mb-2">Invoice Totals Summary</h3>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between"><span>Taxable Amount (Subtotal):</span> <span className="font-medium">₹{calculatedTotals.subtotal.toFixed(2)}</span></div>
+              {gstType === 'CGST+SGST' && (
+                <>
+                  <div className="flex justify-between"><span>CGST:</span> <span>₹{calculatedTotals.cgst.toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>SGST:</span> <span>₹{calculatedTotals.sgst.toFixed(2)}</span></div>
+                </>
+              )}
+              {gstType === 'IGST' && (
+                <div className="flex justify-between"><span>IGST:</span> <span>₹{calculatedTotals.igst.toFixed(2)}</span></div>
+              )}
+              {calculatedTotals.tcsAmount > 0 && (
+                <div className="flex justify-between text-blue-600"><span>TCS:</span> <span>₹{calculatedTotals.tcsAmount.toFixed(2)}</span></div>
+              )}
+              <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
+                <span>Net Amount (Total):</span> <span className="text-green-600">₹{calculatedTotals.total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-4 pt-4 border-t">
           <h3 className="font-semibold border-b pb-2">Terms & Conditions (Rich Text)</h3>
           <div className="flex gap-4">
