@@ -80,14 +80,14 @@ workflows:
 
       - name: Export IPA
         script: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath "$CM_BUILD_DIR/App.xcarchive" \
-            -exportPath "$CM_BUILD_DIR/ipa" \
-            -exportOptionsPlist exportOptions.plist \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -30
-          echo "=== IPA artifacts ==="
-          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA ready!" || echo "Check xcarchive"
+          echo "=== Creating Unsigned IPA via Payload zip ==="
+          cd "$CM_BUILD_DIR"
+          mkdir -p Payload
+          cp -r App.xcarchive/Products/Applications/App.app Payload/
+          zip -r RupeeLedger.ipa Payload
+          rm -rf Payload
+          echo "=== IPA created successfully! ==="
+          ls -la RupeeLedger.ipa
 
     artifacts:
       - $CM_BUILD_DIR/**/*.ipa
