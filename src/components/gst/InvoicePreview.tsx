@@ -299,6 +299,18 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
                         <span>{formatCurrency(invoice.igst, invoice.currency || 'INR')}</span>
                       </div>
                     )}
+                    {(invoice.tcsAmount || 0) > 0 && (
+                      <div className="flex justify-between text-sm text-gray-600 text-blue-600">
+                        <span>TCS</span>
+                        <span>{formatCurrency(invoice.tcsAmount!, invoice.currency || 'INR')}</span>
+                      </div>
+                    )}
+                    {(invoice.roundoff || 0) !== 0 && (
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Roundoff</span>
+                        <span>{formatCurrency(invoice.roundoff!, invoice.currency || 'INR')}</span>
+                      </div>
+                    )}
                     <div className="border-t border-gray-200 pt-2 mt-2">
                       <div className="flex justify-between text-lg font-bold text-gray-900">
                         <span>Total</span>

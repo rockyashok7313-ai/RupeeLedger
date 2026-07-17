@@ -398,15 +398,7 @@ export default function RupeeLedger() {
           let syncData: any = null;
           let fromMongo = false;
           
-          try {
-              const supabaseData = await pullSyncFromSupabase(supabaseUser.id);
-              if (supabaseData && supabaseData.exists) {
-                  syncData = supabaseData;
-                  syncData.isOfflineFallback = false;
-              }
-          } catch (e) {
-              console.log("Supabase pull failed, falling back to MongoDB");
-          }
+          
 
           if (!syncData) {
               const token = session.access_token;
@@ -567,15 +559,7 @@ export default function RupeeLedger() {
               try {
                 toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
                 let syncData: any = null;
-                try {
-                  const supabaseData = await pullSyncFromSupabase(parsed.id);
-                  if (supabaseData && supabaseData.exists) {
-                    syncData = supabaseData;
-                    syncData.isOfflineFallback = false;
-                  }
-                } catch (e) {
-                  console.log("Supabase pull failed for saved user, falling back to MongoDB");
-                }
+                
                 
                 if (!syncData) {
                   const syncRes = await fetch('/api/ledger/sync', {
@@ -817,15 +801,7 @@ export default function RupeeLedger() {
         let syncData: any = null;
         let fromMongo = false;
         
-        try {
-            const supabaseData = await pullSyncFromSupabase(phoneId);
-            if (supabaseData && supabaseData.exists) {
-                syncData = supabaseData;
-                syncData.isOfflineFallback = false;
-            }
-        } catch (e) {
-            console.log("Supabase pull failed, falling back to MongoDB");
-        }
+        
 
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
@@ -959,15 +935,7 @@ export default function RupeeLedger() {
         let syncData: any = null;
         let fromMongo = false;
         
-        try {
-            const supabaseData = await pullSyncFromSupabase(phoneId);
-            if (supabaseData && supabaseData.exists) {
-                syncData = supabaseData;
-                syncData.isOfflineFallback = false;
-            }
-        } catch (e) {
-            console.log("Supabase pull failed, falling back to MongoDB");
-        }
+        
 
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
@@ -1101,15 +1069,7 @@ export default function RupeeLedger() {
         let syncData: any = null;
         let fromMongo = false;
         
-        try {
-            const supabaseData = await pullSyncFromSupabase(emailId);
-            if (supabaseData && supabaseData.exists) {
-                syncData = supabaseData;
-                syncData.isOfflineFallback = false;
-            }
-        } catch (e) {
-            console.log("Supabase pull failed, falling back to MongoDB");
-        }
+        
 
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
@@ -1557,6 +1517,22 @@ export default function RupeeLedger() {
           const parsedLocal = JSON.parse(localKeysStr);
           const fetchedKeyStrings = new Set(fetchedKeys.map((k: any) => k.key));
           const missingLocalKeys = parsedLocal.filter((k: any) => !fetchedKeyStrings.has(k.key));
+          
+          if (missingLocalKeys.length > 0) {
+            // Push missing keys to backend
+            Promise.all(missingLocalKeys.map((k: any) => 
+              fetch('/api/keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                body: JSON.stringify({
+                  key: k.key,
+                  durationDays: k.duration === "Annual" ? 365 : 30,
+                  createdBy: userId
+                })
+              })
+            )).catch(console.error);
+          }
+
           fetchedKeys = [...missingLocalKeys, ...fetchedKeys];
           fetchedKeys.sort((a: any, b: any) => b.createdAt - a.createdAt);
         } catch(e) {}

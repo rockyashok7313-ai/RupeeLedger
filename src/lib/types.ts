@@ -172,6 +172,7 @@ export interface Invoice {
   agentName?: string;
   agentCommissionPercent?: number;
   agentCommissionAmount?: number;
+  roundoff?: number;
 }
 
 export interface Expense {
