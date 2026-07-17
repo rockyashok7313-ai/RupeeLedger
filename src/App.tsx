@@ -566,14 +566,30 @@ export default function RupeeLedger() {
             const loadUserData = async () => {
               try {
                 toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
-                const syncRes = await fetch('/api/ledger/sync', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: parsed.id, action: 'pull' })
-                });
+                let syncData: any = null;
+                try {
+                  const supabaseData = await pullSyncFromSupabase(parsed.id);
+                  if (supabaseData && supabaseData.exists) {
+                    syncData = supabaseData;
+                    syncData.isOfflineFallback = false;
+                  }
+                } catch (e) {
+                  console.log("Supabase pull failed for saved user, falling back to MongoDB");
+                }
+                
+                if (!syncData) {
+                  const syncRes = await fetch('/api/ledger/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: parsed.id, action: 'pull' })
+                  });
+                  if (syncRes.ok) {
+                    syncData = await syncRes.json();
+                  }
+                }
+                
                 let shouldLock = false;
-                if (syncRes.ok) {
-                  const syncData = await syncRes.json();
+                if (syncData) {
                   if (syncData.isOfflineFallback) {
                     await loadLocalStorageData(parsed.id);
                   } else if (syncData.exists) {
@@ -599,16 +615,20 @@ export default function RupeeLedger() {
                     if (syncData.expenses) setExpenses(syncData.expenses);
                     if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
                     if (syncData.receipts) setReceipts(syncData.receipts);
+                  } else {
+                    await loadLocalStorageData(parsed.id);
                   }
                 } else {
                   await loadLocalStorageData(parsed.id);
                 }
                 
                 setIsLocked(shouldLock);
+                await fetchGeneratedKeys(parsed.id);
                 setIsLoaded(true);
               } catch (err) {
                 console.error("MongoDB user loading error on refresh:", err);
                 await loadLocalStorageData(parsed.id);
+                await fetchGeneratedKeys(parsed.id);
                 setIsLoaded(true);
               }
             };
@@ -1528,12 +1548,27 @@ export default function RupeeLedger() {
       if (!res.ok) throw new Error('API failed');
       const data = await res.json();
       if (data.isOfflineFallback) {
-        return;
+        throw new Error('Offline fallback');
       }
-      setGeneratedKeysList(data.keys || []);
+      let fetchedKeys = data.keys || [];
+      const localKeysStr = localStorage.getItem(`rupee_ledger_generated_keys_${userId}`);
+      if (localKeysStr) {
+        try {
+          const parsedLocal = JSON.parse(localKeysStr);
+          const fetchedKeyStrings = new Set(fetchedKeys.map((k: any) => k.key));
+          const missingLocalKeys = parsedLocal.filter((k: any) => !fetchedKeyStrings.has(k.key));
+          fetchedKeys = [...missingLocalKeys, ...fetchedKeys];
+          fetchedKeys.sort((a: any, b: any) => b.createdAt - a.createdAt);
+        } catch(e) {}
+      }
+      setGeneratedKeysList(fetchedKeys);
+      localStorage.setItem(`rupee_ledger_generated_keys_${userId}`, JSON.stringify(fetchedKeys));
     } catch (err) {
       console.warn("Backend keys fetch failed, using local keys.", err);
-      // Fallback to local keys not strictly needed here as they are in state, but we ignore the error
+      const localKeys = localStorage.getItem(`rupee_ledger_generated_keys_${userId}`);
+      if (localKeys) {
+        setGeneratedKeysList(JSON.parse(localKeys));
+      }
     }
   };
 
@@ -1590,7 +1625,11 @@ export default function RupeeLedger() {
           createdAt: Date.now(),
           status: "unused"
         };
-        setGeneratedKeysList(prev => [newLocalKey, ...prev]);
+        setGeneratedKeysList(prev => {
+          const newList = [newLocalKey, ...prev];
+          localStorage.setItem(`rupee_ledger_generated_keys_${user?.id || 'guest_local'}`, JSON.stringify(newList));
+          return newList;
+        });
         toast({
           title: "License Key Generated (Local Mode)",
           description: `Key ${newKey} is stored in local reseller memory.`
@@ -1684,7 +1723,11 @@ export default function RupeeLedger() {
 
       // Mark local key as used (if it exists locally)
       if (localKeyObj) {
-        setGeneratedKeysList(prev => prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k));
+        setGeneratedKeysList(prev => {
+          const newList = prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k);
+          localStorage.setItem(`rupee_ledger_generated_keys_${user?.id || 'guest_local'}`, JSON.stringify(newList));
+          return newList;
+        });
       }
       
       let days = 30;
