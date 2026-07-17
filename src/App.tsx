@@ -531,8 +531,8 @@ export default function RupeeLedger() {
           setPinInput("");
           setIsLoaded(true);
         } catch (err) {
-          console.error("MongoDB loading error:", err);
-          toast({ title: "Cloud Sync Failure", description: "Loading backup cache from local storage.", variant: "destructive" });
+          console.warn("Cloud sync not available, falling back to local storage:", err);
+          toast({ title: "Offline Mode Active", description: "Using local storage for your data.", variant: "default" });
           await loadLocalStorageData(supabaseUser.id);
           
           const profile: UserProfile = {
