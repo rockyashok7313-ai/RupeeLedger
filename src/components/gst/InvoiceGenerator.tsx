@@ -8,6 +8,7 @@ import { BusinessProfile, Client, InventoryItem, Invoice, InvoiceItem, InvoiceTy
 import { currencies } from '@/lib/currency';
 import { UQC_LIST, generateInvoiceNumber, getCurrentFinancialYear } from '@/lib/invoiceUtils';
 import { v4 as uuidv4 } from 'uuid';
+import { Switch } from '@/components/ui/switch';
 
 interface Props {
   businessProfile: BusinessProfile;
@@ -31,6 +32,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
   const [gstCalculationType, setGstCalculationType] = useState<'including' | 'excluding'>('excluding');
   const [gstType, setGstType] = useState<'CGST+SGST' | 'IGST'>('CGST+SGST');
   const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', pieceNo: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
+  const [autoRoundoff, setAutoRoundoff] = useState<boolean>(true);
 
   const termsTemplates = {
     'general': '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed by more than 30 days.',
@@ -173,10 +175,12 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
       }
     }
 
-    const total = baseTotal + tcsAmount;
+    const rawTotal = baseTotal + tcsAmount;
+    const total = autoRoundoff ? Math.round(rawTotal) : rawTotal;
+    const roundoff = autoRoundoff ? Math.round((total - rawTotal) * 100) / 100 : 0;
 
-    return { subtotal, cgst, sgst, igst, tcsAmount, total };
-  }, [items, gstCalculationType, gstType, clientId, invoices]);
+    return { subtotal, cgst, sgst, igst, tcsAmount, roundoff, total };
+  }, [items, gstCalculationType, gstType, clientId, invoices, autoRoundoff]);
 
   const handleSaveInvoice = () => {
     if (!clientName) return alert('Please enter a client name.');
@@ -245,7 +249,9 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
       }
     }
 
-    const total = baseTotal + tcsAmount;
+    const rawTotal = baseTotal + tcsAmount;
+    const total = autoRoundoff ? Math.round(rawTotal) : rawTotal;
+    const roundoff = autoRoundoff ? Math.round((total - rawTotal) * 100) / 100 : 0;
 
     // Agent Commission calculation based on Taxable Amount (subtotal)
     let agentCommissionAmount = 0;
@@ -299,6 +305,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
       sgst,
       igst,
       tcsAmount,
+      roundoff: roundoff,
       total,
       status: existingInvoice?.status || 'draft',
       createdAt: existingInvoice?.createdAt || Date.now(),
@@ -556,7 +563,17 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         
         <div className="space-y-4 pt-4 border-t">
           <div className="bg-gray-50 p-4 rounded-lg border w-full md:w-1/2 ml-auto">
-            <h3 className="font-semibold text-sm border-b pb-2 mb-2">Invoice Totals Summary</h3>
+            <div className="flex items-center justify-between border-b pb-2 mb-2">
+              <h3 className="font-semibold text-sm">Invoice Totals Summary</h3>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="auto-roundoff"
+                  checked={autoRoundoff}
+                  onCheckedChange={setAutoRoundoff}
+                />
+                <Label htmlFor="auto-roundoff" className="text-xs text-gray-500 cursor-pointer">Auto Round Off</Label>
+              </div>
+            </div>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between"><span>Taxable Amount (Subtotal):</span> <span className="font-medium">₹{calculatedTotals.subtotal.toFixed(2)}</span></div>
               {gstType === 'CGST+SGST' && (
@@ -570,6 +587,9 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
               )}
               {calculatedTotals.tcsAmount > 0 && (
                 <div className="flex justify-between text-blue-600"><span>TCS:</span> <span>₹{calculatedTotals.tcsAmount.toFixed(2)}</span></div>
+              )}
+              {calculatedTotals.roundoff !== 0 && (
+                <div className="flex justify-between"><span>Roundoff:</span> <span>₹{calculatedTotals.roundoff.toFixed(2)}</span></div>
               )}
               <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
                 <span>Net Amount (Total):</span> <span className="text-green-600">₹{calculatedTotals.total.toFixed(2)}</span>
