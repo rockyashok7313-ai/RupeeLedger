@@ -1,6 +1,6 @@
 workflows:
   # ─────────────────────────────────────────
-  # iOS Debug build
+  # iOS Debug build — Capacitor 8 uses SPM
   # ─────────────────────────────────────────
   ios-debug:
     name: RupeeLedger iOS Build
@@ -10,7 +10,6 @@ workflows:
     environment:
       node: 22.16.0
       xcode: 16.4
-      cocoapods: default
       vars:
         APP_ID: com.rupeeledger.app
         APP_NAME: RupeeLedger
@@ -21,7 +20,6 @@ workflows:
           node --version
           npm --version
           xcodebuild -version
-          pod --version
 
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -34,48 +32,45 @@ workflows:
       - name: Add iOS platform (fresh)
         script: |
           set -e
-          # Always remove and recreate to guarantee Podfile is generated
           rm -rf ios/
           echo "=== Running npx cap add ios ==="
           npx cap add ios 2>&1
           echo ""
-          echo "=== Verifying Podfile was created ==="
-          if [ -f "ios/App/Podfile" ]; then
-            echo "✓ Podfile found!"
-            cat ios/App/Podfile
-          else
-            echo "FATAL: Podfile not created by cap add ios"
-            echo "ios/ contents:"
-            ls -la ios/ 2>/dev/null || echo "No ios dir"
-            echo "ios/App/ contents:"
-            ls -la ios/App/ 2>/dev/null || echo "No ios/App dir"
-            exit 1
-          fi
+          echo "=== iOS project structure ==="
+          ls -la ios/App/
+          echo "=== Capacitor 8 uses SPM — checking Package.swift ==="
+          ls -la ios/App/CapApp-SPM/ 2>/dev/null || echo "No CapApp-SPM dir"
 
       - name: Sync Capacitor to iOS
         script: |
           set -e
           npx cap sync ios
-          echo "=== ios/App after sync ==="
+          echo "=== Final ios/App contents ==="
           ls -la ios/App/
 
-      - name: Install CocoaPods
+      - name: Resolve Swift Package Manager dependencies
         script: |
           set -e
           cd ios/App
-          echo "=== Running pod install ==="
-          pod install --repo-update 2>&1
+          echo "=== Resolving SPM packages ==="
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -resolvePackageDependencies \
+            -derivedDataPath "$CM_BUILD_DIR/DerivedData" 2>&1 | tail -30
 
       - name: Build iOS (Debug - unsigned)
         script: |
           set -e
           cd ios/App
+          echo "=== Building with SPM (no CocoaPods) ==="
           xcodebuild \
-            -workspace App.xcworkspace \
+            -project App.xcodeproj \
             -scheme App \
             -configuration Debug \
             -sdk iphoneos \
             -destination generic/platform=iOS \
+            -derivedDataPath "$CM_BUILD_DIR/DerivedData" \
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             archive \
             CODE_SIGN_IDENTITY="" \
@@ -85,7 +80,6 @@ workflows:
 
       - name: Export IPA
         script: |
-          set -e
           xcodebuild \
             -exportArchive \
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
@@ -93,7 +87,7 @@ workflows:
             -exportOptionsPlist exportOptions.plist \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -30
           echo "=== IPA artifacts ==="
-          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA ready!" || echo "No IPA found"
+          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA ready!" || echo "Check xcarchive"
 
     artifacts:
       - $CM_BUILD_DIR/**/*.ipa
