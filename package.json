@@ -6,12 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "node build-api.js && tsc --noEmit && vite build",
+    "build:mobile": "node build-api.js && vite build",
+    "cap:sync": "npm run build:mobile && npx cap sync",
+    "cap:android": "npm run build:mobile && npx cap sync android && npx cap open android",
+    "cap:ios": "npm run build:mobile && npx cap sync ios && npx cap open ios",
     "start": "node api/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.0",
+    "@capacitor/splash-screen": "^8.0.2",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@genkit-ai/google-genai": "^1.28.0",
     "@hookform/resolvers": "^4.1.3",
@@ -48,6 +55,7 @@
     "dotenv": "^16.5.0",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
+    "firebase": "^12.16.0",
     "genkit": "^1.28.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",

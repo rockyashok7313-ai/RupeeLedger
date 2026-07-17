@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RupeeLedger</string>
+    <string name="title_activity_main">RupeeLedger</string>
+    <string name="package_name">com.rupeeledger.app</string>
+    <string name="custom_url_scheme">com.rupeeledger.app</string>
+</resources>
