@@ -22,6 +22,7 @@ workflows:
           npm --version
           xcodebuild -version
           pod --version
+          echo "Architecture: $(uname -m)"
 
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -33,29 +34,43 @@ workflows:
 
       - name: Add iOS platform
         script: |
-          npx cap add ios || echo "iOS already added, continuing..."
-          ls -la ios/ || echo "No ios dir found"
+          set -e
+          if [ ! -d "ios" ]; then
+            echo "Adding iOS platform..."
+            npx cap add ios
+          else
+            echo "iOS platform already exists."
+          fi
+          echo "=== iOS directory ==="
+          ls -la ios/
 
       - name: Sync Capacitor to iOS
         script: |
+          set -e
           npx cap sync ios
-          echo "=== iOS directory structure ==="
-          ls -la ios/
-          ls -la ios/App/ || echo "No ios/App dir"
+          echo "=== ios/App contents ==="
+          ls -la ios/App/
 
       - name: Install CocoaPods
         script: |
-          echo "=== Checking Podfile ==="
-          ls -la ios/App/
-          cat ios/App/Podfile || echo "No Podfile found"
+          set -e
+          echo "=== Podfile ==="
+          cat ios/App/Podfile
+          echo ""
           echo "=== Running pod install ==="
           cd ios/App
-          pod install 2>&1
+          # Use --repo-update to ensure fresh specs on CI
+          # Use sudo if needed, log verbose output
+          pod install --repo-update --verbose 2>&1 || {
+            echo "pod install failed — trying with sudo..."
+            sudo pod install --repo-update --verbose 2>&1
+          }
 
       - name: Build iOS (Debug - unsigned)
         script: |
+          set -e
           cd ios/App
-          echo "=== Workspace files ==="
+          echo "=== Workspace check ==="
           ls -la
           xcodebuild \
             -workspace App.xcworkspace \
@@ -68,7 +83,7 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" 2>&1 | tail -50
+            DEVELOPMENT_TEAM="" 2>&1 | tail -100
 
       - name: Export IPA
         script: |
@@ -77,9 +92,9 @@ workflows:
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             -exportPath "$CM_BUILD_DIR/ipa" \
             -exportOptionsPlist exportOptions.plist \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -30
-          echo "=== Build artifacts ==="
-          find "$CM_BUILD_DIR" -name "*.ipa" -o -name "*.xcarchive" 2>/dev/null || echo "No IPA found"
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -50
+          echo "=== Looking for IPA ==="
+          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA found!" || echo "No IPA — check xcarchive"
 
     artifacts:
       - $CM_BUILD_DIR/**/*.ipa
