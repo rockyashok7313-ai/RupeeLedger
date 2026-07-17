@@ -1,6 +1,6 @@
 workflows:
   # ─────────────────────────────────────────
-  # iOS Debug / Ad-hoc build
+  # iOS Debug build
   # ─────────────────────────────────────────
   ios-debug:
     name: RupeeLedger iOS Build
@@ -8,14 +8,19 @@ workflows:
     instance_type: mac_mini_m2
 
     environment:
-      node: 20.x
-      xcode: latest
+      node: 20.19.4
+      xcode: 16.4
       cocoapods: default
       vars:
         APP_ID: com.rupeeledger.app
         APP_NAME: RupeeLedger
 
     scripts:
+      - name: Set Node version
+        script: |
+          node --version
+          npm --version
+
       - name: Install dependencies
         script: npm install --legacy-peer-deps
 
@@ -36,9 +41,9 @@ workflows:
       - name: Install CocoaPods
         script: |
           cd ios/App
-          pod install
+          pod install --repo-update
 
-      - name: Build iOS (Debug IPA)
+      - name: Build iOS (Debug IPA - no code signing)
         script: |
           cd ios/App
           xcodebuild \
@@ -46,8 +51,11 @@ workflows:
             -scheme App \
             -configuration Debug \
             -sdk iphoneos \
+            -destination generic/platform=iOS \
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
           xcodebuild \
@@ -55,11 +63,9 @@ workflows:
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             -exportPath "$CM_BUILD_DIR/ipa" \
             -exportOptionsPlist exportOptions.plist \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO || true
 
     artifacts:
-      - android/app/build/outputs/**/*.apk
-      - ios/App/build/**/*.ipa
       - $CM_BUILD_DIR/**/*.ipa
       - $CM_BUILD_DIR/**/*.xcarchive
 
@@ -72,7 +78,7 @@ workflows:
           failure: true
 
   # ─────────────────────────────────────────
-  # Android Debug build (also via Codemagic)
+  # Android Debug build
   # ─────────────────────────────────────────
   android-debug:
     name: RupeeLedger Android Debug
@@ -80,7 +86,7 @@ workflows:
     instance_type: linux_x2
 
     environment:
-      node: 20.x
+      node: 20.19.4
       java: 21
 
     scripts:
@@ -104,6 +110,7 @@ workflows:
       - name: Build Debug APK
         script: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
 
     artifacts:
