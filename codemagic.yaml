@@ -22,7 +22,6 @@ workflows:
           npm --version
           xcodebuild -version
           pod --version
-          echo "Architecture: $(uname -m)"
 
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -32,46 +31,45 @@ workflows:
           node build-api.js
           npx vite build
 
-      - name: Add iOS platform
+      - name: Add iOS platform (fresh)
         script: |
           set -e
-          if [ ! -d "ios" ]; then
-            echo "Adding iOS platform..."
-            npx cap add ios
+          # Always remove and recreate to guarantee Podfile is generated
+          rm -rf ios/
+          echo "=== Running npx cap add ios ==="
+          npx cap add ios 2>&1
+          echo ""
+          echo "=== Verifying Podfile was created ==="
+          if [ -f "ios/App/Podfile" ]; then
+            echo "✓ Podfile found!"
+            cat ios/App/Podfile
           else
-            echo "iOS platform already exists."
+            echo "FATAL: Podfile not created by cap add ios"
+            echo "ios/ contents:"
+            ls -la ios/ 2>/dev/null || echo "No ios dir"
+            echo "ios/App/ contents:"
+            ls -la ios/App/ 2>/dev/null || echo "No ios/App dir"
+            exit 1
           fi
-          echo "=== iOS directory ==="
-          ls -la ios/
 
       - name: Sync Capacitor to iOS
         script: |
           set -e
           npx cap sync ios
-          echo "=== ios/App contents ==="
+          echo "=== ios/App after sync ==="
           ls -la ios/App/
 
       - name: Install CocoaPods
         script: |
           set -e
-          echo "=== Podfile ==="
-          cat ios/App/Podfile
-          echo ""
-          echo "=== Running pod install ==="
           cd ios/App
-          # Use --repo-update to ensure fresh specs on CI
-          # Use sudo if needed, log verbose output
-          pod install --repo-update --verbose 2>&1 || {
-            echo "pod install failed — trying with sudo..."
-            sudo pod install --repo-update --verbose 2>&1
-          }
+          echo "=== Running pod install ==="
+          pod install --repo-update 2>&1
 
       - name: Build iOS (Debug - unsigned)
         script: |
           set -e
           cd ios/App
-          echo "=== Workspace check ==="
-          ls -la
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
@@ -83,18 +81,19 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" 2>&1 | tail -100
+            DEVELOPMENT_TEAM="" 2>&1 | tail -80
 
       - name: Export IPA
         script: |
+          set -e
           xcodebuild \
             -exportArchive \
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             -exportPath "$CM_BUILD_DIR/ipa" \
             -exportOptionsPlist exportOptions.plist \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -50
-          echo "=== Looking for IPA ==="
-          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA found!" || echo "No IPA — check xcarchive"
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -30
+          echo "=== IPA artifacts ==="
+          find "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null && echo "IPA ready!" || echo "No IPA found"
 
     artifacts:
       - $CM_BUILD_DIR/**/*.ipa
@@ -129,14 +128,12 @@ workflows:
           node build-api.js
           npx vite build
 
-      - name: Add Android platform (if not exists)
+      - name: Sync Capacitor to Android
         script: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
-
-      - name: Sync Capacitor to Android
-        script: npx cap sync android
+          npx cap sync android
 
       - name: Build Debug APK
         script: |
