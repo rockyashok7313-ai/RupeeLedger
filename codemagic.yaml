@@ -16,10 +16,12 @@ workflows:
         APP_NAME: RupeeLedger
 
     scripts:
-      - name: Set Node version
+      - name: Check environment
         script: |
           node --version
           npm --version
+          xcodebuild -version
+          pod --version
 
       - name: Install dependencies
         script: npm install --legacy-peer-deps
@@ -29,23 +31,32 @@ workflows:
           node build-api.js
           npx vite build
 
-      - name: Add iOS platform (if not exists)
+      - name: Add iOS platform
         script: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
+          npx cap add ios || echo "iOS already added, continuing..."
+          ls -la ios/ || echo "No ios dir found"
 
       - name: Sync Capacitor to iOS
-        script: npx cap sync ios
+        script: |
+          npx cap sync ios
+          echo "=== iOS directory structure ==="
+          ls -la ios/
+          ls -la ios/App/ || echo "No ios/App dir"
 
       - name: Install CocoaPods
         script: |
+          echo "=== Checking Podfile ==="
+          ls -la ios/App/
+          cat ios/App/Podfile || echo "No Podfile found"
+          echo "=== Running pod install ==="
           cd ios/App
-          pod install --repo-update
+          pod install 2>&1
 
-      - name: Build iOS (Debug IPA - no code signing)
+      - name: Build iOS (Debug - unsigned)
         script: |
           cd ios/App
+          echo "=== Workspace files ==="
+          ls -la
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
@@ -56,14 +67,19 @@ workflows:
             archive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" 2>&1 | tail -50
 
+      - name: Export IPA
+        script: |
           xcodebuild \
             -exportArchive \
             -archivePath "$CM_BUILD_DIR/App.xcarchive" \
             -exportPath "$CM_BUILD_DIR/ipa" \
             -exportOptionsPlist exportOptions.plist \
-            CODE_SIGNING_ALLOWED=NO || true
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -30
+          echo "=== Build artifacts ==="
+          find "$CM_BUILD_DIR" -name "*.ipa" -o -name "*.xcarchive" 2>/dev/null || echo "No IPA found"
 
     artifacts:
       - $CM_BUILD_DIR/**/*.ipa
