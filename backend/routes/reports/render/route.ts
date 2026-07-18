@@ -1,5 +1,4 @@
 import { z } from "zod";
-import puppeteer from 'puppeteer';
 import { renderInvoice } from '../../../templates/invoice.js';
 import { renderLedger } from '../../../templates/ledger.js';
 import { renderVoucher } from '../../../templates/voucher.js';
@@ -48,11 +47,25 @@ export async function POST(req: Request) {
     }
 
     if (format === 'pdf') {
-      // Launch Puppeteer
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      });
+      let browser;
+      if (process.env.VERCEL) {
+        // Run with serverless chromium on Vercel
+        const puppeteerCore = await import('puppeteer-core');
+        const chromium = (await import('@sparticuz/chromium')).default as any;
+        browser = await puppeteerCore.launch({
+          args: chromium.args,
+          defaultViewport: chromium.defaultViewport,
+          executablePath: await chromium.executablePath(),
+          headless: chromium.headless,
+        });
+      } else {
+        // Run locally with standard puppeteer
+        const puppeteer = (await import('puppeteer')).default;
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+      }
       
       const page = await browser.newPage();
       await page.setContent(htmlContent, { waitUntil: 'load' }); // Wait for fonts to load

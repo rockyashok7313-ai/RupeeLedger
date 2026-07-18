@@ -5,6 +5,6 @@ esbuild.build({
   platform: 'node',
   format: 'esm',
   outfile: 'api/index.js',
-  external: ['express', 'cors', 'mongodb', 'jsonwebtoken', 'crypto'],
+  external: ['express', 'cors', 'mongodb', 'jsonwebtoken', 'crypto', 'puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
   target: 'node20',
 }).then(() => console.log('API bundled successfully')).catch(() => process.exit(1));
