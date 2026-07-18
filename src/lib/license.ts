@@ -21,6 +21,12 @@ export const createAndSaveKey = async (payId: string, duration: string, userId: 
   const existingKey = await db.collection('keys').findOne({ paymentId: payId });
   if (existingKey) {
     console.log(`Key already exists for payment ${payId}: ${existingKey.key || existingKey._id}`);
+    if ((existingKey.createdBy === 'anonymous_buyer' || existingKey.createdBy === 'guest_local') && userId && userId !== 'anonymous_buyer' && userId !== 'guest_local') {
+      await db.collection('keys').updateOne(
+        { _id: existingKey._id },
+        { $set: { createdBy: userId } }
+      );
+    }
     return (existingKey.key || existingKey._id) as string;
   }
 

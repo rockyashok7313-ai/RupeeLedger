@@ -9,6 +9,7 @@ import { currencies } from '@/lib/currency';
 import { UQC_LIST, generateInvoiceNumber, getCurrentFinancialYear } from '@/lib/invoiceUtils';
 import { v4 as uuidv4 } from 'uuid';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 interface Props {
   businessProfile: BusinessProfile;
@@ -19,9 +20,11 @@ interface Props {
   setActiveTab: (t: 'preview' | string) => void;
   editingInvoiceId?: string | null;
   setEditingInvoiceId?: (id: string | null) => void;
+  setClients?: (clients: Client[]) => void;
+  setInventory?: (inventory: InventoryItem[]) => void;
 }
 
-export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab, editingInvoiceId, setEditingInvoiceId }: Props) {
+export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab, editingInvoiceId, setEditingInvoiceId, setClients, setInventory }: Props) {
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -33,6 +36,84 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
   const [gstType, setGstType] = useState<'CGST+SGST' | 'IGST'>('CGST+SGST');
   const [items, setItems] = useState<Partial<InvoiceItem>[]>([{ name: '', hsnCode: '', pieceNo: '', quantity: 1, rate: 0, taxPercent: 18, unit: 'NOS-NUMBERS' }]);
   const [autoRoundoff, setAutoRoundoff] = useState<boolean>(true);
+
+  // Quick Add Client Dialog States
+  const [isClientDialogOpen, setIsClientDialogOpen] = useState(false);
+  const [newClient, setNewClient] = useState<Partial<Client>>({ type: 'client' });
+
+  // Quick Add Item Dialog States
+  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
+  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+  const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
+    taxRate: 18,
+    currentStock: 0,
+    unit: 'NOS-NUMBERS'
+  });
+
+  const handleQuickAddClient = () => {
+    if (!newClient.name) return alert('Name is required');
+    if (!setClients) return alert('Error: Cannot modify clients database.');
+    
+    const client: Client = {
+      id: uuidv4(),
+      name: newClient.name || '',
+      gstin: (newClient.gstin || '').toUpperCase(),
+      address: newClient.address || '',
+      phone: newClient.phone || '',
+      type: newClient.type || 'client',
+      createdAt: Date.now(),
+    };
+    
+    setClients([...clients, client]);
+    
+    // Automatically select the new client
+    setClientId(client.id);
+    setClientName(client.name);
+    setCustomerAddress(client.address || '');
+    setCustomerGstin(client.gstin || '');
+    
+    // Clean up and close
+    setNewClient({ type: 'client' });
+    setIsClientDialogOpen(false);
+  };
+
+  const handleQuickAddItem = () => {
+    if (!newItem.name || newItem.basePrice === undefined) return alert('Name and Price are required');
+    if (!setInventory) return alert('Error: Cannot modify inventory database.');
+    
+    const item: InventoryItem = {
+      id: uuidv4(),
+      name: newItem.name || '',
+      hsnCode: newItem.hsnCode || '',
+      basePrice: Number(newItem.basePrice),
+      taxRate: Number(newItem.taxRate || 0),
+      currentStock: Number(newItem.currentStock || 0),
+      unit: newItem.unit || 'NOS-NUMBERS',
+      createdAt: Date.now(),
+    };
+    
+    setInventory([...inventory, item]);
+    
+    // Auto populate the line item row
+    if (activeItemIndex !== null) {
+      handleItemChange(activeItemIndex, 'name', item.name);
+      handleItemChange(activeItemIndex, 'hsnCode', item.hsnCode || '');
+      handleItemChange(activeItemIndex, 'rate', item.basePrice);
+      handleItemChange(activeItemIndex, 'taxPercent', item.taxRate);
+      handleItemChange(activeItemIndex, 'inventoryId', item.id);
+      handleItemChange(activeItemIndex, 'unit', item.unit || 'NOS-NUMBERS');
+    }
+    
+    // Clean up and close
+    setNewItem({ taxRate: 18, currentStock: 0, unit: 'NOS-NUMBERS' });
+    setIsItemDialogOpen(false);
+    setActiveItemIndex(null);
+  };
+
+  const handleOpenAddItemDialog = (index: number) => {
+    setActiveItemIndex(index);
+    setIsItemDialogOpen(true);
+  };
 
   const termsTemplates = {
     'general': '1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if payment is delayed by more than 30 days.',
@@ -430,7 +511,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
             <Label>Client</Label>
             <div className="flex gap-2">
               <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                 value={clientId}
                 onChange={handleClientSelect}
               >
@@ -439,6 +520,16 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="icon" 
+                className="h-10 w-10 shrink-0" 
+                onClick={() => setIsClientDialogOpen(true)}
+                title="Quick Add New Client"
+              >
+                <Plus className="h-4 w-4 text-blue-600" />
+              </Button>
             </div>
           </div>
           <div className="space-y-2">
@@ -512,16 +603,28 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
               <div className="flex-1 space-y-2">
                 <Label className="text-xs">Product/Service</Label>
                 <div className="flex gap-2">
-                  <select 
-                    className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    onChange={(e) => handleInventorySelect(index, e)}
-                    value={item.inventoryId || ''}
-                  >
-                    <option value="">Catalog...</option>
-                    {inventory.map(inv => (
-                      <option key={inv.id} value={inv.id}>{inv.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-1.5 items-center">
+                    <select 
+                      className="flex h-10 w-96 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      onChange={(e) => handleInventorySelect(index, e)}
+                      value={item.inventoryId || ''}
+                    >
+                      <option value="">Catalog...</option>
+                      {inventory.map(inv => (
+                        <option key={inv.id} value={inv.id}>{inv.name}</option>
+                      ))}
+                    </select>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-10 w-10 shrink-0 border-blue-200 hover:border-blue-300"
+                      onClick={() => handleOpenAddItemDialog(index)}
+                      title="Quick Add New Item to Catalog"
+                    >
+                      <Plus className="h-4 w-4 text-blue-600" />
+                    </Button>
+                  </div>
                   <Input 
                     className="flex-1"
                     placeholder="Item Name" 
@@ -630,6 +733,158 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
           </Button>
         </div>
       </CardContent>
+
+      {/* Quick Add Client Dialog */}
+      <Dialog open={isClientDialogOpen} onOpenChange={setIsClientDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Quick Add Client / Party</DialogTitle>
+            <DialogDescription>Create a new party and auto-select them for this invoice.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="c-name" className="text-right">Name *</Label>
+              <Input
+                id="c-name"
+                className="col-span-3"
+                value={newClient.name || ''}
+                onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                placeholder="Acme Corp"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="c-type" className="text-right">Type</Label>
+              <select
+                id="c-type"
+                className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={newClient.type || 'client'}
+                onChange={e => setNewClient({ ...newClient, type: e.target.value as any })}
+              >
+                <option value="client">Client (Customer)</option>
+                <option value="vendor">Vendor (Supplier)</option>
+                <option value="agent">Agent (Broker)</option>
+                <option value="both">Both (Client & Vendor)</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="c-gstin" className="text-right">GSTIN</Label>
+              <Input
+                id="c-gstin"
+                className="col-span-3"
+                value={newClient.gstin || ''}
+                onChange={e => setNewClient({ ...newClient, gstin: e.target.value.toUpperCase() })}
+                placeholder="29ABCDE1234F1Z5"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="c-phone" className="text-right">Phone</Label>
+              <Input
+                id="c-phone"
+                className="col-span-3"
+                value={newClient.phone || ''}
+                onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
+                placeholder="+91 9876543210"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="c-address" className="text-right">Address</Label>
+              <textarea
+                id="c-address"
+                className="col-span-3 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={newClient.address || ''}
+                onChange={e => setNewClient({ ...newClient, address: e.target.value })}
+                placeholder="123 Business Road, Suite 4"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsClientDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleQuickAddClient}>Save Party</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Add Item Dialog */}
+      <Dialog open={isItemDialogOpen} onOpenChange={setIsItemDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Quick Add Product / Item</DialogTitle>
+            <DialogDescription>Add a new item to your catalog and insert it into this line item.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-name" className="text-right">Name *</Label>
+              <Input
+                id="i-name"
+                className="col-span-3"
+                value={newItem.name || ''}
+                onChange={e => setNewItem({ ...newItem, name: e.target.value })}
+                placeholder="Product Description"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-hsn" className="text-right">HSN/SAC</Label>
+              <Input
+                id="i-hsn"
+                className="col-span-3"
+                value={newItem.hsnCode || ''}
+                onChange={e => setNewItem({ ...newItem, hsnCode: e.target.value })}
+                placeholder="HSN Code"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-unit" className="text-right">Unit *</Label>
+              <select
+                id="i-unit"
+                className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={newItem.unit || 'NOS-NUMBERS'}
+                onChange={e => setNewItem({ ...newItem, unit: e.target.value })}
+              >
+                {UQC_LIST.map(uqc => (
+                  <option key={uqc} value={uqc}>{uqc}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-price" className="text-right">Price (₹) *</Label>
+              <Input
+                id="i-price"
+                type="number"
+                className="col-span-3"
+                value={newItem.basePrice === undefined ? '' : newItem.basePrice}
+                onChange={e => setNewItem({ ...newItem, basePrice: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-tax" className="text-right">GST Rate (%)</Label>
+              <Input
+                id="i-tax"
+                type="number"
+                className="col-span-3"
+                value={newItem.taxRate === undefined ? '' : newItem.taxRate}
+                onChange={e => setNewItem({ ...newItem, taxRate: parseFloat(e.target.value) || 0 })}
+                placeholder="18"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="i-stock" className="text-right">Stock</Label>
+              <Input
+                id="i-stock"
+                type="number"
+                className="col-span-3"
+                value={newItem.currentStock === undefined ? '' : newItem.currentStock}
+                onChange={e => setNewItem({ ...newItem, currentStock: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsItemDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleQuickAddItem}>Save Item</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

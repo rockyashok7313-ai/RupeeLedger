@@ -119,6 +119,17 @@ async function migrateSecuritySettings(sec: SecuritySettings, userId: string): P
 }
 
 
+async function getAuthToken(): Promise<string | null> {
+  const customToken = localStorage.getItem("rupee_ledger_token");
+  if (customToken) return customToken;
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    return session?.access_token || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function pushSyncToMongoDB(
     userId: string,
     accountsList: Account[],
@@ -134,11 +145,43 @@ async function pushSyncToMongoDB(
     receipts?: Receipt[]
 ) {
   try {
-    // Write to Supabase ONLY!
-    await pushSyncToSupabase(
-      userId, accountsList, transactionsList, businessProfile, subscription, securitySettings,
-      clients, inventory, invoices, expenses, recurringTemplates, receipts
-    );
+    // 1. Sync with Supabase (primary cloud storage)
+    try {
+      await pushSyncToSupabase(
+        userId, accountsList, transactionsList, businessProfile, subscription, securitySettings,
+        clients, inventory, invoices, expenses, recurringTemplates, receipts
+      );
+    } catch (err) {
+      console.error("Supabase backup sync error:", err);
+    }
+
+    // 2. Sync with MongoDB (reseller, keys, fallback backing)
+    const token = await getAuthToken();
+    const res = await fetch('/api/ledger/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        userId,
+        accounts: accountsList,
+        transactions: transactionsList,
+        businessProfile,
+        subscription,
+        securitySettings,
+        clients,
+        inventory,
+        invoices,
+        expenses,
+        recurringTemplates,
+        receipts,
+        action: 'push'
+      })
+    });
+    if (!res.ok) {
+      console.warn("MongoDB sync push backup failed:", await res.text());
+    }
   } catch (err) {
     console.error("MongoDB backup sync error:", err);
     throw err;
@@ -206,6 +249,15 @@ export default function RupeeLedger() {
     printFooter: ""
   });
 
+  const getDeviceId = (): string => {
+    let devId = localStorage.getItem("rupee_ledger_device_id");
+    if (!devId) {
+      devId = "device_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem("rupee_ledger_device_id", devId);
+    }
+    return devId;
+  };
+
   const [subscription, setSubscription] = useState<Subscription>({
     status: "active",
     plan: "Free Trial (7 Days)",
@@ -214,6 +266,69 @@ export default function RupeeLedger() {
     licenseKey: "FREE-TRIAL",
     purchasedAt: Date.now()
   });
+
+  const getRemainingDays = (sub: Subscription | null | undefined): number => {
+    if (!sub || !sub.renewalDate) return 0;
+    try {
+      const parsedDate = parse(sub.renewalDate, "dd-MM-yyyy", new Date());
+      const diffTime = parsedDate.getTime() - new Date().getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const getMergedSubscription = (cloudSub: Subscription | null | undefined): Subscription => {
+    const initialSubscription: Subscription = {
+      status: "active",
+      plan: "Free Trial (7 Days)",
+      price: "₹199 / month",
+      renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
+      licenseKey: "FREE-TRIAL",
+      purchasedAt: Date.now()
+    };
+
+    let localSub: Subscription | null = null;
+    try {
+      const savedSub = localStorage.getItem("rupee_ledger_subscription");
+      if (savedSub) {
+        localSub = JSON.parse(savedSub);
+      }
+    } catch (e) {
+      console.error("Error parsing local subscription", e);
+    }
+
+    const cloudDays = getRemainingDays(cloudSub);
+    const localDays = getRemainingDays(localSub);
+
+    const hasLocalActiveKey = localSub && localSub.licenseKey && localSub.licenseKey !== "FREE-TRIAL" && localDays > 0;
+    const hasCloudActiveKey = cloudSub && cloudSub.licenseKey && cloudSub.licenseKey !== "FREE-TRIAL" && cloudDays > 0;
+
+    if (hasLocalActiveKey) {
+      if (!hasCloudActiveKey || localDays > cloudDays) {
+        console.log(`[SUBSCRIPTION] Merging local license key ${localSub!.licenseKey} (${localDays} days) over cloud subscription.`);
+        return {
+          ...initialSubscription,
+          ...cloudSub,
+          licenseKey: localSub!.licenseKey,
+          renewalDate: localSub!.renewalDate,
+          plan: localSub!.plan,
+          price: localSub!.price,
+          purchasedAt: localSub!.purchasedAt || Date.now(),
+          status: "active"
+        };
+      }
+    }
+
+    if (cloudSub) {
+      const s = { ...initialSubscription, ...cloudSub };
+      if (s.price === '₹500 / month' || s.price === '₹500/month') s.price = '₹199 / month';
+      if (s.price === '₹5,000 / year' || s.price === '₹5000 / year') s.price = '₹1,999 / year';
+      return s;
+    }
+    return initialSubscription;
+  };
 
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
     pinEnabled: false,
@@ -239,6 +354,9 @@ export default function RupeeLedger() {
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  const [wasenderApiKey, setWasenderApiKey] = useState(() => {
+    return localStorage.getItem("rupee_ledger_wasender_api_key") || "";
+  });
   // Email OTP login states
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpInput, setEmailOtpInput] = useState("");
@@ -373,7 +491,10 @@ export default function RupeeLedger() {
           invoices,
           expenses,
           recurringTemplates,
-          receipts
+          receipts,
+          businessProfile,
+          subscription,
+          securitySettings
         };
         localStorage.setItem("rupee_ledger_auto_backup_data", JSON.stringify(backupData));
         localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
@@ -434,12 +555,33 @@ export default function RupeeLedger() {
             } else {
               if (syncData.exists) {
                 if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
-                if (syncData.subscription) {
-                  const s = syncData.subscription;
-                  if (s.price === '₹500 / month') s.price = '₹199 / month';
-                  if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
-                  setSubscription(s);
+                
+                const mergedSub = getMergedSubscription(syncData.subscription);
+                setSubscription(mergedSub);
+
+                // If local active key was merged and is not yet updated in MongoDB, push it
+                if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
+                  console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to MongoDB.");
+                  try {
+                    await pushSyncToMongoDB(
+                      supabaseUser.id,
+                      syncData.accounts || [],
+                      syncData.transactions || [],
+                      syncData.businessProfile || businessProfile,
+                      mergedSub,
+                      syncData.securitySettings || securitySettings,
+                      syncData.clients || clients,
+                      syncData.inventory || inventory,
+                      syncData.invoices || invoices,
+                      syncData.expenses || expenses,
+                      syncData.recurringTemplates || recurringTemplates,
+                      syncData.receipts || receipts
+                    );
+                  } catch (e) {
+                    console.error("Failed to push merged subscription to MongoDB", e);
+                  }
                 }
+
                 if (syncData.securitySettings) {
                   const migrated = await migrateSecuritySettings(syncData.securitySettings, supabaseUser.id);
                   setSecuritySettings(migrated);
@@ -456,21 +598,14 @@ export default function RupeeLedger() {
                 if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
                 if (syncData.receipts) setReceipts(syncData.receipts);
               } else {
-                const initialSubscription: Subscription = {
-                  status: "active",
-                  plan: "Free Trial (7 Days)",
-                  price: "₹199 / month",
-                  renewalDate: format(addDays(new Date(), 7), "dd-MM-yyyy"),
-                  licenseKey: "FREE-TRIAL",
-                  purchasedAt: Date.now()
-                };
-                setSubscription(initialSubscription);
+                const mergedSub = getMergedSubscription(null);
+                setSubscription(mergedSub);
                 await pushSyncToMongoDB(
                   supabaseUser.id,
                   [],
                   [],
                   businessProfile,
-                  initialSubscription,
+                  mergedSub,
                   securitySettings,
                   clients, inventory, invoices, expenses, recurringTemplates, receipts
                 );
@@ -562,9 +697,13 @@ export default function RupeeLedger() {
                 
                 
                 if (!syncData) {
+                  const token = await getAuthToken();
                   const syncRes = await fetch('/api/ledger/sync', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
                     body: JSON.stringify({ userId: parsed.id, action: 'pull' })
                   });
                   if (syncRes.ok) {
@@ -578,12 +717,33 @@ export default function RupeeLedger() {
                     await loadLocalStorageData(parsed.id);
                   } else if (syncData.exists) {
                     if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
-                    if (syncData.subscription) {
-                      const s = syncData.subscription;
-                      if (s.price === '₹500 / month') s.price = '₹199 / month';
-                      if (s.price === '₹5,000 / year') s.price = '₹1,999 / year';
-                      setSubscription(s);
+                    
+                    const mergedSub = getMergedSubscription(syncData.subscription);
+                    setSubscription(mergedSub);
+
+                    // If local active key was merged and is not yet updated in MongoDB, push it
+                    if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
+                      console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to MongoDB.");
+                      try {
+                        await pushSyncToMongoDB(
+                          parsed.id,
+                          syncData.accounts || [],
+                          syncData.transactions || [],
+                          syncData.businessProfile || businessProfile,
+                          mergedSub,
+                          syncData.securitySettings || securitySettings,
+                          syncData.clients || clients,
+                          syncData.inventory || inventory,
+                          syncData.invoices || invoices,
+                          syncData.expenses || expenses,
+                          syncData.recurringTemplates || recurringTemplates,
+                          syncData.receipts || receipts
+                        );
+                      } catch (e) {
+                        console.error("Failed to push merged subscription to MongoDB", e);
+                      }
                     }
+
                     if (syncData.securitySettings) {
                       const migrated = await migrateSecuritySettings(syncData.securitySettings, parsed.id);
                       setSecuritySettings(migrated);
@@ -600,6 +760,8 @@ export default function RupeeLedger() {
                     if (syncData.recurringTemplates) setRecurringTemplates(syncData.recurringTemplates);
                     if (syncData.receipts) setReceipts(syncData.receipts);
                   } else {
+                    const mergedSub = getMergedSubscription(null);
+                    setSubscription(mergedSub);
                     await loadLocalStorageData(parsed.id);
                   }
                 } else {
@@ -650,10 +812,19 @@ export default function RupeeLedger() {
                     subscription.licenseKey === "FREE-TRIAL" || 
                     subscription.plan.toLowerCase().includes("trial");
 
+    let currentlyExpired = false;
+
     if (isTrial && subscription.purchasedAt) {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
       if (Date.now() - subscription.purchasedAt > sevenDays) {
+        currentlyExpired = true;
         setIsTrialExpired(true);
+        if (subscription.status !== "expired") {
+          setSubscription(prev => ({
+            ...prev,
+            status: "expired"
+          }));
+        }
       } else {
         setIsTrialExpired(false);
       }
@@ -663,10 +834,95 @@ export default function RupeeLedger() {
         ...prev,
         purchasedAt: Date.now()
       }));
-    } else {
-      setIsTrialExpired(false);
+    } else if (!isTrial) {
+      // Non-trial active key checks (keep active until its expire)
+      const remainingDays = getRemainingDays(subscription);
+      if (remainingDays > 0) {
+        setIsTrialExpired(false);
+        if (subscription.status !== "active") {
+          console.log(`[SUBSCRIPTION] Key ${subscription.licenseKey} has ${remainingDays} days left. Auto-reactivating.`);
+          setSubscription(prev => ({
+            ...prev,
+            status: "active"
+          }));
+        }
+      } else {
+        currentlyExpired = true;
+        setIsTrialExpired(true);
+        if (subscription.status === "active") {
+          console.log(`[SUBSCRIPTION] Key ${subscription.licenseKey} has expired.`);
+          setSubscription(prev => ({
+            ...prev,
+            status: "expired"
+          }));
+        }
+      }
     }
-  }, [isLoaded, user, subscription]);
+
+    // Auto renew if expired and has unused generated keys in inventory
+    const hasExpiredLicense = subscription.status === "expired" || currentlyExpired || isTrialExpired;
+    if (hasExpiredLicense && generatedKeysList.length > 0) {
+      const unusedKeyObj = generatedKeysList.find(k => k.status === "unused");
+      if (unusedKeyObj) {
+        console.log(`[SUBSCRIPTION] Expired. Auto-activating unused key from inventory: ${unusedKeyObj.key}`);
+        autoActivateKey(unusedKeyObj.key);
+      }
+    }
+  }, [isLoaded, user, subscription, generatedKeysList]);
+
+  // Periodic concurrent system lock verification hook
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    if (!subscription.licenseKey || subscription.licenseKey === "FREE-TRIAL") return;
+
+    let active = true;
+    const verifyKeyOnServer = async () => {
+      if (user.authMethod === 'guest') return;
+      try {
+        const token = await getAuthToken();
+        const res = await fetch('/api/keys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            key: subscription.licenseKey,
+            userId: user.id,
+            deviceId: getDeviceId()
+          })
+        });
+        if (!active) return;
+
+        if (!res.ok) {
+          const data = await res.json();
+          const errorMsg = data.error || "License verification failed.";
+          toast({
+            title: "License Blocked",
+            description: errorMsg,
+            variant: "destructive"
+          });
+          // Reset to expired trial to block features
+          setSubscription({
+            status: "expired",
+            plan: "Free Trial (Expired)",
+            price: "Free",
+            renewalDate: "",
+            licenseKey: "FREE-TRIAL"
+          });
+        }
+      } catch (err) {
+        console.warn("Could not verify license key with server:", err);
+      }
+    };
+
+    // Run verification on mount/load
+    verifyKeyOnServer();
+
+    // Check again every 3 minutes
+    const interval = setInterval(verifyKeyOnServer, 3 * 60 * 1000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isLoaded, user?.id, subscription.licenseKey]);
 
   // Sync to local storage
 
@@ -784,6 +1040,10 @@ export default function RupeeLedger() {
       const data = await res.json();
       if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
 
+      if (data.token) {
+        localStorage.setItem("rupee_ledger_token", data.token);
+      }
+
       const phoneId = 'p_' + phoneInput;
       const phoneUser: UserProfile = {
         id: phoneId,
@@ -806,7 +1066,10 @@ export default function RupeeLedger() {
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
+              },
               body: JSON.stringify({ userId: phoneId, action: 'pull' })
             });
             if (syncRes.ok) {
@@ -833,7 +1096,26 @@ export default function RupeeLedger() {
           } else {
             if (syncData.exists) {
               if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
-              if (syncData.subscription) setSubscription(syncData.subscription);
+              
+              const mergedSub = getMergedSubscription(syncData.subscription);
+              setSubscription(mergedSub);
+
+              // Push merged subscription if it contains a newly merged local key
+              if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
+                try {
+                  await pushSyncToMongoDB(
+                    phoneId,
+                    syncData.accounts || [],
+                    syncData.transactions || [],
+                    syncData.businessProfile || businessProfile,
+                    mergedSub,
+                    syncData.securitySettings || securitySettings
+                  );
+                } catch (e) {
+                  console.error("Failed to push merged subscription", e);
+                }
+              }
+
               if (syncData.securitySettings) {
                 const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
                 setSecuritySettings(migrated);
@@ -842,7 +1124,9 @@ export default function RupeeLedger() {
               fetchedAccounts = syncData.accounts || [];
               fetchedTxs = syncData.transactions || [];
             } else {
-              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+              const mergedSub = getMergedSubscription(null);
+              setSubscription(mergedSub);
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -918,6 +1202,10 @@ export default function RupeeLedger() {
       const data = await res.json();
       if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
 
+      if (data.token) {
+        localStorage.setItem("rupee_ledger_token", data.token);
+      }
+
       const phoneId = 'p_' + whatsappInput;
       const whatsappUser: UserProfile = {
         id: phoneId,
@@ -940,7 +1228,10 @@ export default function RupeeLedger() {
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
+              },
               body: JSON.stringify({ userId: phoneId, action: 'pull' })
             });
             if (syncRes.ok) {
@@ -967,7 +1258,26 @@ export default function RupeeLedger() {
           } else {
             if (syncData.exists) {
               if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
-              if (syncData.subscription) setSubscription(syncData.subscription);
+              
+              const mergedSub = getMergedSubscription(syncData.subscription);
+              setSubscription(mergedSub);
+
+              // Push merged subscription if it contains a newly merged local key
+              if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
+                try {
+                  await pushSyncToMongoDB(
+                    phoneId,
+                    syncData.accounts || [],
+                    syncData.transactions || [],
+                    syncData.businessProfile || businessProfile,
+                    mergedSub,
+                    syncData.securitySettings || securitySettings
+                  );
+                } catch (e) {
+                  console.error("Failed to push merged subscription", e);
+                }
+              }
+
               if (syncData.securitySettings) {
                 const migrated = await migrateSecuritySettings(syncData.securitySettings, phoneId);
                 setSecuritySettings(migrated);
@@ -976,7 +1286,9 @@ export default function RupeeLedger() {
               fetchedAccounts = syncData.accounts || [];
               fetchedTxs = syncData.transactions || [];
             } else {
-              await pushSyncToMongoDB(phoneId, [], [], businessProfile, subscription, securitySettings);
+              const mergedSub = getMergedSubscription(null);
+              setSubscription(mergedSub);
+              await pushSyncToMongoDB(phoneId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -1052,6 +1364,10 @@ export default function RupeeLedger() {
       const data = await res.json();
       if (!res.ok || !data.verified) throw new Error(data.error || 'Verification failed.');
 
+      if (data.token) {
+        localStorage.setItem("rupee_ledger_token", data.token);
+      }
+
       const emailId = 'e_' + emailInput.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
       const emailUser: UserProfile = {
         id: emailId,
@@ -1074,7 +1390,10 @@ export default function RupeeLedger() {
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
+              },
               body: JSON.stringify({ userId: emailId, action: 'pull' })
             });
             if (syncRes.ok) {
@@ -1101,7 +1420,26 @@ export default function RupeeLedger() {
           } else {
             if (syncData.exists) {
               if (syncData.businessProfile) setBusinessProfile(syncData.businessProfile);
-              if (syncData.subscription) setSubscription(syncData.subscription);
+              
+              const mergedSub = getMergedSubscription(syncData.subscription);
+              setSubscription(mergedSub);
+
+              // Push merged subscription if it contains a newly merged local key
+              if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
+                try {
+                  await pushSyncToMongoDB(
+                    emailId,
+                    syncData.accounts || [],
+                    syncData.transactions || [],
+                    syncData.businessProfile || businessProfile,
+                    mergedSub,
+                    syncData.securitySettings || securitySettings
+                  );
+                } catch (e) {
+                  console.error("Failed to push merged subscription", e);
+                }
+              }
+
               if (syncData.securitySettings) {
                 const migrated = await migrateSecuritySettings(syncData.securitySettings, emailId);
                 setSecuritySettings(migrated);
@@ -1110,7 +1448,9 @@ export default function RupeeLedger() {
               fetchedAccounts = syncData.accounts || [];
               fetchedTxs = syncData.transactions || [];
             } else {
-              await pushSyncToMongoDB(emailId, [], [], businessProfile, subscription, securitySettings);
+              const mergedSub = getMergedSubscription(null);
+              setSubscription(mergedSub);
+              await pushSyncToMongoDB(emailId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -1266,6 +1606,7 @@ export default function RupeeLedger() {
     toast({ title: "Logging out...", description: "Clearing session data." });
     await supabase.auth.signOut();
     localStorage.removeItem("rupee_ledger_user");
+    localStorage.removeItem("rupee_ledger_token");
     setUser(null);
     setAccounts([]);
     setTransactions([]);
@@ -1372,7 +1713,7 @@ export default function RupeeLedger() {
       const orderResponse = await fetch(`${targetUrl}/api/razorpay/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount })
+        body: JSON.stringify({ amount, userId: user?.id || 'guest_local', duration })
       });
 
       if (!orderResponse.ok) {
@@ -1501,7 +1842,7 @@ export default function RupeeLedger() {
 
   const fetchGeneratedKeys = async (userId: string) => {
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const token = await getAuthToken();
       const res = await fetch(`/api/keys?userId=${userId}`, {
         headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
       });
@@ -1569,7 +1910,7 @@ export default function RupeeLedger() {
       let savedToCloud = false;
       if (user && user.authMethod !== 'guest') {
         try {
-          const token = (await supabase.auth.getSession()).data.session?.access_token;
+          const token = await getAuthToken();
           const res = await fetch('/api/keys', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
@@ -1623,23 +1964,20 @@ export default function RupeeLedger() {
     }
   };
 
-  const [licenseInput, setLicenseInput] = useState("");
-  const handleActivateKey = async () => {
-    const keyStr = licenseInput.trim().toUpperCase();
-    if (!keyStr) return;
-
+  const autoActivateKey = async (keyStr: string) => {
     let activatedCloud = false;
     let durationDays = 30;
 
     if (user && user.authMethod !== 'guest') {
       try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const token = await getAuthToken();
         const res = await fetch('/api/keys', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
           body: JSON.stringify({
             key: keyStr,
-            userId: user.id
+            userId: user.id,
+            deviceId: getDeviceId()
           })
         });
         if (res.ok) {
@@ -1647,13 +1985,10 @@ export default function RupeeLedger() {
           if (!data.error && !data.isOfflineFallback) {
             activatedCloud = true;
             durationDays = data.durationDays || 30;
-          } else if (data.error) {
-            toast({ title: "Activation Failed", description: data.error, variant: "destructive" });
-            return;
           }
         }
       } catch (e) {
-        console.warn("Cloud activation failed, trying local", e);
+        console.warn("Cloud auto-activation failed", e);
       }
     }
 
@@ -1662,14 +1997,117 @@ export default function RupeeLedger() {
       const planName = durationDays === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
       const priceStr = durationDays === 365 ? "₹1,999 / year" : "₹199 / month";
       
-      setSubscription({
+      const newSub: Subscription = {
         status: "active",
         plan: planName,
         price: priceStr,
         renewalDate: newRenewalStr,
         licenseKey: keyStr,
         purchasedAt: Date.now()
+      };
+      setSubscription(newSub);
+      if (user && user.id) {
+        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+      }
+      toast({
+        title: "License Auto-Activated",
+        description: `Your subscription has been renewed using an unused key from your inventory!`
       });
+    } else {
+      // Local validation fallback
+      const localKeyObj = generatedKeysList.find(k => k.key === keyStr);
+      if (localKeyObj && localKeyObj.status === "unused") {
+        setGeneratedKeysList(prev => {
+          const newList = prev.map(k => k.key === keyStr ? { ...k, status: "used", usedBy: user?.id || 'guest_local', usedAt: Date.now() } : k);
+          localStorage.setItem(`rupee_ledger_generated_keys_${user?.id || 'guest_local'}`, JSON.stringify(newList));
+          return newList;
+        });
+
+        const days = localKeyObj.duration === "Annual" ? 365 : 30;
+        const newRenewalStr = format(addDays(new Date(), days), "dd-MM-yyyy");
+        const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
+        const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
+        
+        const newSub: Subscription = {
+          status: "active",
+          plan: planName,
+          price: priceStr,
+          renewalDate: newRenewalStr,
+          licenseKey: keyStr,
+          purchasedAt: Date.now()
+        };
+        setSubscription(newSub);
+        toast({
+          title: "License Auto-Activated (Offline)",
+          description: `Renewed under local policy rules using unused inventory key.`
+        });
+        if (user && user.id && user.authMethod !== 'guest') {
+          pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+        }
+      }
+    }
+  };
+
+  const [licenseInput, setLicenseInput] = useState("");
+  const handleActivateKey = async () => {
+    const keyStr = licenseInput.trim().toUpperCase();
+    if (!keyStr) return;
+
+    let activatedCloud = false;
+    let durationDays = 30;
+    let cloudError = "";
+
+    if (user && user.authMethod !== 'guest') {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch('/api/keys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            key: keyStr,
+            userId: user.id,
+            deviceId: getDeviceId()
+          })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          if (!data.error && !data.isOfflineFallback) {
+            activatedCloud = true;
+            durationDays = data.durationDays || 30;
+          } else if (data.error) {
+            cloudError = data.error;
+          }
+        } else {
+          cloudError = data.error || "Server validation failed.";
+        }
+      } catch (e) {
+        console.warn("Cloud activation failed, trying local", e);
+      }
+    }
+
+    if (cloudError) {
+      toast({ title: "Activation Failed", description: cloudError, variant: "destructive" });
+      return;
+    }
+
+    if (activatedCloud) {
+      const newRenewalStr = format(addDays(new Date(), durationDays), "dd-MM-yyyy");
+      const planName = durationDays === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
+      const priceStr = durationDays === 365 ? "₹1,999 / year" : "₹199 / month";
+      
+      const newSub: Subscription = {
+        status: "active",
+        plan: planName,
+        price: priceStr,
+        renewalDate: newRenewalStr,
+        licenseKey: keyStr,
+        purchasedAt: Date.now()
+      };
+      setSubscription(newSub);
+      if (user && user.id) {
+        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+      }
       toast({
         title: "License Activated",
         description: `Successfully upgraded to ${planName}!`
@@ -1689,18 +2127,33 @@ export default function RupeeLedger() {
       }
       
       if (localKeyObj && localKeyObj.status === "used") {
-        toast({
-          title: "Key Already Used",
-          description: "This license key has already been activated.",
-          variant: "destructive"
-        });
-        return;
+        const localUserId = user?.id || 'guest_local';
+        const isSameLocalUser = (localKeyObj as any).usedBy === localUserId;
+        const localKeyDays = localKeyObj.duration === "Annual" ? 365 : 30;
+        const expiryTime = ((localKeyObj as any).usedAt || localKeyObj.createdAt || Date.now()) + (localKeyDays * 24 * 60 * 60 * 1000);
+        const isExpired = Date.now() > expiryTime;
+
+        if (!isSameLocalUser) {
+          toast({
+            title: "Key Already Used",
+            description: "This license key has already been activated by another account.",
+            variant: "destructive"
+          });
+          return;
+        } else if (isExpired) {
+          toast({
+            title: "Key Expired",
+            description: "This license key has expired.",
+            variant: "destructive"
+          });
+          return;
+        }
       }
 
       // Mark local key as used (if it exists locally)
       if (localKeyObj) {
         setGeneratedKeysList(prev => {
-          const newList = prev.map(k => k.key === keyStr ? { ...k, status: "used" } : k);
+          const newList = prev.map(k => k.key === keyStr ? { ...k, status: "used", usedBy: user?.id || 'guest_local', usedAt: Date.now() } : k);
           localStorage.setItem(`rupee_ledger_generated_keys_${user?.id || 'guest_local'}`, JSON.stringify(newList));
           return newList;
         });
@@ -1718,19 +2171,23 @@ export default function RupeeLedger() {
       const planName = days === 365 ? "Pro Business (Annual License)" : "Pro Business (Monthly License)";
       const priceStr = days === 365 ? "₹1,999 / year" : "₹199 / month";
       
-      setSubscription({
+      const newSub: Subscription = {
         status: "active",
         plan: planName,
         price: priceStr,
         renewalDate: newRenewalStr,
         licenseKey: keyStr,
         purchasedAt: Date.now()
-      });
+      };
+      setSubscription(newSub);
       setLicenseInput("");
       toast({
         title: "License Activated (Offline Mode)",
         description: `License key verified under local policy rules.`,
       });
+      if (user && user.id && user.authMethod !== 'guest') {
+        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+      }
     }
   };
 
@@ -2039,7 +2496,19 @@ export default function RupeeLedger() {
   };
 
   const handleExportData = () => {
-    const data = { accounts, transactions };
+    const data = { 
+      accounts, 
+      transactions,
+      clients,
+      inventory,
+      invoices,
+      expenses,
+      recurringTemplates,
+      receipts,
+      businessProfile,
+      subscription,
+      securitySettings
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2098,9 +2567,20 @@ export default function RupeeLedger() {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed && Array.isArray(parsed.accounts) && Array.isArray(parsed.transactions)) {
           recalculateData(parsed.accounts, parsed.transactions);
+          
+          if (parsed.clients) setClients(parsed.clients);
+          if (parsed.inventory) setInventory(parsed.inventory);
+          if (parsed.invoices) setInvoices(parsed.invoices);
+          if (parsed.expenses) setExpenses(parsed.expenses);
+          if (parsed.recurringTemplates) setRecurringTemplates(parsed.recurringTemplates);
+          if (parsed.receipts) setReceipts(parsed.receipts);
+          if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile);
+          if (parsed.subscription) setSubscription(parsed.subscription);
+          if (parsed.securitySettings) setSecuritySettings(parsed.securitySettings);
+
           toast({ 
             title: "Backup Restored Successfully", 
-            description: `Imported ${parsed.accounts.length} accounts and ${parsed.transactions.length} transactions.` 
+            description: `Imported ${parsed.accounts.length} accounts, transactions, and system configuration.` 
           });
         } else {
           throw new Error("Invalid backup file format. Must contain accounts and transactions arrays.");
@@ -3898,9 +4378,51 @@ export default function RupeeLedger() {
                             Verify & Activate
                           </Button>
                         </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          Current active system key: <span className="font-mono font-bold text-slate-600">{subscription.licenseKey || "None"}</span>
-                        </p>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-3 rounded-lg border gap-2 text-xs">
+                          <span className="text-muted-foreground font-medium">
+                            Current active system key: <span className="font-mono font-bold text-slate-800 bg-white border px-1.5 py-0.5 rounded">{subscription.licenseKey || "None"}</span>
+                          </span>
+                          {subscription.licenseKey && subscription.licenseKey !== "FREE-TRIAL" && (
+                            <div className="flex gap-2 w-full sm:w-auto justify-end">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[10px] bg-white text-slate-700 border-slate-200"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(subscription.licenseKey || "");
+                                  toast({ title: "Key Copied", description: "License key copied to clipboard." });
+                                }}
+                              >
+                                Copy Key
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[10px] bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                                onClick={() => {
+                                  const element = document.createElement("a");
+                                  const fileText = `RupeeLedger Pro License Key Backup\n` +
+                                                   `---------------------------------\n` +
+                                                   `Key: ${subscription.licenseKey}\n` +
+                                                   `Plan: ${subscription.plan}\n` +
+                                                   `Price: ${subscription.price}\n` +
+                                                   `Renewal/Expiry: ${subscription.renewalDate}\n` +
+                                                   `Activated on: ${new Date(subscription.purchasedAt || Date.now()).toLocaleString()}\n\n` +
+                                                   `Please save this key securely. To restore, paste this key in System Settings.`;
+                                  const file = new Blob([fileText], {type: 'text/plain'});
+                                  element.href = URL.createObjectURL(file);
+                                  element.download = `rupee_ledger_license_backup_${subscription.licenseKey.substring(0,8)}.txt`;
+                                  document.body.appendChild(element);
+                                  element.click();
+                                  document.body.removeChild(element);
+                                  toast({ title: "License key backup file downloaded!" });
+                                }}
+                              >
+                                Download Key Backup
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -4001,6 +4523,38 @@ export default function RupeeLedger() {
                   )}
 
 
+
+                  {/* WhatsApp API Key Settings Card */}
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                    <CardHeader>
+                      <CardTitle className="premium-heading text-primary flex items-center gap-2">
+                        <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        WhatsApp API Settings
+                      </CardTitle>
+                      <CardDescription>Configure your personal WASenderAPI key for automated invoice sharing</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="wasenderApiKeyInput" className="text-xs font-semibold text-slate-700">WASender API Key</Label>
+                        <Input 
+                          id="wasenderApiKeyInput" 
+                          type="password"
+                          value={wasenderApiKey} 
+                          placeholder="Enter your WASender API Key" 
+                          className="font-mono text-sm bg-white"
+                          onChange={(e) => {
+                            setWasenderApiKey(e.target.value);
+                            localStorage.setItem("rupee_ledger_wasender_api_key", e.target.value);
+                          }} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Get your API key from <a href="https://www.wasenderapi.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">wasenderapi.com</a>. Leave blank to use the system default key.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
 
 {/* Data & Backups Card */}
                   <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
@@ -4476,22 +5030,21 @@ export default function RupeeLedger() {
           <DialogHeader className="no-print">
             <DialogTitle>Chronological Daily Ledger</DialogTitle>
           </DialogHeader>
-          <div className="max-h-[75vh] overflow-y-auto">
-            <DailyReport 
-              transactions={transactions} 
-              accounts={accounts} 
-              dateInput={dailyReportDateInput}
-              setDateInput={setDailyReportDateInput}
-              date={dailyReportDate}
-              reportMode={dailyReportMode}
-              setReportMode={setDailyReportMode}
-              selectedMonth={dailyReportMonth}
-              setSelectedMonth={setDailyReportMonth}
-              selectedYear={dailyReportYear}
-              setSelectedYear={setDailyReportYear}
-              businessProfile={businessProfile}
-            />
-          </div>
+          <DailyReport 
+            transactions={transactions} 
+            accounts={accounts} 
+            dateInput={dailyReportDateInput}
+            setDateInput={setDailyReportDateInput}
+            date={dailyReportDate}
+            reportMode={dailyReportMode}
+            setReportMode={setDailyReportMode}
+            selectedMonth={dailyReportMonth}
+            setSelectedMonth={setDailyReportMonth}
+            selectedYear={dailyReportYear}
+            setSelectedYear={setDailyReportYear}
+            businessProfile={businessProfile}
+            onClose={() => setIsDailyReportOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 

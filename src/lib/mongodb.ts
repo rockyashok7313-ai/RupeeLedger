@@ -1,7 +1,11 @@
 import { MongoClient } from 'mongodb';
-import { attachDatabasePool } from "@vercel/functions";
-
-const uri = process.env.MONGODB_URI?.trim();
+const rawUri = process.env.MONGODB_URI?.trim();
+// Strip surrounding single/double quotes if present to avoid MongoParseError
+const uri = (rawUri && rawUri.startsWith('"') && rawUri.endsWith('"'))
+  ? rawUri.slice(1, -1)
+  : (rawUri && rawUri.startsWith("'") && rawUri.endsWith("'"))
+    ? rawUri.slice(1, -1)
+    : rawUri;
 
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
@@ -27,7 +31,11 @@ export async function getMongoClient(): Promise<MongoClient> {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       });
-      attachDatabasePool(client);
+      client.on('topologyClosed', () => {
+        global._mongoClientPromise = undefined;
+        clientPromise = null;
+        client = null;
+      });
       global._mongoClientPromise = client.connect().catch((err) => {
         global._mongoClientPromise = undefined;
         throw err;
@@ -42,7 +50,13 @@ export async function getMongoClient(): Promise<MongoClient> {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
       });
-      attachDatabasePool(client);
+      client.on('topologyClosed', () => {
+        clientPromise = null;
+        client = null;
+        if (global._mongoClientPromise) {
+          global._mongoClientPromise = undefined;
+        }
+      });
       clientPromise = client.connect().catch((err) => {
         clientPromise = null;
         client = null;

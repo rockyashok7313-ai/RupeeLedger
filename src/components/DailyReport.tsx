@@ -40,7 +40,8 @@ export function DailyReport({
   setSelectedMonth,
   selectedYear,
   setSelectedYear,
-  businessProfile
+  businessProfile,
+  onClose
 }: { 
   transactions: Transaction[]; 
   accounts: Account[];
@@ -54,6 +55,7 @@ export function DailyReport({
   selectedYear: number;
   setSelectedYear: (year: number) => void;
   businessProfile: BusinessProfile;
+  onClose?: () => void;
 }) {
   const [isExporting, setIsExporting] = useState(false);
   const [selectedReportAccountId, setSelectedReportAccountId] = useState<string>("all");
@@ -61,6 +63,13 @@ export function DailyReport({
 
   const [monthView, setMonthView] = useState<Date>(date);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | "all">(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [reportMode, date, selectedReportAccountId, selectedMonth, selectedYear]);
 
   useEffect(() => {
     setMonthView(date);
@@ -79,7 +88,7 @@ export function DailyReport({
     if (selectedReportAccountId !== "all") {
       list = list.filter(t => t.accountId === selectedReportAccountId);
     }
-    return list;
+    return list.sort((a, b) => a.date - b.date);
   }, [transactions, date, selectedReportAccountId]);
 
   const dailyStats = useMemo(() => {
@@ -153,14 +162,52 @@ export function DailyReport({
   const currentOpeningBalance = reportMode === 'daily' ? (closingBalanceForDay - (dailyStats.credit - dailyStats.debit)) : openingBalanceForMonth;
   const currentClosingBalance = reportMode === 'daily' ? closingBalanceForDay : closingBalanceForMonth;
 
-  const handlePrint = () => {
+  const transactionsWithRunningBalance = useMemo(() => {
+    let runningBalance = currentOpeningBalance;
+    return currentTransactions.map(t => {
+      if (t.type === 'Credit') {
+        runningBalance += t.amount;
+      } else {
+        runningBalance -= t.amount;
+      }
+      return {
+        ...t,
+        runningBalance
+      };
+    });
+  }, [currentTransactions, currentOpeningBalance]);
+
+  const paginatedTransactions = useMemo(() => {
+    if (pageSize === "all") return transactionsWithRunningBalance;
+    const startIndex = (currentPage - 1) * pageSize;
+    return transactionsWithRunningBalance.slice(startIndex, startIndex + pageSize);
+  }, [transactionsWithRunningBalance, currentPage, pageSize]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === "all") return 1;
+    return Math.ceil(currentTransactions.length / pageSize) || 1;
+  }, [currentTransactions.length, pageSize]);
+
+  const handlePrint = async () => {
+    const prevPageSize = pageSize;
+    setPageSize("all");
+    await new Promise(r => setTimeout(r, 150));
     window.print();
+    setPageSize(prevPageSize);
   };
 
   const handleDownloadPDF = async () => {
     if (!reportRef.current) return;
     
+    const prevPageSize = pageSize;
+    const prevPage = currentPage;
+    
     setIsExporting(true);
+    setPageSize("all");
+    
+    // Wait for DOM to expand
+    await new Promise(r => setTimeout(r, 150));
+    
     try {
       // Dynamically import to avoid SSR errors
       const html2canvas = (await import('html2canvas')).default;
@@ -328,15 +375,16 @@ export function DailyReport({
             pdf.setTextColor(15, 23, 42);
             
             if (reportMode === 'monthly') {
-              pdf.text("Date", margin + 3, margin + 32.5);
-              pdf.text("Account", margin + 25, margin + 32.5);
-              pdf.text("Description / Narration", margin + 60, margin + 32.5);
+              pdf.text("Date", margin + 2, margin + 32.5);
+              pdf.text("Account", margin + 22, margin + 32.5);
+              pdf.text("Description / Narration", margin + 55, margin + 32.5);
             } else {
-              pdf.text("Account", margin + 3, margin + 32.5);
-              pdf.text("Description / Narration", margin + 40, margin + 32.5);
+              pdf.text("Account", margin + 2, margin + 32.5);
+              pdf.text("Description / Narration", margin + 35, margin + 32.5);
             }
-            pdf.text("Credit (In)", 160, margin + 32.5, { align: "right" });
-            pdf.text("Debit (Out)", 197, margin + 32.5, { align: "right" });
+            pdf.text("Credit (In)", 135, margin + 32.5, { align: "right" });
+            pdf.text("Debit (Out)", 165, margin + 32.5, { align: "right" });
+            pdf.text("Balance", 197, margin + 32.5, { align: "right" });
           }
           
           canvasYOffset += sliceHeight;
@@ -358,13 +406,15 @@ export function DailyReport({
       console.error(error);
       toast({ title: "Failed to generate PDF", variant: "destructive" });
     } finally {
+      setPageSize(prevPageSize);
+      setCurrentPage(prevPage);
       setIsExporting(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 no-print border-b pb-4">
+    <div className="flex flex-col h-[78vh] max-h-[78vh] -mx-6 -my-6 bg-background rounded-lg overflow-hidden">
+      <div className="flex-none p-6 pb-4 border-b no-print">
         <div className="flex flex-wrap gap-4 items-end justify-between">
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex flex-col gap-1.5">
@@ -539,7 +589,8 @@ export function DailyReport({
         </div>
       </div>
 
-      <div ref={reportRef} className="p-8 bg-white border rounded-lg text-slate-950">
+      <div className="flex-1 overflow-y-auto p-6 pt-2">
+        <div ref={reportRef} className="p-8 bg-white border rounded-lg text-slate-950">
         <div className="text-center border-b pb-6 mb-8 space-y-1">
           <h1 className="text-3xl font-bold text-primary">
             {businessProfile.companyName || "RupeeLedger Pro"}
@@ -582,59 +633,149 @@ export function DailyReport({
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-x-auto w-full">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50">
-                {reportMode === 'monthly' && <TableHead className="text-slate-900">Date</TableHead>}
-                <TableHead className="text-slate-900">Account</TableHead>
-                <TableHead className="text-slate-900">Description / Narration</TableHead>
-                <TableHead className="text-right text-slate-900">Credit (In)</TableHead>
-                <TableHead className="text-right text-slate-900">Debit (Out)</TableHead>
+              <TableRow className="bg-slate-100 border-b-2 border-slate-200">
+                {reportMode === 'monthly' && <TableHead className="text-slate-900 font-bold text-xs uppercase">Date</TableHead>}
+                <TableHead className="text-slate-900 font-bold text-xs uppercase">Account</TableHead>
+                <TableHead className="text-slate-900 font-bold text-xs uppercase">Description / Narration</TableHead>
+                <TableHead className="text-right text-slate-900 font-bold text-xs uppercase">Credit (In)</TableHead>
+                <TableHead className="text-right text-slate-900 font-bold text-xs uppercase">Debit (Out)</TableHead>
+                <TableHead className="text-right text-slate-900 font-bold text-xs uppercase">Balance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentTransactions.length === 0 ? (
+              {paginatedTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={reportMode === 'monthly' ? 5 : 4} className="text-center py-12 text-slate-400 italic">
+                  <TableCell colSpan={reportMode === 'monthly' ? 6 : 5} className="text-center py-12 text-slate-400 italic">
                     No transactions recorded for this period.
                   </TableCell>
                 </TableRow>
               ) : (
-                currentTransactions.map((t) => {
+                paginatedTransactions.map((t) => {
                   const account = accounts.find(a => a.id === t.accountId);
                   return (
-                    <TableRow key={t.id} className="border-b border-slate-100">
-                      {reportMode === 'monthly' && (
-                        <TableCell className="whitespace-nowrap font-medium text-slate-600 text-xs">
-                          {format(new Date(t.date), "dd-MM-yyyy")}
-                        </TableCell>
-                      )}
-                      <TableCell className="font-medium text-slate-800">{account?.name || 'Unknown'}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{t.description}</TableCell>
-                      <TableCell className="text-right text-green-600 font-semibold">
-                        {t.type === 'Credit' ? <CurrencyDisplay amount={t.amount} /> : '-'}
-                      </TableCell>
-                      <TableCell className="text-right text-destructive font-semibold">
-                        {t.type === 'Debit' ? <CurrencyDisplay amount={t.amount} /> : '-'}
-                      </TableCell>
-                    </TableRow>
+                     <TableRow key={t.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                       {reportMode === 'monthly' && (
+                         <TableCell className="whitespace-nowrap font-bold text-slate-700 text-xs">
+                           {format(new Date(t.date), "dd-MM-yyyy")}
+                         </TableCell>
+                       )}
+                       <TableCell className="font-bold text-slate-900">{account?.name || 'Unknown'}</TableCell>
+                       <TableCell className="text-xs text-slate-600 font-medium">{t.description}</TableCell>
+                       <TableCell className="text-right text-green-700 font-bold">
+                         {t.type === 'Credit' ? <CurrencyDisplay amount={t.amount} /> : '-'}
+                       </TableCell>
+                       <TableCell className="text-right text-destructive font-bold">
+                         {t.type === 'Debit' ? <CurrencyDisplay amount={t.amount} /> : '-'}
+                       </TableCell>
+                       <TableCell className="text-right text-slate-950 font-bold bg-slate-50/30">
+                         <CurrencyDisplay amount={t.runningBalance} />
+                       </TableCell>
+                     </TableRow>
                   );
                 })
               )}
             </TableBody>
             <TableFooter>
-              <TableRow className="bg-slate-50 font-bold">
-                <TableCell colSpan={reportMode === 'monthly' ? 3 : 2} className="text-right text-slate-700">PERIOD TOTALS:</TableCell>
-                <TableCell className="text-right text-green-700">
+              <TableRow className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                <TableCell colSpan={reportMode === 'monthly' ? 3 : 2} className="text-right text-slate-800 uppercase tracking-wider text-xs font-bold">Period Totals:</TableCell>
+                <TableCell className="text-right text-green-700 font-extrabold text-sm">
                   <CurrencyDisplay amount={currentStats.credit} />
                 </TableCell>
-                <TableCell className="text-right text-destructive">
+                <TableCell className="text-right text-destructive font-extrabold text-sm">
                   <CurrencyDisplay amount={currentStats.debit} />
+                </TableCell>
+                <TableCell className="text-right text-primary font-extrabold text-sm bg-slate-200/50">
+                  <CurrencyDisplay amount={currentClosingBalance} />
                 </TableCell>
               </TableRow>
             </TableFooter>
           </Table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="no-print mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4 text-xs font-semibold text-slate-500">
+          <div className="flex items-center gap-2">
+            <span>Show:</span>
+            <Select 
+              value={pageSize.toString()} 
+              onValueChange={(val) => {
+                const valNum = val === 'all' ? 'all' : parseInt(val);
+                setPageSize(valNum);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[85px] h-8 bg-background border-slate-200 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 rows</SelectItem>
+                <SelectItem value="20">20 rows</SelectItem>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="all">All rows</SelectItem>
+              </SelectContent>
+            </Select>
+            <span>
+              {pageSize !== 'all' ? (
+                `Showing ${Math.min(currentTransactions.length, (currentPage - 1) * pageSize + 1)}-${Math.min(currentTransactions.length, currentPage * pageSize)} of ${currentTransactions.length} entries`
+              ) : (
+                `Showing ${currentTransactions.length} entries`
+              )}
+            </span>
+          </div>
+
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                className="h-8 w-8 text-slate-500 hover:text-slate-900 border-slate-200 bg-white"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+              >
+                &lt;&lt;
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                className="h-8 w-8 text-slate-500 hover:text-slate-900 border-slate-200 bg-white"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                &lt;
+              </Button>
+              
+              <div className="px-2.5 py-1.5 border rounded bg-slate-50 text-slate-700 text-xs">
+                Page {currentPage} of {totalPages}
+              </div>
+
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                className="h-8 w-8 text-slate-500 hover:text-slate-900 border-slate-200 bg-white"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                &gt;
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                className="h-8 w-8 text-slate-500 hover:text-slate-900 border-slate-200 bg-white"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+              >
+                &gt;&gt;
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="mt-8 flex flex-col items-end space-y-2">
@@ -662,6 +803,14 @@ export function DailyReport({
             Period summary generated by {businessProfile.companyName || "RupeeLedger Pro"} on {format(new Date(), 'PPP p')}.
           </p>
         </div>
+      </div>
+    </div>
+
+      {/* 3. Footer (Fixed Close Button) */}
+      <div className="flex-none p-4 border-t mt-auto flex justify-end no-print bg-slate-50 border-slate-200/80 rounded-b-lg">
+        <Button onClick={onClose} variant="outline" className="h-9 px-6 font-semibold bg-white text-slate-700 hover:bg-slate-50">
+          Close Report
+        </Button>
       </div>
     </div>
   );

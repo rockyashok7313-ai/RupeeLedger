@@ -1,39 +1,53 @@
 import { NextResponse } from '../../../next-response.ts';
 import { signAppToken } from '../../../../src/lib/auth-verify.ts';
+import { saveOtp, verifyOtp } from '../../../utils/otp-mongo.ts';
+import { checkRateLimit } from '../../../utils/rate-limit.ts';
 import nodemailer from 'nodemailer';
+import { z } from 'zod';
 
-// In-memory OTP store: email -> { otp, expiresAt }
-// Works fine for single-instance serverless; upgrade to Redis for scale.
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+const emailOtpSchema = z.object({
+  email: z.string().trim().email('Invalid email format.'),
+  action: z.enum(['send', 'verify']),
+  otp: z.string().trim().optional()
+});
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-function cleanExpired() {
-  const now = Date.now();
-  for (const [key, val] of otpStore.entries()) {
-    if (val.expiresAt < now) otpStore.delete(key);
-  }
-}
-
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { email, action, otp: submittedOtp } = body;
-
-    if (!email || !action) {
-      return NextResponse.json({ error: 'Missing email or action.' }, { status: 400 });
+    const rawBody = await request.json();
+    
+    // Schema Validation
+    const parsed = emailOtpSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const errorMsg = parsed.error.errors.map(e => e.message).join(', ');
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    cleanExpired();
+    
+    const { email, action, otp: submittedOtp } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
+    
+    // IP Rate Limiting (60 requests per 15 minutes window per IP)
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || request.headers.get('x-real-ip') || '127.0.0.1';
+    const rateLimitResult = await checkRateLimit(clientIp, 'email-otp', 60, 900);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json({ 
+        error: 'Too many requests from this IP. Please try again in 15 minutes.' 
+      }, { status: 429 });
+    }
 
     // --- SEND OTP ---
     if (action === 'send') {
       const otp = generateOtp();
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-      otpStore.set(normalizedEmail, { otp, expiresAt });
+      
+      // Save and check identifier cooldown (60s minimum wait between emails)
+      const saveResult = await saveOtp(normalizedEmail, otp, expiresAt);
+      if (!saveResult.success) {
+        return NextResponse.json({ error: saveResult.error }, { status: 429 });
+      }
 
       const smtpHost = process.env.SMTP_HOST;
       const smtpPort = process.env.SMTP_PORT;
@@ -81,18 +95,12 @@ export async function POST(request: Request) {
       if (!submittedOtp) {
         return NextResponse.json({ verified: false, error: 'OTP is required.' }, { status: 400 });
       }
-      const record = otpStore.get(normalizedEmail);
-      if (!record) {
-        return NextResponse.json({ verified: false, error: 'OTP expired or not found. Please request a new one.' }, { status: 400 });
+      
+      const verifyResult = await verifyOtp(normalizedEmail, submittedOtp);
+      if (!verifyResult.success) {
+        return NextResponse.json({ verified: false, error: verifyResult.error }, { status: 400 });
       }
-      if (Date.now() > record.expiresAt) {
-        otpStore.delete(normalizedEmail);
-        return NextResponse.json({ verified: false, error: 'OTP has expired. Please request a new one.' }, { status: 400 });
-      }
-      if (submittedOtp.trim() !== record.otp) {
-        return NextResponse.json({ verified: false, error: 'Incorrect OTP.' }, { status: 400 });
-      }
-      otpStore.delete(normalizedEmail);
+      
       const appToken = signAppToken('e_' + normalizedEmail);
       return NextResponse.json({ verified: true, token: appToken });
     }
@@ -103,4 +111,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
-

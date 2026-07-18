@@ -1,10 +1,35 @@
 import { NextResponse } from '../../../next-response.ts';
 import { getMongoDb, isMongoConfigured } from '../../../../src/lib/mongodb.ts';
-import { verifyIdToken, extractToken } from '../../../../src/lib/auth-verify.ts';
+import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
+import { z } from 'zod';
+
+const syncSchema = z.object({
+  userId: z.string().trim().min(1, 'userId is required.'),
+  action: z.enum(['pull', 'push']),
+  accounts: z.array(z.any()).optional(),
+  transactions: z.array(z.any()).optional(),
+  businessProfile: z.any().optional(),
+  subscription: z.any().optional(),
+  securitySettings: z.any().optional(),
+  clients: z.array(z.any()).optional(),
+  inventory: z.array(z.any()).optional(),
+  invoices: z.array(z.any()).optional(),
+  expenses: z.array(z.any()).optional(),
+  recurringTemplates: z.array(z.any()).optional(),
+  receipts: z.array(z.any()).optional(),
+});
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
+    
+    // Zod Schema Validation
+    const parsed = syncSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const errorMsg = parsed.error.errors.map(e => e.message).join(', ');
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
+    }
+
     const { 
       userId, 
       accounts, 
@@ -19,11 +44,7 @@ export async function POST(request: Request) {
       recurringTemplates,
       receipts,
       action 
-    } = body;
-
-    if (!userId || !action) {
-      return NextResponse.json({ error: 'Missing userId or action.' }, { status: 400 });
-    }
+    } = parsed.data;
 
     const token = extractToken(request);
     if (!token) {
@@ -37,9 +58,19 @@ export async function POST(request: Request) {
 
     // Verify that the token owner is the one requested (or it's the admin, or phone matches)
     const isOwner = decodedToken.uid === userId;
-    const isPhoneUser = decodedToken.phone_number && userId === `p_${decodedToken.phone_number}`;
-    const isEmailUser = decodedToken.email && userId === `e_${decodedToken.email}`;
-    const isAdmin = decodedToken.email === 'rockyashok7313@gmail.com';
+    
+    const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);
+
+    const tokenEmail = decodedToken.email ? normalizeString(decodedToken.email) : '';
+    const userEmail = userId.startsWith('e_') ? normalizeString(userId.substring(2)) : normalizeString(userId);
+    const isEmailUser = tokenEmail && tokenEmail === userEmail;
+
+    const tokenPhone = decodedToken.phone_number ? normalizePhone(decodedToken.phone_number) : '';
+    const userPhone = userId.startsWith('p_') ? normalizePhone(userId.substring(2)) : normalizePhone(userId);
+    const isPhoneUser = tokenPhone && tokenPhone === userPhone;
+
+    const isAdmin = checkIsAdmin(decodedToken);
 
     if (!isOwner && !isPhoneUser && !isEmailUser && !isAdmin) {
       console.error(`Unauthorized sync attempt. Token uid: ${decodedToken.uid}, Target: ${userId}`);
@@ -166,8 +197,8 @@ const usersCollection = db.collection('users');
       }
 
       // Helper function to sync arrays
-      const syncArray = async (collection: any, dataArray: any[]) => {
-        if (!Array.isArray(dataArray)) return;
+      const syncArray = async (collection: any, dataArray: any[] | undefined) => {
+        if (!dataArray || !Array.isArray(dataArray)) return;
         const activeIds = dataArray.map(item => item.id);
         await collection.deleteMany({ userId, _id: { $nin: activeIds } });
         for (const item of dataArray) {

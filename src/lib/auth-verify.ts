@@ -45,7 +45,12 @@ export function extractToken(request: Request): string | null {
   return authHeader.split('Bearer ')[1];
 }
 
-const SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'default-secret-key';
+const SECRET = process.env.APP_TOKEN_SECRET || (() => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('APP_TOKEN_SECRET is not configured in production environment!');
+  }
+  return process.env.RAZORPAY_WEBHOOK_SECRET || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'default-secret-key';
+})();
 
 export function signAppToken(userId: string): string {
   const hmac = crypto.createHmac('sha256', SECRET);
@@ -70,4 +75,26 @@ export function verifyAppToken(token: string): { uid: string; email?: string; ph
     return { uid: userId };
   }
   return null;
+}
+
+export function checkIsAdmin(decodedToken: { uid: string; email?: string; phone_number?: string } | null): boolean {
+  if (!decodedToken) return false;
+  
+  const adminIdsEnv = process.env.ADMIN_USER_IDS || '';
+  const adminIds = adminIdsEnv
+    .split(',')
+    .map(id => id.trim().toLowerCase())
+    .filter(Boolean);
+    
+  if (adminIds.length === 0) {
+    return false; // Default: Admin actions fully disabled if not set
+  }
+  
+  const uid = decodedToken.uid.toLowerCase();
+  const email = decodedToken.email?.trim().toLowerCase();
+  const phone = decodedToken.phone_number?.replace(/\D/g, '');
+  
+  return adminIds.includes(uid) || 
+         (email ? adminIds.includes(email) : false) || 
+         (phone ? adminIds.includes(phone) : false);
 }

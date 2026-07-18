@@ -13,7 +13,7 @@ async function getAuthenticatedUserId(request: Request) {
 
   // Try custom HMAC token first
   const customUserId = verifyAppToken(token);
-  if (customUserId) return customUserId;
+  if (customUserId) return customUserId.uid;
 
   // Fallback to Firebase token
   try {

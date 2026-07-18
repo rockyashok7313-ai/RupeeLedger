@@ -75,9 +75,13 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
     }
     setIsSuggesting(true);
     try {
+      const token = localStorage.getItem("rupee_ledger_token");
       const response = await fetch("/api/suggest-narration", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ amount, type }),
       });
       if (!response.ok) throw new Error("Failed to get suggestion");

@@ -1,42 +1,57 @@
 import { NextResponse } from '../../../next-response.ts';
 import { signAppToken } from '../../../../src/lib/auth-verify.ts';
+import { saveOtp, verifyOtp } from '../../../utils/otp-mongo.ts';
+import { checkRateLimit } from '../../../utils/rate-limit.ts';
+import { z } from 'zod';
 
-// In-memory OTP store: phone -> { otp, expiresAt }
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+const phoneOtpSchema = z.object({
+  phone: z.string().trim(),
+  action: z.enum(['send', 'verify']),
+  otp: z.string().trim().optional()
+});
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-function cleanExpired() {
-  const now = Date.now();
-  for (const [key, val] of otpStore.entries()) {
-    if (val.expiresAt < now) otpStore.delete(key);
-  }
-}
-
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { phone, action, otp: submittedOtp } = body;
-
-    if (!phone || !action) {
-      return NextResponse.json({ error: 'Missing phone or action.' }, { status: 400 });
+    const rawBody = await request.json();
+    
+    // Schema Validation
+    const parsed = phoneOtpSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const errorMsg = parsed.error.errors.map(e => e.message).join(', ');
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
-
+    
+    const { phone, action, otp: submittedOtp } = parsed.data;
+    
     // Normalize: digits only
     const normalizedPhone = phone.replace(/\D/g, '').slice(-10);
     if (normalizedPhone.length < 10) {
       return NextResponse.json({ error: 'Invalid phone number. Must be 10 digits.' }, { status: 400 });
     }
-
-    cleanExpired();
+    
+    // IP Rate Limiting (60 requests per 15 minutes window per IP)
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0] || request.headers.get('x-real-ip') || '127.0.0.1';
+    const rateLimitResult = await checkRateLimit(clientIp, 'phone-otp', 60, 900);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json({ 
+        error: 'Too many requests from this IP. Please try again in 15 minutes.' 
+      }, { status: 429 });
+    }
 
     // --- SEND OTP ---
     if (action === 'send') {
       const otp = generateOtp();
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-      otpStore.set(normalizedPhone, { otp, expiresAt });
+      
+      // Save and check identifier cooldown (60s minimum wait between texts)
+      const saveResult = await saveOtp(normalizedPhone, otp, expiresAt);
+      if (!saveResult.success) {
+        return NextResponse.json({ error: saveResult.error }, { status: 429 });
+      }
 
       // TODO: Integrate SMS provider (MSG91, Twilio, etc.) here
       // For now, OTP is returned in response for UI display (dev/demo mode)
@@ -49,19 +64,12 @@ export async function POST(request: Request) {
       if (!submittedOtp) {
         return NextResponse.json({ verified: false, error: 'OTP is required.' }, { status: 400 });
       }
-      const record = otpStore.get(normalizedPhone);
-      if (!record) {
-        return NextResponse.json({ verified: false, error: 'OTP expired or not found. Please request a new one.' }, { status: 400 });
-      }
-      if (Date.now() > record.expiresAt) {
-        otpStore.delete(normalizedPhone);
-        return NextResponse.json({ verified: false, error: 'OTP has expired. Please request a new one.' }, { status: 400 });
-      }
-      if (submittedOtp.trim() !== record.otp) {
-        return NextResponse.json({ verified: false, error: 'Incorrect OTP. Please try again.' }, { status: 400 });
+      
+      const verifyResult = await verifyOtp(normalizedPhone, submittedOtp);
+      if (!verifyResult.success) {
+        return NextResponse.json({ verified: false, error: verifyResult.error }, { status: 400 });
       }
       
-      otpStore.delete(normalizedPhone);
       const appToken = signAppToken('p_' + normalizedPhone);
       return NextResponse.json({ verified: true, token: appToken });
     }
@@ -72,4 +80,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
-

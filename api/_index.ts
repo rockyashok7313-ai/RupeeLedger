@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 
 // Import route handlers
 import * as AuthEmailOtp from '../backend/routes/auth/email-otp/route.ts';
@@ -14,10 +15,60 @@ import * as RazorpayOrder from '../backend/routes/razorpay/order/route.ts';
 import * as RazorpayVerify from '../backend/routes/razorpay/verify/route.ts';
 import * as RazorpayWebhook from '../backend/routes/razorpay/webhook/route.ts';
 import * as SuggestNarration from '../backend/routes/suggest-narration/route.ts';
+import * as WhatsappSend from '../backend/routes/whatsapp/send/route.ts';
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  'https://www.rupeeledgerpro.com',
+  'https://rupeeledgerpro.com',
+  'capacitor://localhost',
+  'http://localhost',
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      /^https:\/\/v0-indian-payroll-website-.*\.vercel\.app$/.test(origin);
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", "capacitor://localhost", "http://localhost"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://checkout.razorpay.com"],
+      connectSrc: [
+        "'self'", 
+        "capacitor://localhost",
+        "http://localhost",
+        "http://localhost:*",
+        "https://*.supabase.co", 
+        "https://api.razorpay.com", 
+        "https://www.rupeeledgerpro.com",
+        "https://v0-indian-payroll-website-*.vercel.app"
+      ],
+      frameSrc: ["'self'", "https://api.razorpay.com", "https://otpservice.razorpay.com"],
+      imgSrc: ["'self'", "data:", "https://*.supabase.co", "capacitor://localhost", "http://localhost"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
 app.use(express.json());
 
 // Adapter to convert Express request to standard Request, and standard Response to Express response
@@ -74,6 +125,7 @@ const routes = [
   { path: '/api/razorpay/verify', module: RazorpayVerify },
   { path: '/api/razorpay/webhook', module: RazorpayWebhook },
   { path: '/api/suggest-narration', module: SuggestNarration },
+  { path: '/api/whatsapp/send', module: WhatsappSend },
 ];
 
 routes.forEach(route => {

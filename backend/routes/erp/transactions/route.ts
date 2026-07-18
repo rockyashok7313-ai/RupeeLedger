@@ -11,7 +11,7 @@ async function getAuthenticatedUserId(request: Request) {
   if (!token) return null;
 
   const customUserId = verifyAppToken(token);
-  if (customUserId) return customUserId;
+  if (customUserId) return customUserId.uid;
 
   try {
     const decoded = await verifyIdToken(token);

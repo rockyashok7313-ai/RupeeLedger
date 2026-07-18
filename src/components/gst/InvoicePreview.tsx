@@ -7,6 +7,7 @@ import { formatAmountInWords, formatCurrency } from '@/lib/currency';
 import { Label } from '@/components/ui/label';
 import DOMPurify from 'dompurify';
 import { exportInvoiceToPDF } from '@/lib/pdfExport';
+import { WhatsAppShareDialog } from '../WhatsAppShareDialog';
 
 interface Props {
   businessProfile: BusinessProfile;
@@ -15,6 +16,7 @@ interface Props {
 
 export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(invoices.length > 0 ? invoices[invoices.length - 1].id : '');
+  const [isShareOpen, setIsShareOpen] = useState(false);
   
   // Settings State
   const [theme, setTheme] = useState<'Classic' | 'Modern' | 'Minimal'>('Classic');
@@ -26,20 +28,20 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
 
   const invoice = invoices.find(inv => inv.id === selectedInvoiceId);
 
-
-
   const handlePrint = () => {
+    if (!invoice) return;
+    window.print();
+  };
+
+  const handleDownloadPDF = () => {
     if (!invoice) return;
     const filename = `Invoice_${invoice.invoiceNumber || invoice.id}.pdf`;
     exportInvoiceToPDF('invoice-pdf-container', filename);
   };
 
-
   const handleWhatsAppShare = () => {
     if (!invoice) return;
-    const text = `Hello ${invoice.clientName},\n\nPlease find your invoice ${invoice.invoiceNumber || invoice.id} attached.\nAmount Due: ${formatCurrency(invoice.total, invoice.currency || 'INR')}\nDue Date: ${new Date(invoice.dueDate).toLocaleDateString()}\n\nThank you for your business!\n- ${businessProfile.companyName}`;
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    setIsShareOpen(true);
   };
 
   const handleEmailShare = () => {
@@ -55,9 +57,48 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
     <div className="space-y-4">
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; }
-          .print-a4-page { width: 100%; min-height: 297mm; }
+          @page { 
+            size: A4 portrait; 
+            margin: 12mm 10mm 12mm 10mm; 
+          }
+          body { 
+            -webkit-print-color-adjust: exact; 
+            print-color-adjust: exact;
+            background: white !important;
+            color: black !important;
+          }
+          /* Hide non-printable elements */
+          aside, header, nav, .no-print, button, select, input, [role="tablist"], .flex-wrap {
+            display: none !important;
+          }
+          /* Ensure main content container is reset for printing */
+          main, .flex-1, .overflow-auto, .animate-in, .space-y-6, .space-y-4 {
+            overflow: visible !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+          /* Reset Card and layout styles for printing */
+          #invoice-pdf-container, .theme-classic, .theme-modern, .theme-minimal {
+            width: 100% !important;
+            max-width: 100% !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+          .glass-card, .border, .shadow-sm, .shadow-xl {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+          /* Avoid page breaks inside table rows */
+          tr {
+            page-break-inside: avoid !important;
+          }
         }
         .theme-modern .invoice-header { background: #f8fafc; padding-bottom: 1.5rem; }
         .theme-minimal .invoice-header { border-bottom: 1px solid #e2e8f0; }
@@ -88,8 +129,11 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
           <Button onClick={handleEmailShare} variant="outline" className="flex-1 sm:flex-none" disabled={!invoice}>
             Email
           </Button>
-          <Button onClick={handlePrint} variant="default" className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white" disabled={!invoice}>
-            <Printer className="h-4 w-4 mr-2" /> Print / PDF
+          <Button onClick={handleDownloadPDF} variant="outline" className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50" disabled={!invoice}>
+            Download PDF
+          </Button>
+          <Button onClick={handlePrint} variant="default" className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold" disabled={!invoice}>
+            <Printer className="h-4 w-4 mr-2" /> Print / Save PDF (HQ)
           </Button>
         </div>
 
@@ -339,6 +383,15 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
           )}
         </div>
       </div>
+
+      {invoice && (
+        <WhatsAppShareDialog
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+          defaultText={`Hello ${invoice.clientName},\n\nPlease find your invoice ${invoice.invoiceNumber || invoice.id} attached.\nAmount Due: ${formatCurrency(invoice.total, invoice.currency || 'INR')}\nDue Date: ${new Date(invoice.dueDate).toLocaleDateString()}\n\nThank you for your business!\n- ${businessProfile.companyName}`}
+          title="Share Invoice via WhatsApp"
+        />
+      )}
     </div>
   );
 }
