@@ -4,12 +4,9 @@ import { renderLedger } from '../../../templates/ledger.js';
 import { renderVoucher } from '../../../templates/voucher.js';
 import { renderGSTR } from '../../../templates/gstr.js';
 import puppeteerCore from 'puppeteer-core';
+import sparticuzChromium from '@sparticuz/chromium';
 
-// Workaround for sparticuz/chromium missing type definitions in some environments
-const getChromium = async () => {
-  const chromium = (await import('@sparticuz/chromium')).default as any;
-  return chromium;
-};
+const chromium = sparticuzChromium as any;
 
 const RenderRequestSchema = z.object({
   type: z.enum(['invoice', 'ledger', 'voucher', 'gstr']),
@@ -57,7 +54,6 @@ export async function POST(req: Request) {
     }
 
     if (format === 'pdf') {
-      const chromium = await getChromium();
       const isVercel = !!process.env.VERCEL;
       
       console.log(`[PDF] Determining executable path (isVercel: ${isVercel})`);
