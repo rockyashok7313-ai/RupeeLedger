@@ -26,8 +26,9 @@ export function VoucherPrint({
       try {
         const html = await fetchReportHTML('voucher', { transaction, account, businessProfile });
         setHtmlContent(html);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        setHtmlContent(`<html><body><h2 style="color:red; font-family:sans-serif; padding: 20px;">Preview Error</h2><pre style="padding: 20px;">${err.message}</pre></body></html>`);
       }
     }
     loadPreview();

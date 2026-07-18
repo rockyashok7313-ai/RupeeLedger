@@ -28,8 +28,9 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
       try {
         const html = await fetchReportHTML('invoice', { invoice, businessProfile });
         setHtmlContent(html);
-      } catch (err) {
-        console.error("Failed to load preview:", err);
+      } catch (err: any) {
+        console.error(err);
+        setHtmlContent(`<html><body><h2 style="color:red; font-family:sans-serif; padding: 20px;">Preview Error</h2><pre style="padding: 20px;">${err.message}</pre></body></html>`);
       } finally {
         setIsLoading(false);
       }
