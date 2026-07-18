@@ -4,9 +4,6 @@ import { renderLedger } from '../../../templates/ledger.js';
 import { renderVoucher } from '../../../templates/voucher.js';
 import { renderGSTR } from '../../../templates/gstr.js';
 import puppeteerCore from 'puppeteer-core';
-import sparticuzChromium from '@sparticuz/chromium';
-
-const chromium = sparticuzChromium as any;
 
 const RenderRequestSchema = z.object({
   type: z.enum(['invoice', 'ledger', 'voucher', 'gstr']),
@@ -55,6 +52,11 @@ export async function POST(req: Request) {
 
     if (format === 'pdf') {
       const isVercel = !!process.env.VERCEL;
+      let chromium: any;
+      if (isVercel) {
+        const spart = await import('@sparticuz/chromium');
+        chromium = spart.default || spart;
+      }
       
       console.log(`[PDF] Determining executable path (isVercel: ${isVercel})`);
       const executablePath = isVercel 
