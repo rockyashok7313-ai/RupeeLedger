@@ -4977,7 +4977,7 @@ export default function RupeeLedger() {
           <div className="max-h-[70vh] overflow-y-auto pt-2">
             {selectedVoucher && (
               <ErrorBoundary>
-                <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} />
+                <VoucherPrint transaction={selectedVoucher.t} account={selectedVoucher.a} businessProfile={businessProfile} />
               </ErrorBoundary>
             )}
           </div>

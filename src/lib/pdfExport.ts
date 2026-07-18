@@ -1,37 +1,39 @@
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-
-export async function exportInvoiceToPDF(elementId: string, filename: string) {
-  const element = document.getElementById(elementId);
-  if (!element) {
-    console.error(`Element with id ${elementId} not found.`);
-    return;
+export async function fetchReportHTML(type: 'invoice' | 'ledger' | 'voucher' | 'gstr', data: any): Promise<string> {
+  const response = await fetch('/api/reports/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, format: 'html', data }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch report HTML');
   }
+  return await response.text();
+}
 
+export async function downloadReportPDF(type: 'invoice' | 'ledger' | 'voucher' | 'gstr', data: any, filename: string) {
   try {
-    // Generate canvas from DOM element
-    const canvas = await html2canvas(element, {
-      scale: 2, // Higher resolution
-      useCORS: true,
-      logging: false,
+    const response = await fetch('/api/reports/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, format: 'pdf', data }),
     });
-
-    const imgData = canvas.toDataURL('image/png');
     
-    // A4 dimensions in mm
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(filename);
+    if (!response.ok) {
+      throw new Error('Failed to generate PDF');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   } catch (error) {
-    console.error('Error generating PDF:', error);
-    alert('Failed to generate PDF. Please try again.');
+    console.error('Error downloading PDF:', error);
+    alert('Failed to generate PDF. Please check server logs.');
   }
 }

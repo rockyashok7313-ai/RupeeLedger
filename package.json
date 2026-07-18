@@ -11,7 +11,8 @@
     "cap:ios": "npm run build:mobile && npx cap sync ios && npx cap open ios",
     "start": "node api/index.js",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "npx -y firebase-tools@latest deploy"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

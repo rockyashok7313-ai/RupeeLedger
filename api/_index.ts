@@ -16,6 +16,7 @@ import * as RazorpayVerify from '../backend/routes/razorpay/verify/route.ts';
 import * as RazorpayWebhook from '../backend/routes/razorpay/webhook/route.ts';
 import * as SuggestNarration from '../backend/routes/suggest-narration/route.ts';
 import * as WhatsappSend from '../backend/routes/whatsapp/send/route.ts';
+import * as ReportsRender from '../backend/routes/reports/render/route.ts';
 
 const app = express();
 
@@ -124,6 +125,7 @@ const routes = [
   { path: '/api/razorpay/order', module: RazorpayOrder },
   { path: '/api/razorpay/verify', module: RazorpayVerify },
   { path: '/api/razorpay/webhook', module: RazorpayWebhook },
+  { path: '/api/reports/render', module: ReportsRender },
   { path: '/api/suggest-narration', module: SuggestNarration },
   { path: '/api/whatsapp/send', module: WhatsappSend },
 ];
