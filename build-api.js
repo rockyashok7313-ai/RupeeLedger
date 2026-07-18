@@ -3,7 +3,7 @@ esbuild.build({
   entryPoints: ['api/_index.ts'],
   bundle: true,
   platform: 'node',
-  format: 'esm',
+  format: 'cjs',
   outfile: 'api/index.js',
   external: ['express', 'cors', 'mongodb', 'jsonwebtoken', 'crypto', 'puppeteer', 'puppeteer-core', '@sparticuz/chromium'],
   target: 'node20',

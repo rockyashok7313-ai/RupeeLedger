@@ -102,8 +102,14 @@ async function nextHandler(req: express.Request, res: express.Response, handler:
     });
     
     if (webRes.body) {
-      const text = await webRes.text();
-      res.send(text);
+      const contentType = webRes.headers.get('content-type') || '';
+      if (contentType.includes('application/pdf') || contentType.includes('application/octet-stream')) {
+        const arrayBuffer = await webRes.arrayBuffer();
+        res.end(Buffer.from(arrayBuffer));
+      } else {
+        const text = await webRes.text();
+        res.send(text);
+      }
     } else {
       res.end();
     }
