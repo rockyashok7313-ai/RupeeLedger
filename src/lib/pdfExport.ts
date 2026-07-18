@@ -20,7 +20,8 @@ export async function downloadReportPDF(type: 'invoice' | 'ledger' | 'voucher' |
     });
     
     if (!response.ok) {
-      throw new Error('Failed to generate PDF');
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to generate PDF');
     }
     
     const blob = await response.blob();
@@ -32,8 +33,8 @@ export async function downloadReportPDF(type: 'invoice' | 'ledger' | 'voucher' |
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error downloading PDF:', error);
-    alert('Failed to generate PDF. Please check server logs.');
+    alert(`Failed to generate PDF: ${error.message}`);
   }
 }
