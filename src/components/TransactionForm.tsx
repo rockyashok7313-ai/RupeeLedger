@@ -84,11 +84,20 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
         },
         body: JSON.stringify({ amount, type }),
       });
-      if (!response.ok) throw new Error("Failed to get suggestion");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to get suggestion");
+      }
       const data = await response.json();
-      if (data.suggestion) setDescription(data.suggestion);
-    } catch (error) {
-      toast({ title: "Could not get AI suggestion.", variant: "destructive" });
+      if (data.suggestion) {
+        setDescription(data.suggestion);
+      } else {
+        throw new Error("No suggestion returned");
+      }
+    } catch (error: any) {
+      console.error("AI Narration Error:", error);
+      toast({ title: "AI Suggestion Failed", description: error.message || "Could not get AI suggestion.", variant: "destructive" });
+      setDescription("Manual Entry");
     } finally {
       setIsSuggesting(false);
     }

@@ -98,7 +98,7 @@ export function GSTModule({
 
       {/* Content Area */}
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        {activeTab === 'generator' && <InvoiceGenerator businessProfile={businessProfile} invoices={invoices} setInvoices={setInvoices} clients={clients} setClients={setClients} inventory={inventory} setInventory={setInventory} setActiveTab={(t) => setActiveTab(t as any)} editingInvoiceId={editingInvoiceId} setEditingInvoiceId={setEditingInvoiceId} />}
+        {activeTab === 'generator' && <InvoiceGenerator businessProfile={businessProfile} invoices={invoices} setInvoices={setInvoices} clients={clients} setClients={setClients} inventory={inventory} setInventory={setInventory} setActiveTab={(t) => setActiveTab(t as any)} editingInvoiceId={editingInvoiceId} setEditingInvoiceId={setEditingInvoiceId} recurringTemplates={recurringTemplates} setRecurringTemplates={setRecurringTemplates} />}
         {activeTab === 'preview' && <InvoicePreview businessProfile={businessProfile} invoices={invoices} />}
         {activeTab === 'clients' && <ClientsView clients={clients} setClients={setClients} />}
         {activeTab === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} />}

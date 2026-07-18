@@ -62,11 +62,24 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
       itc.igst += exp.igst;
     });
 
+    // Apply precision rounding to avoid floating-point errors
+    const round2 = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
+
+    sales.taxableAmount = round2(sales.taxableAmount);
+    sales.cgst = round2(sales.cgst);
+    sales.sgst = round2(sales.sgst);
+    sales.igst = round2(sales.igst);
+    sales.total = round2(sales.total);
+
+    itc.cgst = round2(itc.cgst);
+    itc.sgst = round2(itc.sgst);
+    itc.igst = round2(itc.igst);
+
     // Net Payable
     const payable = {
-      cgst: Math.max(0, sales.cgst - itc.cgst),
-      sgst: Math.max(0, sales.sgst - itc.sgst),
-      igst: Math.max(0, sales.igst - itc.igst),
+      cgst: round2(Math.max(0, sales.cgst - itc.cgst)),
+      sgst: round2(Math.max(0, sales.sgst - itc.sgst)),
+      igst: round2(Math.max(0, sales.igst - itc.igst)),
     };
 
     return { sales, itc, payable };

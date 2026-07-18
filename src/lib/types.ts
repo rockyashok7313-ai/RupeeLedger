@@ -194,7 +194,7 @@ export interface RecurringTemplate {
   clientId: string;
   interval: 'weekly' | 'monthly' | 'yearly';
   nextRun: number;
-  items: InvoiceItem[];
+  templateData: Partial<Invoice>;
   active: boolean;
   createdAt: number;
 }

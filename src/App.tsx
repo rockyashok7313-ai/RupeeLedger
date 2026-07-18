@@ -42,6 +42,7 @@ import { TransactionForm } from "@/components/TransactionForm";
 import { CurrencyDisplay } from "@/components/CurrencyDisplay";
 import { LandingPage } from "@/components/LandingPage";
 import { UpgradeModal } from "@/components/UpgradeModal";
+import { useRecurringScheduler } from "@/hooks/useRecurringScheduler";
 import { 
   Dialog, 
   DialogContent, 
@@ -228,6 +229,8 @@ export default function RupeeLedger() {
   const [isClearDataAlertOpen, setIsClearDataAlertOpen] = useState(false);
   const [boughtKey, setBoughtKey] = useState<{ key: string, duration: string } | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  useRecurringScheduler(recurringTemplates, setRecurringTemplates, invoices, setInvoices, isLoaded);
   const [dailyReportDateInput, setDailyReportDateInput] = useState<string>(
     format(new Date(), "dd-MM-yyyy")
   );

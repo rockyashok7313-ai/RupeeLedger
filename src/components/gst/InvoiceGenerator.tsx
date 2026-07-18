@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash, FileText, CheckCircle2 } from 'lucide-react';
-import { BusinessProfile, Client, InventoryItem, Invoice, InvoiceItem, InvoiceType } from '@/lib/types';
+import { BusinessProfile, Client, InventoryItem, Invoice, InvoiceItem, InvoiceType, RecurringTemplate } from '@/lib/types';
 import { currencies } from '@/lib/currency';
 import { UQC_LIST, generateInvoiceNumber, getCurrentFinancialYear } from '@/lib/invoiceUtils';
 import { v4 as uuidv4 } from 'uuid';
@@ -22,9 +22,11 @@ interface Props {
   setEditingInvoiceId?: (id: string | null) => void;
   setClients?: (clients: Client[]) => void;
   setInventory?: (inventory: InventoryItem[]) => void;
+  recurringTemplates?: RecurringTemplate[];
+  setRecurringTemplates?: (r: RecurringTemplate[]) => void;
 }
 
-export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab, editingInvoiceId, setEditingInvoiceId, setClients, setInventory }: Props) {
+export function InvoiceGenerator({ businessProfile, clients, inventory, invoices, setInvoices, setActiveTab, editingInvoiceId, setEditingInvoiceId, setClients, setInventory, recurringTemplates, setRecurringTemplates }: Props) {
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -408,6 +410,98 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
     setActiveTab('preview');
   };
 
+  const handleSaveRecurring = () => {
+    if (!clientName) return alert('Please enter a client name.');
+    if (!setRecurringTemplates || !recurringTemplates) return alert('Recurring templates feature is unavailable.');
+
+    let subtotal = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    const validatedItems: InvoiceItem[] = items.map(item => {
+      const qty = item.quantity || 1;
+      const rate = item.rate || 0;
+      const taxPercent = item.taxPercent || 0;
+      
+      let itemAmt = qty * rate;
+      let itemTax = 0;
+
+      if (gstCalculationType === 'including') {
+        const totalAmt = itemAmt;
+        itemAmt = Math.round((totalAmt / (1 + taxPercent / 100)) * 100) / 100;
+        itemTax = Math.round((totalAmt - itemAmt) * 100) / 100;
+      } else {
+        itemTax = Math.round((itemAmt * (taxPercent / 100)) * 100) / 100;
+      }
+      
+      subtotal += itemAmt;
+
+      if (gstType === 'CGST+SGST') {
+        cgst += itemTax / 2;
+        sgst += itemTax / 2;
+      } else {
+        igst += itemTax;
+      }
+
+      return {
+        id: uuidv4(),
+        inventoryId: item.inventoryId,
+        name: item.name || 'Item',
+        hsnCode: item.hsnCode || '',
+        pieceNo: item.pieceNo || '',
+        quantity: qty,
+        rate: rate,
+        taxPercent: taxPercent,
+        amount: itemAmt
+      };
+    });
+    
+    cgst = Math.round(cgst * 100) / 100;
+    sgst = Math.round(sgst * 100) / 100;
+    igst = Math.round(igst * 100) / 100;
+
+    let baseTotal = subtotal + cgst + sgst + igst;
+    
+    const rawTotal = baseTotal;
+    const total = autoRoundoff ? Math.round(rawTotal) : rawTotal;
+    const roundoff = autoRoundoff ? Math.round((total - rawTotal) * 100) / 100 : 0;
+
+    const templateData: Partial<Invoice> = {
+      terms,
+      type: invoiceType,
+      currency,
+      exchangeRate,
+      clientId: clientId || uuidv4(),
+      clientName,
+      customerAddress,
+      customerGstin,
+      vehicleNo,
+      gstCalculationType,
+      gstType,
+      items: validatedItems,
+      subtotal,
+      cgst,
+      sgst,
+      igst,
+      roundoff,
+      total,
+    };
+
+    const newTemplate: RecurringTemplate = {
+      id: uuidv4(),
+      clientId: templateData.clientId!,
+      interval: 'monthly',
+      nextRun: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      templateData,
+      active: true,
+      createdAt: Date.now()
+    };
+
+    setRecurringTemplates([...recurringTemplates, newTemplate]);
+    alert('Recurring template saved! You can manage it in the Recurring tab.');
+  };
+
   return (
     <Card className="glass-card">
       <CardHeader>
@@ -728,6 +822,9 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         </div>
 
         <div className="pt-4 border-t flex justify-end gap-3">
+          <Button variant="outline" onClick={handleSaveRecurring} title="Save this as a monthly recurring template">
+            Save as Recurring
+          </Button>
           <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleSaveInvoice}>
             <CheckCircle2 className="h-4 w-4 mr-2" /> Save Invoice & Preview
           </Button>

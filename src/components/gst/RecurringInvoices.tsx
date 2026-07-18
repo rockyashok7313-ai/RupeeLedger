@@ -80,7 +80,23 @@ export function RecurringInvoices({ recurringTemplates = [], setRecurringTemplat
                 {filteredTemplates.map((template) => (
                   <tr key={template.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="p-3 font-medium">{template.clientId}</td>
-                    <td className="p-3 capitalize">{template.interval}</td>
+                    <td className="p-3">
+                      <select 
+                        className="rounded border p-1 text-sm bg-transparent"
+                        value={template.interval}
+                        onChange={(e) => {
+                          if (setRecurringTemplates) {
+                            setRecurringTemplates(recurringTemplates.map(t => 
+                              t.id === template.id ? { ...t, interval: e.target.value as any } : t
+                            ));
+                          }
+                        }}
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </td>
                     <td className="p-3">{new Date(template.nextRun).toLocaleDateString()}</td>
                     <td className="p-3">
                       {template.active ? (
