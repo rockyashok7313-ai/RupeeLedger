@@ -221,7 +221,7 @@ export function DailyReport({
       });
       
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF('p', 'mm', 'a5');
       const imgProps = pdf.getImageProperties(imgData);
       
       const pageWidth = pdf.internal.pageSize.getWidth();
@@ -280,6 +280,12 @@ export function DailyReport({
           // Cover the bottom margin area (below y = pageHeight - margin) to hide any overflow
           pdf.setFillColor(255, 255, 255);
           pdf.rect(0, pageHeight - margin, pageWidth, margin, "F");
+          
+          // Add Page Number to bottom
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text(`Page ${pageNumber}`, pageWidth / 2, pageHeight - (margin / 2), { align: "center" });
 
           // Draw Branded Header and Summary row on top of the canvas for Subsequent Pages
           if (pageNumber > 1) {
@@ -662,9 +668,9 @@ export function DailyReport({
                            {format(new Date(t.date), "dd-MM-yyyy")}
                          </TableCell>
                        )}
-                       <TableCell className="font-bold text-slate-900">{account?.name || 'Unknown'}</TableCell>
-                       <TableCell className="text-xs text-slate-600 font-medium">{t.description}</TableCell>
-                       <TableCell className="text-right text-green-700 font-bold">
+                       <TableCell className="font-extrabold text-slate-900">{account?.name || 'Unknown'}</TableCell>
+                       <TableCell className="text-xs text-slate-900 font-bold">{t.description}</TableCell>
+                       <TableCell className="text-right text-green-700 font-extrabold">
                          {t.type === 'Credit' ? <CurrencyDisplay amount={t.amount} /> : '-'}
                        </TableCell>
                        <TableCell className="text-right text-destructive font-bold">
