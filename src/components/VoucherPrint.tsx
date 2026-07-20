@@ -47,11 +47,8 @@ export function VoucherPrint({
     iframeRef.current.contentWindow.print();
   };
   
-  const handleDownloadPDF = async () => {
-    setIsExporting(true);
-    const filename = `Voucher_${transaction.id?.toString().slice(0,8) || 'receipt'}.pdf`;
-    await downloadReportPDF('voucher', { transaction, account, businessProfile }, filename);
-    setIsExporting(false);
+  const handleDownloadPDF = () => {
+    handlePrint();
   };
 
   const amountStr = new Intl.NumberFormat('en-IN', {

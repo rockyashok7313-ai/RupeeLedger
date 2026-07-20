@@ -43,10 +43,8 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
     iframeRef.current.contentWindow.print();
   };
 
-  const handleDownloadPDF = async () => {
-    if (!invoice) return;
-    const filename = `Invoice_${invoice.invoiceNumber || invoice.id}.pdf`;
-    await downloadReportPDF('invoice', { invoice, businessProfile }, filename);
+  const handleDownloadPDF = () => {
+    handlePrint();
   };
 
   const handleWhatsAppShare = () => {

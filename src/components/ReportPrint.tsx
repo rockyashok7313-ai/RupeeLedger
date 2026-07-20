@@ -67,11 +67,8 @@ export function ReportPrint({
     iframeRef.current.contentWindow.print();
   };
 
-  const handleDownloadPDF = async () => {
-    setIsExporting(true);
-    const filename = `Account_Statement_${account.name.replace(/\\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`;
-    await downloadReportPDF('ledger', reportData, filename);
-    setIsExporting(false);
+  const handleDownloadPDF = () => {
+    handlePrint();
   };
 
   return (

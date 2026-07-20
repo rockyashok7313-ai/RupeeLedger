@@ -217,18 +217,8 @@ export function DailyReport({
     iframeRef.current.contentWindow.print();
   };
 
-  const handleDownloadPDF = async () => {
-    const selectedAccName = selectedReportAccountId === 'all' 
-      ? 'All_Accounts' 
-      : (accounts.find(a => a.id === selectedReportAccountId)?.name || 'Account').replace(/\s+/g, '_');
-      
-    const filename = reportMode === 'daily' 
-      ? `Daily_Report_${selectedAccName}_${format(date, 'dd-MM-yyyy')}.pdf`
-      : `Monthly_Report_${selectedAccName}_${format(new Date(selectedYear, selectedMonth, 1), 'MM-yyyy')}.pdf`;
-      
-    setIsExporting(true);
-    await downloadReportPDF('ledger', reportData, filename);
-    setIsExporting(false);
+  const handleDownloadPDF = () => {
+    handlePrint();
   };
 
   return (
