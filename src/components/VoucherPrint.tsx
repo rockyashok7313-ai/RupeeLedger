@@ -87,7 +87,7 @@ export function VoucherPrint({
           srcDoc={htmlContent}
           className="w-full h-full bg-white"
           title="Voucher Preview"
-          sandbox="allow-same-origin allow-scripts"
+          sandbox="allow-same-origin allow-scripts allow-modals"
         />
       </div>
     </div>

@@ -111,7 +111,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
             srcDoc={htmlContent}
             className="w-full h-full bg-white"
             title="Invoice Preview"
-            sandbox="allow-same-origin allow-scripts"
+            sandbox="allow-same-origin allow-scripts allow-modals"
           />
         )}
       </div>

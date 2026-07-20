@@ -410,7 +410,7 @@ export function DailyReport({
             srcDoc={htmlContent}
             className="w-full h-full bg-white border border-slate-200 rounded shadow-sm"
             title="Ledger Report Preview"
-            sandbox="allow-same-origin allow-scripts"
+            sandbox="allow-same-origin allow-scripts allow-modals"
           />
         )}
       </div>
