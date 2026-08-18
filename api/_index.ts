@@ -70,7 +70,11 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(express.json());
+// express.json() defaults to a 100kb body, which a ledger report exceeds: an
+// account statement POSTs its whole transaction list, and a single busy account
+// is already ~131kb. Over the default the request was rejected with a bare 413
+// and surfaced in the UI as "Failed to fetch report HTML".
+app.use(express.json({ limit: '5mb' }));
 
 // Adapter to convert Express request to standard Request, and standard Response to Express response
 async function nextHandler(req: express.Request, res: express.Response, handler: any) {

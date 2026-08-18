@@ -14,6 +14,10 @@ export function renderLedger(data: any): string {
   } = data;
   
   if (!transactions) return renderLayout({ title: 'Ledger Report', businessProfile, content: '<p>No data provided.</p>' });
+
+  // A partial payload should render a report with zeroed totals rather than
+  // throwing a 500 the caller can only report as "failed to fetch".
+  const stats = currentStats ?? { credit: 0, debit: 0 };
   
   let itemsHtml = '';
   transactions.forEach((t: any) => {
@@ -48,11 +52,11 @@ export function renderLedger(data: any): string {
       </div>
       <div>
         <span class="text-slate-500">Total Credit:</span> 
-        <span class="text-green-700 ml-1">${formatINR(currentStats.credit)}</span>
+        <span class="text-green-700 ml-1">${formatINR(stats.credit)}</span>
       </div>
       <div>
         <span class="text-slate-500">Total Debit:</span> 
-        <span class="text-red-600 ml-1">${formatINR(currentStats.debit)}</span>
+        <span class="text-red-600 ml-1">${formatINR(stats.debit)}</span>
       </div>
       <div>
         <span class="text-slate-500">Closing Balance:</span> 
@@ -81,8 +85,8 @@ export function renderLedger(data: any): string {
       <tfoot class="bg-slate-100 border-t-2 border-slate-300 font-bold">
         <tr>
           <td colspan="3" class="py-2 px-2 text-right text-xs text-slate-700 uppercase">Period Totals:</td>
-          <td class="py-2 px-2 text-right text-xs text-green-700">${formatINR(currentStats.credit)}</td>
-          <td class="py-2 px-2 text-right text-xs text-red-600">${formatINR(currentStats.debit)}</td>
+          <td class="py-2 px-2 text-right text-xs text-green-700">${formatINR(stats.credit)}</td>
+          <td class="py-2 px-2 text-right text-xs text-red-600">${formatINR(stats.debit)}</td>
           <td class="py-2 px-2 text-right text-xs text-slate-900 bg-slate-200">${formatINR(currentClosingBalance)}</td>
         </tr>
       </tfoot>
