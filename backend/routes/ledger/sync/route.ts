@@ -1,7 +1,8 @@
 import { NextResponse } from '../../../next-response.ts';
-import { getMongoDb, isMongoConfigured } from '../../../../src/lib/mongodb.ts';
+import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const syncSchema = z.object({
   userId: z.string().trim().min(1, 'userId is required.'),
@@ -19,10 +20,94 @@ const syncSchema = z.object({
   receipts: z.array(z.any()).optional(),
 });
 
+/** Logical collection name -> Supabase table name. */
+const TABLES = {
+  accounts: 'accounts',
+  transactions: 'transactions',
+  clients: 'clients',
+  inventory: 'inventory',
+  invoices: 'invoices',
+  expenses: 'expenses',
+  recurringTemplates: 'recurring_templates',
+  receipts: 'receipts',
+} as const;
+
+/** Strip the storage columns so the client sees the same shape it pushed. */
+const mapRows = (rows: any[] | null) =>
+  (rows || []).map(({ user_id, branchId, ...rest }) => rest);
+
+/** Strip server-managed columns from a single settings row. */
+const mapSettings = (row: any | null) =>
+  row ? (({ user_id, updated_at, ...rest }) => rest)(row) : null;
+
+/**
+ * Callers pass the branch folded into the id ("<owner>_hq"). Storage keys on
+ * (user_id, branchId) instead, which is the shape src/lib/supabaseSync.ts reads
+ * and writes -- both paths target the same rows, so they must agree.
+ */
+function splitBranch(userId: string): { ownerId: string; branchId: string } {
+  const idx = userId.lastIndexOf('_');
+  if (idx > 0) {
+    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
+  }
+  return { ownerId: userId, branchId: 'hq' };
+}
+
+/**
+ * Replace the stored set for a table with `dataArray`: delete rows the client no
+ * longer has, then upsert the rest. The pushed array is the source of truth
+ * for that owner and branch.
+ */
+async function syncArray(
+  supabase: SupabaseClient,
+  table: string,
+  dataArray: any[] | undefined,
+  ownerId: string,
+  branchId: string
+) {
+  if (!dataArray || !Array.isArray(dataArray)) return;
+
+  const activeIds = dataArray.map(item => item.id).filter(id => id !== undefined && id !== null);
+
+  if (activeIds.length === 0) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('user_id', ownerId)
+      .eq('branchId', branchId);
+    if (error) throw error;
+    return;
+  }
+
+  const { data: existing, error: selectError } = await supabase
+    .from(table)
+    .select('id')
+    .eq('user_id', ownerId)
+    .eq('branchId', branchId);
+  if (selectError) throw selectError;
+
+  const idsToDelete = (existing || []).map(r => r.id).filter(id => !activeIds.includes(id));
+  if (idsToDelete.length > 0) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('user_id', ownerId)
+      .eq('branchId', branchId)
+      .in('id', idsToDelete);
+    if (error) throw error;
+  }
+
+  // `branchId` is set after the spread so a stale value carried in from a
+  // previous pull cannot override the branch being written.
+  const rows = dataArray.map(item => ({ ...item, user_id: ownerId, branchId }));
+  const { error: upsertError } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
+  if (upsertError) throw upsertError;
+}
+
 export async function POST(request: Request) {
   try {
     const rawBody = await request.json();
-    
+
     // Zod Schema Validation
     const parsed = syncSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -30,12 +115,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
-    const { 
-      userId, 
-      accounts, 
-      transactions, 
-      businessProfile, 
-      subscription, 
+    const {
+      userId,
+      accounts,
+      transactions,
+      businessProfile,
+      subscription,
       securitySettings,
       clients,
       inventory,
@@ -43,7 +128,7 @@ export async function POST(request: Request) {
       expenses,
       recurringTemplates,
       receipts,
-      action 
+      action
     } = parsed.data;
 
     const token = extractToken(request);
@@ -57,17 +142,18 @@ export async function POST(request: Request) {
     }
 
     // Verify that the token owner is the one requested (or it's the admin, or phone matches)
-    const isOwner = decodedToken.uid === userId;
-    
+    const baseUserId = userId.includes('_') ? userId.substring(0, userId.lastIndexOf('_')) : userId;
+    const isOwner = decodedToken.uid === userId || decodedToken.uid === baseUserId;
+
     const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
     const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);
 
     const tokenEmail = decodedToken.email ? normalizeString(decodedToken.email) : '';
-    const userEmail = userId.startsWith('e_') ? normalizeString(userId.substring(2)) : normalizeString(userId);
+    const userEmail = baseUserId.startsWith('e_') ? normalizeString(baseUserId.substring(2)) : normalizeString(baseUserId);
     const isEmailUser = tokenEmail && tokenEmail === userEmail;
 
     const tokenPhone = decodedToken.phone_number ? normalizePhone(decodedToken.phone_number) : '';
-    const userPhone = userId.startsWith('p_') ? normalizePhone(userId.substring(2)) : normalizePhone(userId);
+    const userPhone = baseUserId.startsWith('p_') ? normalizePhone(baseUserId.substring(2)) : normalizePhone(baseUserId);
     const isPhoneUser = tokenPhone && tokenPhone === userPhone;
 
     const isAdmin = checkIsAdmin(decodedToken);
@@ -77,146 +163,97 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to access this data.' }, { status: 403 });
     }
 
-    // Fallback if MongoDB is not configured
-    if (!isMongoConfigured()) {
-      console.log('[SYNC] MongoDB is not configured. Falling back to local offline mode.');
+    // Fallback if Supabase is not configured
+    if (!isSupabaseConfigured()) {
+      console.log('[SYNC] Supabase is not configured. Falling back to local offline mode.');
       return NextResponse.json({ isOfflineFallback: true });
     }
 
-    const db = await getMongoDb();
-const usersCollection = db.collection('users');
-    const accountsCollection = db.collection('accounts');
-    const transactionsCollection = db.collection('transactions');
-    const clientsCollection = db.collection('clients');
-    const inventoryCollection = db.collection('inventory');
-    const invoicesCollection = db.collection('invoices');
-    const expensesCollection = db.collection('expenses');
-    const recurringCollection = db.collection('recurringTemplates');
-    const receiptsCollection = db.collection('receipts');
+    const supabase = getSupabaseAdmin();
+
+    // Storage is keyed on (user_id, branchId), matching src/lib/supabaseSync.ts.
+    const { ownerId, branchId } = splitBranch(userId);
 
     if (action === 'pull') {
-      // Fetch user settings profile doc
-      const userDoc = await usersCollection.findOne({ _id: userId as any });
-      
-      // Fetch user's accounts
-      const userAccounts = await accountsCollection.find({ userId }).toArray();
-      const mappedAccounts = userAccounts.map(a => {
-        const { _id, userId, ...rest } = a;
-        return { id: _id.toString(), ...rest };
-      });
+      const [
+        profileRes,
+        subscriptionRes,
+        securityRes,
+        accountsRes,
+        transactionsRes,
+        clientsRes,
+        inventoryRes,
+        invoicesRes,
+        expensesRes,
+        recurringRes,
+        receiptsRes
+      ] = await Promise.all([
+        supabase.from('business_profiles').select('*').eq('user_id', ownerId).maybeSingle(),
+        supabase.from('subscriptions').select('*').eq('user_id', ownerId).maybeSingle(),
+        supabase.from('security_settings').select('*').eq('user_id', ownerId).maybeSingle(),
+        supabase.from(TABLES.accounts).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.transactions).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.clients).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.inventory).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.invoices).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.expenses).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.recurringTemplates).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.receipts).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+      ]);
 
-      // Fetch user's transactions
-      const userTransactions = await transactionsCollection.find({ userId }).toArray();
-      const mappedTransactions = userTransactions.map(t => {
-        const { _id, userId, ...rest } = t;
-        return { id: _id.toString(), ...rest };
-      });
-
-      // Fetch GST Module Data
-      const mapDocs = (docs: any[]) => docs.map(d => {
-        const { _id, userId, ...rest } = d;
-        return { id: _id.toString(), ...rest };
-      });
-
-      const userClients = await clientsCollection.find({ userId }).toArray();
-      const userInventory = await inventoryCollection.find({ userId }).toArray();
-      const userInvoices = await invoicesCollection.find({ userId }).toArray();
-      const userExpenses = await expensesCollection.find({ userId }).toArray();
-      const userRecurring = await recurringCollection.find({ userId }).toArray();
-      const userReceipts = await receiptsCollection.find({ userId }).toArray();
+      const profile = profileRes.data;
 
       return NextResponse.json({
-        clients: mapDocs(userClients),
-        inventory: mapDocs(userInventory),
-        invoices: mapDocs(userInvoices),
-        expenses: mapDocs(userExpenses),
-        recurringTemplates: mapDocs(userRecurring),
-        receipts: mapDocs(userReceipts),
-        exists: !!userDoc,
-        businessProfile: userDoc?.businessProfile || null,
-        subscription: userDoc?.subscription || null,
-        securitySettings: userDoc?.securitySettings || null,
-        accounts: mappedAccounts,
-        transactions: mappedTransactions
+        clients: mapRows(clientsRes.data),
+        inventory: mapRows(inventoryRes.data),
+        invoices: mapRows(invoicesRes.data),
+        expenses: mapRows(expensesRes.data),
+        recurringTemplates: mapRows(recurringRes.data),
+        receipts: mapRows(receiptsRes.data),
+        exists: !!profile,
+        businessProfile: mapSettings(profile),
+        subscription: mapSettings(subscriptionRes.data),
+        securitySettings: mapSettings(securityRes.data),
+        accounts: mapRows(accountsRes.data),
+        transactions: mapRows(transactionsRes.data)
       });
     }
 
     if (action === 'push') {
-      // 1. Save user profile doc
-      await usersCollection.updateOne(
-        { _id: userId as any },
-        { 
-          $set: { 
-            businessProfile, 
-            subscription, 
-            securitySettings, 
-            updatedAt: Date.now() 
-          } 
-        },
-        { upsert: true }
-      );
+      // 1. Save the user's settings rows
+      const updatedAt = new Date().toISOString();
 
-      // 2. Refresh/Upsert accounts
-      if (Array.isArray(accounts)) {
-        // Delete accounts that aren't in the pushed list
-        const activeAccountIds = accounts.map(a => a.id);
-        await accountsCollection.deleteMany({ 
-          userId, 
-          _id: { $nin: activeAccountIds as any[] } 
-        });
-
-        // Upsert standard accounts list
-        for (const acc of accounts) {
-          const { id, ...accountData } = acc;
-          await accountsCollection.updateOne(
-            { _id: id as any, userId },
-            { $set: { ...accountData, userId } },
-            { upsert: true }
-          );
-        }
+      // Settings are per owner, not per branch.
+      if (businessProfile) {
+        const { error } = await supabase
+          .from('business_profiles')
+          .upsert({ user_id: ownerId, ...businessProfile, updated_at: updatedAt }, { onConflict: 'user_id' });
+        if (error) throw error;
       }
 
-      // 3. Refresh/Upsert transactions
-      if (Array.isArray(transactions)) {
-        // Delete transactions that aren't in the pushed list
-        const activeTxIds = transactions.map(t => t.id);
-        await transactionsCollection.deleteMany({ 
-          userId, 
-          _id: { $nin: activeTxIds as any[] } 
-        });
-
-        // Upsert standard transactions list
-        for (const tx of transactions) {
-          const { id, ...txData } = tx;
-          await transactionsCollection.updateOne(
-            { _id: id as any, userId },
-            { $set: { ...txData, userId } },
-            { upsert: true }
-          );
-        }
+      if (subscription) {
+        const { error } = await supabase
+          .from('subscriptions')
+          .upsert({ user_id: ownerId, ...subscription, updated_at: updatedAt }, { onConflict: 'user_id' });
+        if (error) throw error;
       }
 
-      // Helper function to sync arrays
-      const syncArray = async (collection: any, dataArray: any[] | undefined) => {
-        if (!dataArray || !Array.isArray(dataArray)) return;
-        const activeIds = dataArray.map(item => item.id);
-        await collection.deleteMany({ userId, _id: { $nin: activeIds } });
-        for (const item of dataArray) {
-          const { id, ...data } = item;
-          await collection.updateOne(
-            { _id: id, userId },
-            { $set: { ...data, userId } },
-            { upsert: true }
-          );
-        }
-      };
+      if (securitySettings) {
+        const { error } = await supabase
+          .from('security_settings')
+          .upsert({ user_id: ownerId, ...securitySettings, updated_at: updatedAt }, { onConflict: 'user_id' });
+        if (error) throw error;
+      }
 
-      await syncArray(clientsCollection, clients);
-      await syncArray(inventoryCollection, inventory);
-      await syncArray(invoicesCollection, invoices);
-      await syncArray(expensesCollection, expenses);
-      await syncArray(recurringCollection, recurringTemplates);
-      await syncArray(receiptsCollection, receipts);
+      // 2. Replace the stored collections with what the client pushed
+      await syncArray(supabase, TABLES.accounts, accounts, ownerId, branchId);
+      await syncArray(supabase, TABLES.transactions, transactions, ownerId, branchId);
+      await syncArray(supabase, TABLES.clients, clients, ownerId, branchId);
+      await syncArray(supabase, TABLES.inventory, inventory, ownerId, branchId);
+      await syncArray(supabase, TABLES.invoices, invoices, ownerId, branchId);
+      await syncArray(supabase, TABLES.expenses, expenses, ownerId, branchId);
+      await syncArray(supabase, TABLES.recurringTemplates, recurringTemplates, ownerId, branchId);
+      await syncArray(supabase, TABLES.receipts, receipts, ownerId, branchId);
 
       return NextResponse.json({ success: true });
     }
@@ -227,4 +264,3 @@ const usersCollection = db.collection('users');
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
-

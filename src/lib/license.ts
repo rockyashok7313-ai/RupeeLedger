@@ -1,4 +1,4 @@
-import { getMongoDb, isMongoConfigured } from '../lib/mongodb';
+import { getSupabaseAdmin, isSupabaseConfigured } from '../../backend/utils/supabase-admin';
 import nodemailer from 'nodemailer';
 
 export const generateKeyString = (duration: string) => {
@@ -10,41 +10,45 @@ export const generateKeyString = (duration: string) => {
 export const createAndSaveKey = async (payId: string, duration: string, userId: string = 'anonymous_buyer') => {
   const durationDays = duration === 'annual' ? 365 : 30;
   
-  if (!isMongoConfigured()) {
-    console.warn('MongoDB not configured. Mocking activation key save.');
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured. Mocking activation key save.');
     return generateKeyString(duration);
   }
 
-  const db = await getMongoDb();
-  
+  const supabase = getSupabaseAdmin();
+
   // Idempotency: Check if a key was already generated for this payment ID
-  const existingKey = await db.collection('keys').findOne({ paymentId: payId });
+  const { data: existingKey } = await supabase
+    .from('keys')
+    .select('key, created_by')
+    .eq('payment_id', payId)
+    .maybeSingle();
+
   if (existingKey) {
-    console.log(`Key already exists for payment ${payId}: ${existingKey.key || existingKey._id}`);
-    if ((existingKey.createdBy === 'anonymous_buyer' || existingKey.createdBy === 'guest_local') && userId && userId !== 'anonymous_buyer' && userId !== 'guest_local') {
-      await db.collection('keys').updateOne(
-        { _id: existingKey._id },
-        { $set: { createdBy: userId } }
-      );
+    console.log(`Key already exists for payment ${payId}: ${existingKey.key}`);
+    if ((existingKey.created_by === 'anonymous_buyer' || existingKey.created_by === 'guest_local') && userId && userId !== 'anonymous_buyer' && userId !== 'guest_local') {
+      await supabase
+        .from('keys')
+        .update({ created_by: userId })
+        .eq('key', existingKey.key);
     }
-    return (existingKey.key || existingKey._id) as string;
+    return existingKey.key as string;
   }
 
   const newKeyStr = generateKeyString(duration);
-  
-  await db.collection('keys').updateOne(
-    { key: newKeyStr },
-    {
-      $set: {
-        createdAt: Date.now(),
-        durationDays,
-        createdBy: userId,
-        status: 'unused',
-        paymentId: payId
-      }
-    },
-    { upsert: true }
-  );
+
+  const { error } = await supabase
+    .from('keys')
+    .upsert({
+      key: newKeyStr,
+      created_at: Date.now(),
+      duration_days: durationDays,
+      created_by: userId,
+      status: 'unused',
+      payment_id: payId
+    }, { onConflict: 'key' });
+
+  if (error) throw error;
 
   return newKeyStr;
 };

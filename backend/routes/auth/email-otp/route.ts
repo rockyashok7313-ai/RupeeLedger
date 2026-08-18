@@ -1,6 +1,6 @@
 import { NextResponse } from '../../../next-response.ts';
 import { signAppToken } from '../../../../src/lib/auth-verify.ts';
-import { saveOtp, verifyOtp } from '../../../utils/otp-mongo.ts';
+import { saveOtp, verifyOtp } from '../../../utils/otp-store.ts';
 import { checkRateLimit } from '../../../utils/rate-limit.ts';
 import nodemailer from 'nodemailer';
 import { z } from 'zod';

@@ -1,7 +1,7 @@
 import { NextResponse } from '../../../next-response.ts';
 import { signAppToken } from '../../../../src/lib/auth-verify.ts';
 import { sendWhatsappMessage } from '../../../utils/wasender.ts';
-import { saveOtp, verifyOtp } from '../../../utils/otp-mongo.ts';
+import { saveOtp, verifyOtp } from '../../../utils/otp-store.ts';
 import { checkRateLimit } from '../../../utils/rate-limit.ts';
 import { z } from 'zod';
 

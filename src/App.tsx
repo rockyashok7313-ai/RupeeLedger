@@ -27,7 +27,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
-import { pushSyncToSupabase, pullSyncFromSupabase } from "@/lib/supabaseSync";
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
@@ -36,7 +35,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from "firebase/auth";
-// Removed Firestore imports to migrate fully to MongoDB API endpoints
+// Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
 import { CurrencyDisplay } from "@/components/CurrencyDisplay";
@@ -131,7 +130,7 @@ async function getAuthToken(): Promise<string | null> {
   }
 }
 
-async function pushSyncToMongoDB(
+async function pushSyncToCloud(
     userId: string,
     accountsList: Account[],
     transactionsList: Transaction[],
@@ -146,17 +145,10 @@ async function pushSyncToMongoDB(
     receipts?: Receipt[]
 ) {
   try {
-    // 1. Sync with Supabase (primary cloud storage)
-    try {
-      await pushSyncToSupabase(
-        userId, accountsList, transactionsList, businessProfile, subscription, securitySettings,
-        clients, inventory, invoices, expenses, recurringTemplates, receipts
-      );
-    } catch (err) {
-      console.error("Supabase backup sync error:", err);
-    }
-
-    // 2. Sync with MongoDB (reseller, keys, fallback backing)
+    // The server route is the only writer. It authenticates the caller, checks
+    // ownership and uses the service-role key, so it works for every login type
+    // -- including phone/WhatsApp/email OTP users, who have no Supabase session
+    // and therefore cannot satisfy row level security from the browser.
     const token = await getAuthToken();
     const res = await fetch('/api/ledger/sync', {
       method: 'POST',
@@ -165,7 +157,7 @@ async function pushSyncToMongoDB(
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
       body: JSON.stringify({
-        userId,
+        userId: userId + "_" + (typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("branch") || "hq") : "hq"),
         accounts: accountsList,
         transactions: transactionsList,
         businessProfile,
@@ -181,10 +173,18 @@ async function pushSyncToMongoDB(
       })
     });
     if (!res.ok) {
-      console.warn("MongoDB sync push backup failed:", await res.text());
+      // Surface the failure instead of logging and returning as if it worked --
+      // a swallowed error here is why broken cloud sync went unnoticed.
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Cloud sync failed (${res.status}). ${detail}`.trim());
+    }
+
+    const body = await res.json().catch(() => null);
+    if (body?.isOfflineFallback) {
+      throw new Error('Cloud sync is not configured on the server; data was saved locally only.');
     }
   } catch (err) {
-    console.error("MongoDB backup sync error:", err);
+    console.error("Cloud sync error:", err);
     throw err;
   }
 }
@@ -243,6 +243,16 @@ export default function RupeeLedger() {
   const [dailyReportMode, setDailyReportMode] = useState<"daily" | "monthly">("daily");
   const [dailyReportMonth, setDailyReportMonth] = useState<number>(new Date().getMonth());
   const [dailyReportYear, setDailyReportYear] = useState<number>(new Date().getFullYear());
+
+  const [activeBranchId] = useState<string>(() => {
+    return new URLSearchParams(window.location.search).get("branch") || "hq";
+  });
+
+  const handleBranchChange = (branchId: string) => {
+    if (branchId !== activeBranchId) {
+      window.location.href = `/?branch=${branchId}`;
+    }
+  };
 
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile>({
     companyName: "",
@@ -417,14 +427,17 @@ export default function RupeeLedger() {
   }, [user, OWNER_EMAILS]);
 
   const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
-    let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
-    let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
+    let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}_${activeBranchId}`);
+    if (!savedAccounts) savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
     
-    // Backward compatibility fallback
-    if (!savedAccounts && guestUserId === "guest_local") {
+    let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}_${activeBranchId}`);
+    if (!savedTransactions) savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
+    
+    // Backward compatibility fallback for completely old local guest keys
+    if (!savedAccounts && guestUserId === "guest_local" && activeBranchId === "hq") {
       savedAccounts = localStorage.getItem("rupee_ledger_accounts");
     }
-    if (!savedTransactions && guestUserId === "guest_local") {
+    if (!savedTransactions && guestUserId === "guest_local" && activeBranchId === "hq") {
       savedTransactions = localStorage.getItem("rupee_ledger_transactions");
     }
 
@@ -434,12 +447,18 @@ export default function RupeeLedger() {
     if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
     else setTransactions([]);
 
-    const savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
-    const savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
-    const savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
-    const savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
-    const savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
-    const savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
+    let savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}_${activeBranchId}`);
+    if (!savedClients) savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
+    let savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}_${activeBranchId}`);
+    if (!savedInventory) savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
+    let savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}_${activeBranchId}`);
+    if (!savedInvoices) savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
+    let savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}_${activeBranchId}`);
+    if (!savedExpenses) savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
+    let savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}_${activeBranchId}`);
+    if (!savedRecurring) savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
+    let savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}_${activeBranchId}`);
+    if (!savedReceipts) savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
 
     if (savedClients) setClients(JSON.parse(savedClients)); else setClients([]);
     if (savedInventory) setInventory(JSON.parse(savedInventory)); else setInventory([]);
@@ -515,15 +534,11 @@ export default function RupeeLedger() {
       if (supabaseUser) {
         toast({ title: "Syncing with cloud...", description: "Fetching ledger database." });
         try {
-          // Fetch user data via MongoDB Sync API route
+          // Fetch user data via Supabase sync API route
           let shouldLock = false;
           let fetchedAccounts: Account[] = [];
           let fetchedTxs: Transaction[] = [];
           let syncData: any = null;
-          let fromMongo = false;
-          
-          
-
           if (!syncData) {
               const token = session.access_token;
               const syncRes = await fetch('/api/ledger/sync', {
@@ -532,27 +547,14 @@ export default function RupeeLedger() {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ userId: supabaseUser.id, action: 'pull' })
+                body: JSON.stringify({ userId: supabaseUser.id + '_' + (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('branch') || 'hq') : 'hq'), action: 'pull' })
               });
               if (syncRes.ok) {
                 syncData = await syncRes.json();
-                fromMongo = true;
               }
           }
 
           if (syncData) {
-            if (fromMongo && syncData.exists) {
-               try {
-                   await pushSyncToSupabase(
-                     supabaseUser.id, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
-                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
-                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
-                   );
-               } catch (e) {
-                   console.log("Failed to auto-migrate to Supabase", e);
-               }
-            }
-
             if (syncData.isOfflineFallback) {
               await loadLocalStorageData(supabaseUser.id);
             } else {
@@ -562,11 +564,11 @@ export default function RupeeLedger() {
                 const mergedSub = getMergedSubscription(syncData.subscription);
                 setSubscription(mergedSub);
 
-                // If local active key was merged and is not yet updated in MongoDB, push it
+                // If local active key was merged and is not yet updated in Supabase, push it
                 if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
-                  console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to MongoDB.");
+                  console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to Supabase.");
                   try {
-                    await pushSyncToMongoDB(
+                    await pushSyncToCloud(
                       supabaseUser.id,
                       syncData.accounts || [],
                       syncData.transactions || [],
@@ -581,7 +583,7 @@ export default function RupeeLedger() {
                       syncData.receipts || receipts
                     );
                   } catch (e) {
-                    console.error("Failed to push merged subscription to MongoDB", e);
+                    console.error("Failed to push merged subscription to Supabase", e);
                   }
                 }
 
@@ -603,7 +605,7 @@ export default function RupeeLedger() {
               } else {
                 const mergedSub = getMergedSubscription(null);
                 setSubscription(mergedSub);
-                await pushSyncToMongoDB(
+                await pushSyncToCloud(
                   supabaseUser.id,
                   [],
                   [],
@@ -635,7 +637,7 @@ export default function RupeeLedger() {
                   title: "Migrating Local Data", 
                   description: `Uploading ${parsedAccs.length} accounts and ${parsedTxs.length} transactions to cloud storage.` 
                 });
-                await pushSyncToMongoDB(supabaseUser.id, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
+                await pushSyncToCloud(supabaseUser.id, parsedAccs, parsedTxs, businessProfile, subscription, securitySettings, clients, inventory, invoices, expenses, recurringTemplates, receipts);
                 fetchedAccounts = parsedAccs;
                 fetchedTxs = parsedTxs;
               }
@@ -700,14 +702,14 @@ export default function RupeeLedger() {
                 
                 
                 if (!syncData) {
-                  const token = await getAuthToken();
-                  const syncRes = await fetch('/api/ledger/sync', {
-                    method: 'POST',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                    },
-                    body: JSON.stringify({ userId: parsed.id, action: 'pull' })
+                    const token = await getAuthToken();
+                    const syncRes = await fetch('/api/ledger/sync', {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                      },
+                      body: JSON.stringify({ userId: parsed.id + '_' + (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('branch') || 'hq') : 'hq'), action: 'pull' })
                   });
                   if (syncRes.ok) {
                     syncData = await syncRes.json();
@@ -724,11 +726,11 @@ export default function RupeeLedger() {
                     const mergedSub = getMergedSubscription(syncData.subscription);
                     setSubscription(mergedSub);
 
-                    // If local active key was merged and is not yet updated in MongoDB, push it
+                    // If local active key was merged and is not yet updated in Supabase, push it
                     if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
-                      console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to MongoDB.");
+                      console.log("[SUBSCRIPTION] Local active key merged. Pushing updated subscription to Supabase.");
                       try {
-                        await pushSyncToMongoDB(
+                        await pushSyncToCloud(
                           parsed.id,
                           syncData.accounts || [],
                           syncData.transactions || [],
@@ -743,7 +745,7 @@ export default function RupeeLedger() {
                           syncData.receipts || receipts
                         );
                       } catch (e) {
-                        console.error("Failed to push merged subscription to MongoDB", e);
+                        console.error("Failed to push merged subscription to Supabase", e);
                       }
                     }
 
@@ -775,7 +777,7 @@ export default function RupeeLedger() {
                 await fetchGeneratedKeys(parsed.id);
                 setIsLoaded(true);
               } catch (err) {
-                console.error("MongoDB user loading error on refresh:", err);
+                console.error("Supabase user loading error on refresh:", err);
                 await loadLocalStorageData(parsed.id);
                 await fetchGeneratedKeys(parsed.id);
                 setIsLoaded(true);
@@ -817,7 +819,17 @@ export default function RupeeLedger() {
 
     let currentlyExpired = false;
 
-    if (isTrial && subscription.purchasedAt) {
+    if (isOwner) {
+      currentlyExpired = false;
+      setIsTrialExpired(false);
+      if (subscription.status !== "active" || subscription.plan !== "Pro Business (Owner License)") {
+        setSubscription(prev => ({
+          ...prev,
+          status: "active",
+          plan: "Pro Business (Owner License)"
+        }));
+      }
+    } else if (isTrial && subscription.purchasedAt) {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
       if (Date.now() - subscription.purchasedAt > sevenDays) {
         currentlyExpired = true;
@@ -876,6 +888,7 @@ export default function RupeeLedger() {
   // Periodic concurrent system lock verification hook
   useEffect(() => {
     if (!isLoaded || !user) return;
+    if (isOwner) return;
     if (!subscription.licenseKey || subscription.licenseKey === "FREE-TRIAL") return;
 
     let active = true;
@@ -931,7 +944,7 @@ export default function RupeeLedger() {
 
   useEffect(() => {
     if (isLoaded) {
-      const storageSuffix = user ? user.id : "guest_local";
+      const storageSuffix = (user ? user.id : "guest_local") + "_" + activeBranchId;
       localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(accounts));
       localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(transactions));
       localStorage.setItem(`rupee_ledger_clients_${storageSuffix}`, JSON.stringify(clients));
@@ -946,11 +959,11 @@ export default function RupeeLedger() {
       localStorage.setItem("rupee_ledger_cloud_backup_enabled", JSON.stringify(cloudBackupEnabled));
       if (user) {
         localStorage.setItem("rupee_ledger_user", JSON.stringify(user));
-        // Sync configuration states to MongoDB if logged in and cloud backup is enabled
+        // Sync configuration states to Supabase if logged in and cloud backup is enabled
         if (user.authMethod !== 'guest' && cloudBackupEnabled) {
           const syncConfig = async () => {
             try {
-              await pushSyncToMongoDB(
+              await pushSyncToCloud(
                 user.id,
                 accounts,
                 transactions,
@@ -959,7 +972,7 @@ export default function RupeeLedger() {
                 securitySettings
               );
             } catch (err) {
-              console.error("MongoDB config sync error:", err);
+              console.error("Supabase config sync error:", err);
             }
           };
           syncConfig();
@@ -1062,10 +1075,6 @@ export default function RupeeLedger() {
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
         let syncData: any = null;
-        let fromMongo = false;
-        
-        
-
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
@@ -1073,27 +1082,14 @@ export default function RupeeLedger() {
                 'Content-Type': 'application/json',
                 ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
               },
-              body: JSON.stringify({ userId: phoneId, action: 'pull' })
+              body: JSON.stringify({ userId: phoneId + '_' + (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('branch') || 'hq') : 'hq'), action: 'pull' })
             });
             if (syncRes.ok) {
               syncData = await syncRes.json();
-              fromMongo = true;
             }
         }
         
         if (syncData) {
-            if (fromMongo && syncData.exists) {
-               try {
-                   await pushSyncToSupabase(
-                     phoneId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
-                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
-                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
-                   );
-               } catch (e) {
-                   console.log("Failed to auto-migrate to Supabase", e);
-               }
-            }
-
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -1106,7 +1102,7 @@ export default function RupeeLedger() {
               // Push merged subscription if it contains a newly merged local key
               if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
                 try {
-                  await pushSyncToMongoDB(
+                  await pushSyncToCloud(
                     phoneId,
                     syncData.accounts || [],
                     syncData.transactions || [],
@@ -1129,7 +1125,7 @@ export default function RupeeLedger() {
             } else {
               const mergedSub = getMergedSubscription(null);
               setSubscription(mergedSub);
-              await pushSyncToMongoDB(phoneId, [], [], businessProfile, mergedSub, securitySettings);
+              await pushSyncToCloud(phoneId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -1147,7 +1143,7 @@ export default function RupeeLedger() {
         setPhoneInput('');
         toast({ title: 'Verification Successful', description: 'Your phone number is authenticated.' });
       } catch (err) {
-        console.error('MongoDB phone login error:', err);
+        console.error('Supabase phone login error:', err);
         setUser(phoneUser);
         setShowLogin(false);
         await loadLocalStorageData(phoneId);
@@ -1224,10 +1220,6 @@ export default function RupeeLedger() {
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
         let syncData: any = null;
-        let fromMongo = false;
-        
-        
-
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
@@ -1235,27 +1227,14 @@ export default function RupeeLedger() {
                 'Content-Type': 'application/json',
                 ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
               },
-              body: JSON.stringify({ userId: phoneId, action: 'pull' })
+              body: JSON.stringify({ userId: phoneId + '_' + (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('branch') || 'hq') : 'hq'), action: 'pull' })
             });
             if (syncRes.ok) {
               syncData = await syncRes.json();
-              fromMongo = true;
             }
         }
         
         if (syncData) {
-            if (fromMongo && syncData.exists) {
-               try {
-                   await pushSyncToSupabase(
-                     phoneId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
-                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
-                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
-                   );
-               } catch (e) {
-                   console.log("Failed to auto-migrate to Supabase", e);
-               }
-            }
-
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(phoneId);
           } else {
@@ -1268,7 +1247,7 @@ export default function RupeeLedger() {
               // Push merged subscription if it contains a newly merged local key
               if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
                 try {
-                  await pushSyncToMongoDB(
+                  await pushSyncToCloud(
                     phoneId,
                     syncData.accounts || [],
                     syncData.transactions || [],
@@ -1291,7 +1270,7 @@ export default function RupeeLedger() {
             } else {
               const mergedSub = getMergedSubscription(null);
               setSubscription(mergedSub);
-              await pushSyncToMongoDB(phoneId, [], [], businessProfile, mergedSub, securitySettings);
+              await pushSyncToCloud(phoneId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -1308,7 +1287,7 @@ export default function RupeeLedger() {
         setWhatsappOtpInput('');
         setWhatsappInput('');
       } catch (err) {
-        console.error('MongoDB whatsapp login error:', err);
+        console.error('Supabase whatsapp login error:', err);
         setUser(whatsappUser);
         setShowLogin(false);
         await loadLocalStorageData(phoneId);
@@ -1386,10 +1365,6 @@ export default function RupeeLedger() {
         let fetchedAccounts: Account[] = [];
         let fetchedTxs: Transaction[] = [];
         let syncData: any = null;
-        let fromMongo = false;
-        
-        
-
         if (!syncData) {
             const syncRes = await fetch('/api/ledger/sync', {
               method: 'POST',
@@ -1397,27 +1372,14 @@ export default function RupeeLedger() {
                 'Content-Type': 'application/json',
                 ...(data.token ? { 'Authorization': `Bearer ${data.token}` } : {})
               },
-              body: JSON.stringify({ userId: emailId, action: 'pull' })
+              body: JSON.stringify({ userId: emailId + '_' + (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('branch') || 'hq') : 'hq'), action: 'pull' })
             });
             if (syncRes.ok) {
               syncData = await syncRes.json();
-              fromMongo = true;
             }
         }
         
         if (syncData) {
-            if (fromMongo && syncData.exists) {
-               try {
-                   await pushSyncToSupabase(
-                     emailId, syncData.accounts || [], syncData.transactions || [], syncData.businessProfile,
-                     syncData.subscription, syncData.securitySettings, syncData.clients, syncData.inventory,
-                     syncData.invoices, syncData.expenses, syncData.recurringTemplates, syncData.receipts
-                   );
-               } catch (e) {
-                   console.log("Failed to auto-migrate to Supabase", e);
-               }
-            }
-
           if (syncData.isOfflineFallback) {
             await loadLocalStorageData(emailId);
           } else {
@@ -1430,7 +1392,7 @@ export default function RupeeLedger() {
               // Push merged subscription if it contains a newly merged local key
               if (mergedSub.licenseKey !== "FREE-TRIAL" && (!syncData.subscription || syncData.subscription.licenseKey !== mergedSub.licenseKey)) {
                 try {
-                  await pushSyncToMongoDB(
+                  await pushSyncToCloud(
                     emailId,
                     syncData.accounts || [],
                     syncData.transactions || [],
@@ -1453,7 +1415,7 @@ export default function RupeeLedger() {
             } else {
               const mergedSub = getMergedSubscription(null);
               setSubscription(mergedSub);
-              await pushSyncToMongoDB(emailId, [], [], businessProfile, mergedSub, securitySettings);
+              await pushSyncToCloud(emailId, [], [], businessProfile, mergedSub, securitySettings);
             }
           }
         } else {
@@ -1471,7 +1433,7 @@ export default function RupeeLedger() {
         setEmailInput('');
         toast({ title: 'Welcome!', description: `Signed in as ${emailUser.email}` });
       } catch (err) {
-        console.error('MongoDB email OTP login error:', err);
+        console.error('Supabase email OTP login error:', err);
         setUser(emailUser);
         setShowLogin(false);
         await loadLocalStorageData(emailId);
@@ -1544,7 +1506,7 @@ export default function RupeeLedger() {
       // Migrate local guest data to cloud
       toast({ title: 'Linking Account...', description: 'Migrating your ledger data to cloud.' });
       try {
-        await pushSyncToMongoDB(emailId, accounts, transactions, businessProfile, subscription, securitySettings);
+        await pushSyncToCloud(emailId, accounts, transactions, businessProfile, subscription, securitySettings);
         toast({ title: 'Account Linked!', description: `Your ledger is now saved under ${guestUpgradeEmail}` });
       } catch (err) {
         console.error('Guest migration error:', err);
@@ -2010,7 +1972,7 @@ export default function RupeeLedger() {
       };
       setSubscription(newSub);
       if (user && user.id) {
-        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+        pushSyncToCloud(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
       }
       toast({
         title: "License Auto-Activated",
@@ -2045,7 +2007,7 @@ export default function RupeeLedger() {
           description: `Renewed under local policy rules using unused inventory key.`
         });
         if (user && user.id && user.authMethod !== 'guest') {
-          pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+          pushSyncToCloud(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
         }
       }
     }
@@ -2109,7 +2071,7 @@ export default function RupeeLedger() {
       };
       setSubscription(newSub);
       if (user && user.id) {
-        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+        pushSyncToCloud(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
       }
       toast({
         title: "License Activated",
@@ -2189,7 +2151,7 @@ export default function RupeeLedger() {
         description: `License key verified under local policy rules.`,
       });
       if (user && user.id && user.authMethod !== 'guest') {
-        pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
+        pushSyncToCloud(user.id, accounts, transactions, businessProfile, newSub, securitySettings).catch(console.error);
       }
     }
   };
@@ -2263,13 +2225,13 @@ export default function RupeeLedger() {
 
     setAccounts(finalAccounts);
     setTransactions(updatedTransactions);
-    const storageSuffix = user ? user.id : "guest_local";
+    const storageSuffix = (user ? user.id : "guest_local") + "_" + activeBranchId;
     localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(finalAccounts));
     localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(updatedTransactions));
 
     if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      pushSyncToMongoDB(user.id, finalAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
-        console.error("MongoDB batch sync error:", err);
+      pushSyncToCloud(user.id, finalAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
+        console.error("Supabase batch sync error:", err);
       });
     }
   };
@@ -2326,8 +2288,8 @@ export default function RupeeLedger() {
     const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
     
     if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      pushSyncToMongoDB(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
-        console.error("MongoDB account deletion sync error:", err);
+      pushSyncToCloud(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
+        console.error("Supabase account deletion sync error:", err);
         // We do not toast here since it's background, or we could toast a warning.
       });
     }
@@ -2465,9 +2427,9 @@ export default function RupeeLedger() {
   const handleClearAllData = async () => {
     if (user && user.authMethod !== 'guest') {
       try {
-        await pushSyncToMongoDB(user.id, [], [], businessProfile, subscription, securitySettings);
+        await pushSyncToCloud(user.id, [], [], businessProfile, subscription, securitySettings);
       } catch (err) {
-        console.error("MongoDB clear all data error:", err);
+        console.error("Supabase clear all data error:", err);
         toast({ title: "Cloud Clear Failed", description: "Could not clear all records from cloud.", variant: "destructive" });
       }
     }
@@ -2475,7 +2437,7 @@ export default function RupeeLedger() {
     setAccounts([]);
     setTransactions([]);
     setSelectedAccountId(null);
-    const storageSuffix = user ? user.id : "guest_local";
+    const storageSuffix = (user ? user.id : "guest_local") + "_" + activeBranchId;
     localStorage.removeItem(`rupee_ledger_accounts_${storageSuffix}`);
     localStorage.removeItem(`rupee_ledger_transactions_${storageSuffix}`);
     setActiveTab("dashboard");
@@ -2488,9 +2450,9 @@ export default function RupeeLedger() {
       toast({ title: "Guest Mode", description: "Please log in to backup to the cloud.", variant: "destructive" });
       return;
     }
-    toast({ title: "Backing up...", description: "Uploading database to MongoDB." });
+    toast({ title: "Backing up...", description: "Uploading database to Supabase." });
     try {
-      await pushSyncToMongoDB(user.id, accounts, transactions, businessProfile, subscription, securitySettings);
+      await pushSyncToCloud(user.id, accounts, transactions, businessProfile, subscription, securitySettings);
       toast({ title: "Backup Successful", description: "All data is securely saved in the cloud." });
     } catch (err) {
       console.error("Manual cloud backup error:", err);
@@ -2548,7 +2510,7 @@ export default function RupeeLedger() {
         
         // Push the restored data to the cloud
         if (user && user.authMethod !== 'guest') {
-           pushSyncToSupabase(
+           pushSyncToCloud(
               user.id, parsed.accounts || [], parsed.transactions || [], businessProfile,
               subscription, securitySettings, parsed.clients || [], parsed.inventory || [],
               parsed.invoices || [], parsed.expenses || [], parsed.recurringTemplates || [], parsed.receipts || []
@@ -3454,14 +3416,37 @@ export default function RupeeLedger() {
               {businessProfile.companyName || "RupeeLedger"}
             </h1>
             <div className="flex items-center gap-4">
-              <div 
-                className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-md cursor-pointer hover:bg-slate-200 transition-colors"
-                onClick={() => handleFeatureAccess("Multi-Branch Support", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Multi-Branch Support will be available in the next update." }))}
-              >
-                <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                <span className="text-sm font-semibold text-slate-700">HQ / Main Branch</span>
-                <ChevronLeft className="h-4 w-4 text-slate-500 -rotate-90" />
-              </div>
+              <Select value={activeBranchId} onValueChange={(val) => {
+                if (val === 'new_branch') {
+                  handleFeatureAccess("Multi-Branch Support", "YEARLY", () => {
+                    const newName = prompt("Enter new branch name (e.g., 'Retail Store', 'Warehouse'):");
+                    if (newName) {
+                      const newId = 'branch_' + Date.now();
+                      const currentBranches = businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}];
+                      const updatedBranches = [...currentBranches, {id: newId, name: newName}];
+                      const updatedProfile = {...businessProfile, branches: updatedBranches};
+                      setBusinessProfile(updatedProfile);
+                      localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(updatedProfile));
+                      window.location.href = `/?branch=${newId}`;
+                    }
+                  });
+                } else {
+                  handleBranchChange(val);
+                }
+              }}>
+                <SelectTrigger className="w-auto min-w-[200px] h-9 bg-slate-100 border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                    <SelectValue placeholder="Select Branch" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {(businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}]).map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                  <SelectItem value="new_branch" className="text-blue-600 font-semibold">+ Add New Branch</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -4647,7 +4632,7 @@ export default function RupeeLedger() {
                         </Button>
                       </div>
 
-                      {/* MongoDB Config Check */}
+                      {/* Supabase Config Check */}
                       {isOwner && (
                         <div className="pt-4 mt-2 border-t space-y-2">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Database Engine</h4>
@@ -4655,7 +4640,7 @@ export default function RupeeLedger() {
                             <div>
                               <p className="text-slate-500 font-semibold">Active Engine</p>
                               <p className="font-sans text-slate-800 font-bold truncate">
-                                MongoDB API
+                                Supabase API
                               </p>
                             </div>
                             <div>
@@ -4690,7 +4675,7 @@ export default function RupeeLedger() {
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Storage Engine</span>
-                            <span className="font-mono text-xs">browser.localStorage + MongoDB</span>
+                            <span className="font-mono text-xs">browser.localStorage + Supabase</span>
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Privacy Status</span>
