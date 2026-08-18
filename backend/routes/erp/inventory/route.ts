@@ -1,5 +1,5 @@
 import { NextResponse } from '../../../next-response.ts';
-import { getMongoDb } from '../../../../src/lib/mongodb.ts';
+import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyAppToken, verifyIdToken, extractToken } from '../../../../src/lib/auth-verify.ts';
 
 export const dynamic = 'force-dynamic';
@@ -24,12 +24,22 @@ export async function GET(request: Request) {
     const userId = await getAuthenticatedUserId(request);
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const db = await getMongoDb();
-    const collection = db.collection('stock_movements');
-    
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true, data: [] });
+    }
+
+    const supabase = getSupabaseAdmin();
+
     // Fetch records and sort by date descending
-    const data = await collection.find({ userId }).sort({ date: -1 }).toArray();
-    const sanitizedData = data.map(({ _id, ...rest }) => rest);
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false });
+
+    if (error) throw error;
+
+    const sanitizedData = (data || []).map(({ user_id, ...rest }) => rest);
 
     return NextResponse.json({ data: sanitizedData });
   } catch (error: any) {
@@ -48,31 +58,36 @@ export async function POST(request: Request) {
 
     if (!data) return NextResponse.json({ error: 'Missing data' }, { status: 400 });
 
-    const db = await getMongoDb();
-    
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true });
+    }
+
+    const supabase = getSupabaseAdmin();
+
     // Create stock movement
     const movementPayload = {
       ...data,
       movement_id: `STK-${Date.now()}`,
-      userId,
+      user_id: userId,
       created_date: Date.now()
     };
 
-    await db.collection('stock_movements').insertOne(movementPayload);
+    const { error: movementError } = await supabase.from('stock_movements').insert(movementPayload);
+    if (movementError) throw movementError;
 
-    // Update actual stock summary in 'stock' collection
-    const stockColl = db.collection('stock');
+    // Update the running stock summary. This runs through a Postgres function so
+    // the read-modify-write of quantity_on_hand stays atomic under concurrency.
     const multiplier = data.movement_type === 'IN' ? 1 : -1;
-    const qtyChange = data.quantity * multiplier;
+    const qtyChange = Number(data.quantity) * multiplier;
 
-    await stockColl.updateOne(
-      { userId, product_id: data.product_id, warehouse_id: data.warehouse_id },
-      { 
-        $inc: { quantity_on_hand: qtyChange },
-        $set: { updated_date: Date.now() }
-      },
-      { upsert: true }
-    );
+    const { error: stockError } = await supabase.rpc('adjust_stock_on_hand', {
+      p_user_id: userId,
+      p_product_id: data.product_id,
+      p_warehouse_id: data.warehouse_id,
+      p_qty_change: qtyChange
+    });
+
+    if (stockError) throw stockError;
 
     return NextResponse.json({ success: true, message: 'Stock movement recorded' });
   } catch (error: any) {
@@ -80,4 +95,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

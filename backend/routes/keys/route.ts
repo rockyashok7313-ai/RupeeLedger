@@ -1,5 +1,5 @@
 import { NextResponse } from '../../next-response.ts';
-import { getMongoDb, isMongoConfigured } from '../../../src/lib/mongodb.ts';
+import { getSupabaseAdmin, isSupabaseConfigured } from '../../utils/supabase-admin.ts';
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../src/lib/auth-verify.ts';
 import { z } from 'zod';
 
@@ -17,12 +17,29 @@ const putKeySchema = z.object({
   deviceId: z.string().trim().optional()
 });
 
+const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);
+
+/** Does this token belong to the requested userId (uid, email alias or phone alias)? */
+function isOwnerOf(decodedToken: { uid: string; email?: string; phone_number?: string }, userId: string): boolean {
+  if (decodedToken.uid === userId) return true;
+
+  const tokenEmail = decodedToken.email ? normalizeString(decodedToken.email) : '';
+  const userEmail = userId.startsWith('e_') ? normalizeString(userId.substring(2)) : normalizeString(userId);
+  if (tokenEmail && tokenEmail === userEmail) return true;
+
+  const tokenPhone = decodedToken.phone_number ? normalizePhone(decodedToken.phone_number) : '';
+  const userPhone = userId.startsWith('p_') ? normalizePhone(userId.substring(2)) : normalizePhone(userId);
+  if (tokenPhone && tokenPhone === userPhone) return true;
+
+  return false;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const rawUserId = searchParams.get('userId');
 
-    // Query validation
     const parsedUser = getKeysQuerySchema.safeParse(rawUserId);
     if (!parsedUser.success) {
       return NextResponse.json({ error: 'Missing or invalid userId parameter.' }, { status: 400 });
@@ -37,48 +54,34 @@ export async function GET(request: Request) {
     if (!decodedToken) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
-    
-    // Check if user is admin using central environment-backed helper
-    const isAdmin = checkIsAdmin(decodedToken);
-    
-    // Check if caller owns this userId profile
-    const isOwner = decodedToken.uid === userId || (() => {
-      const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);
 
-      const tokenEmail = decodedToken.email ? normalizeString(decodedToken.email) : '';
-      const userEmail = userId.startsWith('e_') ? normalizeString(userId.substring(2)) : normalizeString(userId);
-      if (tokenEmail && tokenEmail === userEmail) return true;
-
-      const tokenPhone = decodedToken.phone_number ? normalizePhone(decodedToken.phone_number) : '';
-      const userPhone = userId.startsWith('p_') ? normalizePhone(userId.substring(2)) : normalizePhone(userId);
-      if (tokenPhone && tokenPhone === userPhone) return true;
-
-      return false;
-    })();
-
-    if (!isAdmin && !isOwner) {
+    if (!checkIsAdmin(decodedToken) && !isOwnerOf(decodedToken, userId)) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to access these keys.' }, { status: 403 });
     }
 
-    if (!isMongoConfigured()) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json({ isOfflineFallback: true, keys: [] });
     }
 
-    const db = await getMongoDb();
-    const keysCollection = db.collection('keys');
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('keys')
+      .select('key, duration_days, created_at, status')
+      .eq('created_by', userId)
+      .order('created_at', { ascending: false });
 
-    const keys = await keysCollection.find({ createdBy: userId }).toArray();
-    const mappedKeys = keys.map(k => ({
-      key: k.key || k._id.toString(),
-      duration: k.durationDays === 365 ? 'Annual' : 'Monthly',
-      createdAt: k.createdAt || Date.now(),
+    if (error) throw error;
+
+    const mappedKeys = (data || []).map(k => ({
+      key: k.key,
+      duration: k.duration_days === 365 ? 'Annual' : 'Monthly',
+      createdAt: k.created_at || Date.now(),
       status: k.status || 'unused'
-    })).sort((a, b) => b.createdAt - a.createdAt);
+    }));
 
     return NextResponse.json({ keys: mappedKeys });
   } catch (error) {
-    console.error('Error fetching keys from MongoDB:', error);
+    console.error('Error fetching keys from Supabase:', error);
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
@@ -86,8 +89,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const rawBody = await request.json();
-    
-    // Body schema validation
+
     const parsedBody = postKeySchema.safeParse(rawBody);
     if (!parsedBody.success) {
       const errorMsg = parsedBody.error.errors.map(e => e.message).join(', ');
@@ -103,37 +105,33 @@ export async function POST(request: Request) {
     if (!decodedToken) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
-    
+
     // Require admin privileges to generate license keys
-    const isAdmin = checkIsAdmin(decodedToken);
-    if (!isAdmin) {
+    if (!checkIsAdmin(decodedToken)) {
       console.warn(`Unauthorized key generation attempt by ${decodedToken.uid}`);
       return NextResponse.json({ error: 'Forbidden: Only administrators can generate keys.' }, { status: 403 });
     }
 
-    if (!isMongoConfigured()) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json({ isOfflineFallback: true });
     }
 
-    const db = await getMongoDb();
-    const keysCollection = db.collection('keys');
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('keys')
+      .upsert({
+        key,
+        duration_days: durationDays || 30,
+        status: 'unused',
+        created_at: Date.now(),
+        created_by: createdBy
+      }, { onConflict: 'key' });
 
-    await keysCollection.updateOne(
-      { key: key },
-      {
-        $set: {
-          durationDays: durationDays || 30,
-          status: 'unused',
-          createdAt: Date.now(),
-          createdBy
-        }
-      },
-      { upsert: true }
-    );
+    if (error) throw error;
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error generating key in MongoDB:', error);
+    console.error('Error generating key in Supabase:', error);
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }
@@ -141,8 +139,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const rawBody = await request.json();
-    
-    // Body schema validation
+
     const parsedBody = putKeySchema.safeParse(rawBody);
     if (!parsedBody.success) {
       const errorMsg = parsedBody.error.errors.map(e => e.message).join(', ');
@@ -158,102 +155,81 @@ export async function PUT(request: Request) {
     if (!decodedToken) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
-    
+
     // IDOR Protection: Verify caller owns this userId profile or is an admin
-    const isAdmin = checkIsAdmin(decodedToken);
-    const isOwner = decodedToken.uid === userId || (() => {
-      const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);
-
-      const tokenEmail = decodedToken.email ? normalizeString(decodedToken.email) : '';
-      const userEmail = userId.startsWith('e_') ? normalizeString(userId.substring(2)) : normalizeString(userId);
-      if (tokenEmail && tokenEmail === userEmail) return true;
-
-      const tokenPhone = decodedToken.phone_number ? normalizePhone(decodedToken.phone_number) : '';
-      const userPhone = userId.startsWith('p_') ? normalizePhone(userId.substring(2)) : normalizePhone(userId);
-      if (tokenPhone && tokenPhone === userPhone) return true;
-
-      return false;
-    })();
-
-    if (!isAdmin && !isOwner) {
+    if (!checkIsAdmin(decodedToken) && !isOwnerOf(decodedToken, userId)) {
       return NextResponse.json({ error: 'Forbidden: You cannot modify keys for another user.' }, { status: 403 });
     }
 
-    if (!isMongoConfigured()) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json({ isOfflineFallback: true });
     }
 
-    const db = await getMongoDb();
-    const keysCollection = db.collection('keys');
+    const supabase = getSupabaseAdmin();
+    const { data: keyDoc, error: findError } = await supabase
+      .from('keys')
+      .select('*')
+      .eq('key', key)
+      .maybeSingle();
 
-    const keyDoc = await keysCollection.findOne({ 
-      $or: [{ key: key }, { _id: key as any }] 
-    });
+    if (findError) throw findError;
     if (!keyDoc) {
       return NextResponse.json({ error: 'Key not found.' }, { status: 404 });
     }
 
+    const durationDays = keyDoc.duration_days || 30;
+
     if (keyDoc.status === 'used') {
-      const isSameUser = keyDoc.usedBy === userId;
-      if (!isSameUser) {
+      if (keyDoc.used_by !== userId) {
         return NextResponse.json({ error: 'Key already used by another account.' }, { status: 400 });
       }
 
-      // Check device verification
+      // Device binding: a key may only be active on one device at a time
       if (deviceId) {
-        if (keyDoc.usedOnDevice && keyDoc.usedOnDevice !== deviceId) {
-          return NextResponse.json({ 
-            error: 'This license key is already active on another system/device. Concurrent usage is blocked.' 
+        if (keyDoc.used_on_device && keyDoc.used_on_device !== deviceId) {
+          return NextResponse.json({
+            error: 'This license key is already active on another system/device. Concurrent usage is blocked.'
           }, { status: 400 });
         }
-        
+
         // If not bound to a device yet, bind it now
-        if (!keyDoc.usedOnDevice) {
-          await keysCollection.updateOne(
-            { _id: keyDoc._id },
-            { $set: { usedOnDevice: deviceId } }
-          );
+        if (!keyDoc.used_on_device) {
+          const { error: bindError } = await supabase
+            .from('keys')
+            .update({ used_on_device: deviceId })
+            .eq('key', key);
+          if (bindError) throw bindError;
         }
       }
 
-      // Check if expired
-      const durationDays = keyDoc.durationDays || 30;
-      const expiryTime = (keyDoc.usedAt || keyDoc.createdAt || Date.now()) + (durationDays * 24 * 60 * 60 * 1000);
+      const expiryTime = (keyDoc.used_at || keyDoc.created_at || Date.now()) + (durationDays * 24 * 60 * 60 * 1000);
       if (Date.now() > expiryTime) {
         return NextResponse.json({ error: 'Key has expired.' }, { status: 400 });
       }
 
-      return NextResponse.json({
-        success: true,
-        durationDays: durationDays
-      });
+      return NextResponse.json({ success: true, durationDays });
     }
 
     // New unused key activation
-    const updateObj: any = {
+    const updateObj: Record<string, unknown> = {
       status: 'used',
-      usedBy: userId,
-      usedAt: Date.now()
+      used_by: userId,
+      used_at: Date.now()
     };
-    
     if (deviceId) {
-      updateObj.usedOnDevice = deviceId;
+      updateObj.used_on_device = deviceId;
     }
 
-    await keysCollection.updateOne(
-      { $or: [{ key: key }, { _id: key as any }] },
-      {
-        $set: updateObj
-      }
-    );
+    const { error: activateError } = await supabase
+      .from('keys')
+      .update(updateObj)
+      .eq('key', key);
 
-    return NextResponse.json({
-      success: true,
-      durationDays: keyDoc.durationDays || 30
-    });
+    if (activateError) throw activateError;
+
+    return NextResponse.json({ success: true, durationDays });
   } catch (error) {
-    console.error('Error activating key in MongoDB:', error);
+    console.error('Error activating key in Supabase:', error);
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
   }
 }

@@ -64,3 +64,6 @@ fix_*.js
 !components.json
 !studio.json
 !recent_logs*.json
+
+# One-off MongoDB->Supabase migration workspace (contains credentials)
+.migration/

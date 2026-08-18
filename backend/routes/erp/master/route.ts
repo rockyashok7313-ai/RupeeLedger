@@ -1,11 +1,24 @@
 import { NextResponse } from '../../../next-response.ts';
-import { getMongoDb } from '../../../../src/lib/mongodb.ts';
+import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyAppToken, verifyIdToken, extractToken } from '../../../../src/lib/auth-verify.ts';
 
 // Ensure standard configuration
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_COLLECTIONS = ['vendors', 'customers', 'products', 'warehouses', 'company'];
+const ALLOWED_TABLES = ['vendors', 'customers', 'products', 'warehouses', 'company'];
+
+/**
+ * The identifying column for each table. Derived here rather than taken from the
+ * request: an attacker-supplied `idField` of `user_id` would match every row the
+ * caller owns, turning a single-record update or delete into a bulk one.
+ */
+const ID_FIELDS: Record<string, string> = {
+  vendors: 'vendor_id',
+  customers: 'customer_id',
+  products: 'product_id',
+  warehouses: 'warehouse_id',
+  company: 'company_id'
+};
 
 async function getAuthenticatedUserId(request: Request) {
   const token = extractToken(request);
@@ -15,7 +28,7 @@ async function getAuthenticatedUserId(request: Request) {
   const customUserId = verifyAppToken(token);
   if (customUserId) return customUserId.uid;
 
-  // Fallback to Firebase token
+  // Fallback to Supabase token
   try {
     const decoded = await verifyIdToken(token);
     return decoded?.uid;
@@ -31,19 +44,21 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
-    
-    if (!type || !ALLOWED_COLLECTIONS.includes(type)) {
+
+    if (!type || !ALLOWED_TABLES.includes(type)) {
       return NextResponse.json({ error: 'Invalid master type' }, { status: 400 });
     }
 
-    const db = await getMongoDb();
-    
-    // Fetch all docs for this user for the given type
-    const collection = db.collection(type);
-    const data = await collection.find({ userId }).toArray();
-    
-    // Remove mongodb _id to prevent client issues
-    const sanitizedData = data.map(({ _id, ...rest }) => rest);
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true, data: [] });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from(type).select('*').eq('user_id', userId);
+    if (error) throw error;
+
+    // Remove the ownership column to prevent client issues
+    const sanitizedData = (data || []).map(({ user_id, ...rest }) => rest);
 
     return NextResponse.json({ data: sanitizedData });
   } catch (error: any) {
@@ -60,26 +75,30 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { type, data } = body;
 
-    if (!type || !ALLOWED_COLLECTIONS.includes(type)) {
+    if (!type || !ALLOWED_TABLES.includes(type)) {
       return NextResponse.json({ error: 'Invalid master type' }, { status: 400 });
     }
-    
+
     if (!data) {
       return NextResponse.json({ error: 'Missing data' }, { status: 400 });
     }
 
-    const db = await getMongoDb();
-    const collection = db.collection(type);
-    
-    // Ensure userId is injected
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Ensure user_id is injected
     const payload = {
       ...data,
-      userId,
+      user_id: userId,
       created_date: Date.now(),
       updated_date: Date.now()
     };
 
-    await collection.insertOne(payload);
+    const { error } = await supabase.from(type).insert(payload);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Record created' });
   } catch (error: any) {
@@ -94,26 +113,36 @@ export async function PUT(request: Request) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { type, id, idField, data } = body;
+    const { type, id, data } = body;
 
-    if (!type || !ALLOWED_COLLECTIONS.includes(type) || !id || !idField) {
+    if (!type || !ALLOWED_TABLES.includes(type) || !id) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
+    const idField = ID_FIELDS[type];
 
-    const db = await getMongoDb();
-    const collection = db.collection(type);
-    
-    const payload = {
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const payload: Record<string, unknown> = {
       ...data,
       updated_date: Date.now()
     };
-    
-    // Remove un-updatable fields just in case
-    delete payload._id;
-    delete payload.userId;
 
-    const query = { userId, [idField]: id };
-    await collection.updateOne(query, { $set: payload });
+    // Remove un-updatable fields just in case
+    delete payload.id;
+    delete payload.user_id;
+
+    // `type` and `idField` are dynamic (validated above), so the query builder is
+    // untyped here -- Supabase cannot infer a schema from a runtime table name.
+    const { error } = await (supabase.from(type) as any)
+      .update(payload)
+      .eq('user_id', userId)
+      .eq(idField, id);
+
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Record updated' });
   } catch (error: any) {
@@ -128,17 +157,24 @@ export async function DELETE(request: Request) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { type, id, idField } = body;
+    const { type, id } = body;
 
-    if (!type || !ALLOWED_COLLECTIONS.includes(type) || !id || !idField) {
+    if (!type || !ALLOWED_TABLES.includes(type) || !id) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
+    const idField = ID_FIELDS[type];
 
-    const db = await getMongoDb();
-    const collection = db.collection(type);
-    
-    const query = { userId, [idField]: id };
-    await collection.deleteOne(query);
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { error } = await (supabase.from(type) as any)
+      .delete()
+      .eq('user_id', userId)
+      .eq(idField, id);
+
+    if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Record deleted' });
   } catch (error: any) {
@@ -146,4 +182,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
