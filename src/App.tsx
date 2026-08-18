@@ -496,6 +496,36 @@ export default function RupeeLedger() {
   };
 
 
+  /**
+   * Radix sets `pointer-events: none` on <body> while a modal is open and clears
+   * it on close. When a dialog's close coincides with a state update that
+   * unmounts it -- editing or deleting a transaction re-renders the whole tree
+   * via recalculateData -- that cleanup can be skipped, and the app is left
+   * looking normal but entirely unclickable until a reload.
+   *
+   * The setTimeout wrappers around setEditingTransaction(null) and
+   * setTransactionToDelete(null) were an attempt to dodge this by delaying the
+   * close; a delay only narrows the window rather than closing it. This watches
+   * the style attribute instead and restores pointer events once no modal is
+   * actually open, which is correct regardless of ordering.
+   */
+  useEffect(() => {
+    const OPEN_MODAL = '[data-state="open"][role="dialog"], [data-state="open"][role="alertdialog"]';
+
+    const restoreIfNoModalOpen = () => {
+      if (document.body.style.pointerEvents !== 'none') return;
+      if (document.querySelector(OPEN_MODAL)) return; // a modal legitimately owns input
+      document.body.style.removeProperty('pointer-events');
+    };
+
+    const observer = new MutationObserver(restoreIfNoModalOpen);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    observer.observe(document.body, { childList: true, subtree: true });
+    restoreIfNoModalOpen();
+
+    return () => observer.disconnect();
+  }, []);
+
   // Daily Auto-Backup to LocalStorage
   useEffect(() => {
     if (!isLoaded || accounts.length === 0) return;
