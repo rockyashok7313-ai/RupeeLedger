@@ -1,7 +1,8 @@
-export type AccountType = 'Cash' | 'Bank' | 'Savings' | 'Business' | 'Other';
+﻿export type AccountType = 'Cash' | 'Bank' | 'Savings' | 'Business' | 'Other';
 
 export interface Account {
   id: string;
+  branchId?: string;
   name: string;
   type: AccountType;
   initialBalance: number;
@@ -20,6 +21,7 @@ export type TransactionType = 'Credit' | 'Debit';
 
 export interface Transaction {
   id: string;
+  branchId?: string;
   accountId: string;
   type: TransactionType;
   amount: number;
@@ -73,6 +75,7 @@ export interface BusinessProfile {
   bankBranch?: string;
   invoiceSettings?: InvoiceSettings;
   logoBase64?: string;
+  branches?: {id: string, name: string}[];
 }
 
 export interface Subscription {
@@ -82,7 +85,7 @@ export interface Subscription {
   tier?: 'FREE' | 'MONTHLY' | 'YEARLY';
   renewalDate: string;
   licenseKey: string;
-  /** Timestamp (ms) when plan was purchased — used for guest 7-day grace period. */
+  /** Timestamp (ms) when plan was purchased â€” used for guest 7-day grace period. */
   purchasedAt?: number;
 }
 
@@ -94,6 +97,7 @@ export interface SecuritySettings {
 
 export interface UserProfile {
   id: string;
+  branchId?: string;
   name: string;
   email?: string;
   phone?: string;
@@ -104,6 +108,7 @@ export interface UserProfile {
 
 export interface Client {
   id: string;
+  branchId?: string;
   name: string;
   gstin: string;
   address: string;
@@ -114,6 +119,7 @@ export interface Client {
 
 export interface InventoryItem {
   id: string;
+  branchId?: string;
   name: string;
   hsnCode: string;
   basePrice: number;
@@ -125,6 +131,7 @@ export interface InventoryItem {
 
 export interface InvoiceItem {
   id: string;
+  branchId?: string;
   inventoryId?: string;
   name: string;
   quantity: number;
@@ -140,6 +147,7 @@ export type InvoiceType = 'Tax Invoice' | 'Proforma' | 'Bill of Supply' | 'Credi
 
 export interface Invoice {
   id: string;
+  branchId?: string;
   invoiceNumber?: string;
   type?: InvoiceType; // Default to Tax Invoice if missing
   prefix?: string;
@@ -177,6 +185,7 @@ export interface Invoice {
 
 export interface Expense {
   id: string;
+  branchId?: string;
   vendorName: string;
   vendorId?: string;
   gstin: string;
@@ -191,6 +200,7 @@ export interface Expense {
 
 export interface RecurringTemplate {
   id: string;
+  branchId?: string;
   clientId: string;
   interval: 'weekly' | 'monthly' | 'yearly';
   nextRun: number;
@@ -201,6 +211,7 @@ export interface RecurringTemplate {
 
 export interface Receipt {
   id: string;
+  branchId?: string;
   invoiceId: string;
   amount: number;
   date: number;
