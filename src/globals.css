@@ -2,270 +2,423 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================================
+   RupeeLedger design tokens
+
+   The identity is Bahi-Khata: the deep red and gold of a traditional Indian
+   ledger, on warm paper rather than cold white. Everything below derives from
+   two brand ramps plus a warm neutral ramp, so surfaces, borders and shadows
+   stay in the same family instead of drifting toward grey.
+   ========================================================================= */
+
 @layer base {
   :root {
-    --background: 40 30% 98%; /* Slightly warm paper background */
-    --foreground: 0 0% 15%; /* Dark charcoal for text */
+    /* --- Brand ramps ---------------------------------------------------- */
+    /* Sindoor red: the ledger cover. */
+    --brand-50:  0 60% 97%;
+    --brand-100: 0 60% 94%;
+    --brand-200: 0 58% 87%;
+    --brand-300: 0 56% 76%;
+    --brand-400: 0 58% 62%;
+    --brand-500: 0 62% 50%;
+    --brand-600: 0 70% 42%;
+    --brand-700: 0 75% 35%;   /* primary */
+    --brand-800: 0 74% 28%;
+    --brand-900: 0 70% 22%;
+    --brand-950: 0 68% 14%;
+
+    /* Haldi gold: the ink and the ruled lines. */
+    --gold-50:  43 90% 96%;
+    --gold-100: 43 88% 90%;
+    --gold-200: 43 85% 80%;
+    --gold-300: 43 82% 68%;
+    --gold-400: 43 78% 58%;
+    --gold-500: 43 74% 49%;   /* accent */
+    --gold-600: 40 72% 42%;
+    --gold-700: 37 70% 34%;
+    --gold-800: 35 66% 27%;
+    --gold-900: 33 62% 21%;
+
+    /* Warm neutrals: paper, not grey. */
+    --sand-50:  40 30% 98%;
+    --sand-100: 40 24% 96%;
+    --sand-200: 38 20% 92%;
+    --sand-300: 36 16% 85%;
+    --sand-400: 34 12% 68%;
+    --sand-500: 32 10% 52%;
+    --sand-600: 30 10% 40%;
+    --sand-700: 28 10% 30%;
+    --sand-800: 26 10% 20%;
+    --sand-900: 24 10% 13%;
+    --sand-950: 24 12% 8%;
+
+    /* --- Semantic surface tokens ---------------------------------------- */
+    --background: var(--sand-50);
+    --foreground: var(--sand-900);
+
+    /* Layered surfaces. Depth comes from stacking these, not from borders. */
+    --surface-1: 0 0% 100%;
+    --surface-2: var(--sand-100);
+    --surface-3: var(--sand-200);
+
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 15%;
+    --card-foreground: var(--sand-900);
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 15%;
-    --primary: 0 75% 35%; /* Bahi-Khata Deep Red */
-    --primary-foreground: 43 74% 90%; /* Light Gold */
-    --secondary: 43 74% 90%; /* Light Gold */
-    --secondary-foreground: 0 75% 35%;
-    --muted: 40 20% 95%;
-    --muted-foreground: 40 10% 45%;
-    --accent: 43 74% 49%; /* True Gold */
-    --accent-foreground: 0 0% 15%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 20% 90%;
-    --input: 0 20% 90%;
-    --ring: 0 75% 35%;
+    --popover-foreground: var(--sand-900);
+
+    --primary: var(--brand-700);
+    --primary-foreground: 43 74% 96%;
+    --secondary: var(--gold-100);
+    --secondary-foreground: var(--brand-800);
+    --muted: var(--sand-100);
+    --muted-foreground: var(--sand-500);
+    --accent: var(--gold-500);
+    --accent-foreground: var(--sand-900);
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: var(--sand-200);
+    --input: var(--sand-300);
+    --ring: var(--brand-600);
     --radius: 0.75rem;
+
+    /* --- Financial semantics --------------------------------------------
+       Money needs its own colours. Credit reads green but warm-shifted so it
+       sits with the palette; debit borrows the brand red so the ledger stays
+       visually coherent. Both hold contrast on paper and on charcoal. */
+    --credit: 152 55% 32%;
+    --credit-foreground: 152 60% 96%;
+    --credit-subtle: 152 45% 94%;
+    --debit: var(--brand-600);
+    --debit-foreground: 0 60% 97%;
+    --debit-subtle: 0 60% 96%;
+
+    /* --- Elevation -------------------------------------------------------
+       Warm-tinted shadows. Pure black shadows over a warm background read as
+       dirt; tinting them toward the brand keeps the page feeling like paper. */
+    --shadow-color: 20 40% 20%;
+    --shadow-xs: 0 1px 2px 0 hsl(var(--shadow-color) / 0.05);
+    --shadow-sm: 0 1px 3px 0 hsl(var(--shadow-color) / 0.07), 0 1px 2px -1px hsl(var(--shadow-color) / 0.06);
+    --shadow-md: 0 4px 12px -2px hsl(var(--shadow-color) / 0.08), 0 2px 6px -2px hsl(var(--shadow-color) / 0.06);
+    --shadow-lg: 0 12px 28px -6px hsl(var(--shadow-color) / 0.12), 0 6px 12px -6px hsl(var(--shadow-color) / 0.08);
+    --shadow-xl: 0 24px 48px -12px hsl(var(--shadow-color) / 0.18);
+    --shadow-ring: 0 0 0 1px hsl(var(--sand-200) / 0.9);
+
+    /* --- Motion ---------------------------------------------------------- */
+    --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 320ms;
+
+    --chart-1: var(--brand-600);
+    --chart-2: var(--gold-500);
+    --chart-3: 152 45% 38%;
+    --chart-4: 200 55% 42%;
+    --chart-5: 28 65% 50%;
   }
+
   .dark {
-    --background: 0 0% 10%; /* Dark mode background */
-    --foreground: 40 30% 98%;
-    --card: 0 0% 12%;
-    --card-foreground: 40 30% 98%;
-    --popover: 0 0% 12%;
-    --popover-foreground: 40 30% 98%;
-    --primary: 0 75% 45%; /* Lighter Bahi-Khata Red for dark mode */
+    --background: var(--sand-950);
+    --foreground: var(--sand-50);
+
+    /* Surfaces get lighter as they come forward, the opposite of light mode. */
+    --surface-1: 24 10% 11%;
+    --surface-2: 24 9% 15%;
+    --surface-3: 24 8% 19%;
+
+    --card: 24 10% 11%;
+    --card-foreground: var(--sand-50);
+    --popover: 24 10% 13%;
+    --popover-foreground: var(--sand-50);
+
+    /* Deep red goes muddy on charcoal, so primary lifts a step. */
+    --primary: var(--brand-500);
     --primary-foreground: 0 0% 100%;
-    --secondary: 43 74% 20%;
-    --secondary-foreground: 43 74% 90%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 43 74% 49%; /* True Gold */
-    --accent-foreground: 0 0% 10%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 0 75% 45%;
+    --secondary: var(--gold-900);
+    --secondary-foreground: var(--gold-100);
+    --muted: 24 8% 17%;
+    --muted-foreground: var(--sand-400);
+    --accent: var(--gold-400);
+    --accent-foreground: var(--sand-950);
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 24 8% 22%;
+    --input: 24 8% 24%;
+    --ring: var(--brand-400);
+
+    --credit: 152 50% 52%;
+    --credit-foreground: 152 60% 8%;
+    --credit-subtle: 152 30% 16%;
+    --debit: 0 62% 60%;
+    --debit-foreground: 0 60% 10%;
+    --debit-subtle: 0 35% 18%;
+
+    /* Shadows barely read on dark surfaces; lean on the ring instead. */
+    --shadow-color: 0 0% 0%;
+    --shadow-ring: 0 0 0 1px hsl(24 8% 24% / 0.9);
   }
-}
-
-@layer utilities {
-  .glass-card {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(139, 0, 0, 0.15); /* Reddish border */
-    box-shadow: 0 8px 32px 0 rgba(139, 0, 0, 0.05); /* Reddish shadow */
-  }
-
-  .premium-glow:hover {
-    box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);
-    transform: translateY(-2px);
-    transition: all 0.3s ease;
-  }
-
-  .metallic-bg {
-    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
-    border: 1px solid #dcdcdc;
-    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.8), 0 4px 6px rgba(0, 0, 0, 0.05);
-  }
-
-  .metallic-text {
-    background: linear-gradient(to bottom, #8a2387, #e94057, #f27121);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    color: transparent;
-    font-weight: 900 !important;
-  }
-}
-
-/* 1. Cursor Glow Effect */
-.cursor-glow {
-    position: fixed;
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 9999;
-    transform: translate(-50%, -50%);
-    transition: opacity 0.3s;
-}
-
-/* 2. Scroll Progress Bar */
-.scroll-progress {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 0%;
-    height: 4px;
-    background: linear-gradient(to right, #ec4899, #be185d);
-    z-index: 10005;
-    box-shadow: 0 0 10px rgba(236, 72, 153, 0.5);
-    transition: width 0.1s ease-out;
-}
-
-/* 3. Card Headline Underline Animation */
-.premium-heading-card h3, .premium-heading-card .premium-heading {
-    position: relative;
-    display: inline-block;
-    padding-bottom: 6px;
-}
-
-.premium-heading-card h3::after, .premium-heading-card .premium-heading::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%) scaleX(0);
-    width: 40px;
-    height: 2px;
-    background: linear-gradient(135deg, #ec4899, #fbcfe8);
-    transition: transform 0.4s ease;
-    transform-origin: center;
-}
-
-.premium-heading-card:hover h3::after, .premium-heading-card:hover .premium-heading::after {
-    transform: translateX(-50%) scaleX(1);
-}
-
-/* 4. CSS Ambient Floating Shapes */
-.shapes-container {
-    position: fixed;
-    width: 100vw;
-    height: 100vh;
-    top: 0;
-    left: 0;
-    perspective: 1000px;
-    overflow: hidden;
-    pointer-events: none;
-    z-index: -1;
-}
-
-.floating-shape {
-    position: absolute;
-    border: 1px solid rgba(236, 72, 153, 0.15);
-    border-radius: 20px;
-    animation: float3D 15s infinite ease-in-out;
-    backdrop-filter: blur(2px);
-}
-
-.shape-1 {
-    width: 200px;
-    height: 200px;
-    top: 10%;
-    left: 5%;
-    background: rgba(236, 72, 153, 0.03);
-    animation-delay: 0s;
-}
-
-.shape-2 {
-    width: 150px;
-    height: 150px;
-    top: 60%;
-    right: 10%;
-    background: rgba(236, 72, 153, 0.03);
-    border-color: rgba(236, 72, 153, 0.15);
-    animation-delay: -3s;
-}
-
-.shape-3 {
-    width: 300px;
-    height: 300px;
-    bottom: -5%;
-    left: 50%;
-    background: rgba(236, 72, 153, 0.02);
-    border-radius: 50%;
-    animation-delay: -7s;
-}
-
-@keyframes float3D {
-    0%, 100% { transform: translateY(0) rotateX(0) rotateY(0); }
-    50% { transform: translateY(-25px) rotateX(8deg) rotateY(-8deg); }
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-background text-foreground font-body;
+    @apply bg-background text-foreground font-body antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Headings get tighter tracking as they scale up. */
+  h1, h2, h3, h4 {
+    @apply font-headline;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* One visible focus treatment everywhere, instead of per-component rings. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: calc(var(--radius) - 4px);
+  }
+
+  ::selection {
+    background: hsl(var(--brand-700) / 0.15);
+    color: hsl(var(--foreground));
+  }
+
+  /* Slim, brand-tinted scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--sand-300)) transparent;
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--sand-300));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: hsl(var(--sand-400)); }
+}
+
+@layer utilities {
+  /* ---------------------------------------------------------------------
+     Numerics. A ledger lives or dies on whether columns of figures line up,
+     so every money value renders with fixed-width digits.
+     --------------------------------------------------------------------- */
+  .tabular, .font-numeric {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "ss01" 1;
+  }
+
+  .amount-credit { color: hsl(var(--credit)); }
+  .amount-debit  { color: hsl(var(--debit)); }
+
+  /* Elevation utilities, so components stop hand-rolling box-shadows. */
+  .elev-1 { box-shadow: var(--shadow-ring), var(--shadow-xs); }
+  .elev-2 { box-shadow: var(--shadow-ring), var(--shadow-sm); }
+  .elev-3 { box-shadow: var(--shadow-ring), var(--shadow-md); }
+  .elev-4 { box-shadow: var(--shadow-ring), var(--shadow-lg); }
+  .elev-5 { box-shadow: var(--shadow-ring), var(--shadow-xl); }
+
+  .surface-1 { background-color: hsl(var(--surface-1)); }
+  .surface-2 { background-color: hsl(var(--surface-2)); }
+  .surface-3 { background-color: hsl(var(--surface-3)); }
+
+  /* ---------------------------------------------------------------------
+     Legacy effect classes, retained by name because components reference
+     them, but re-skinned onto the brand. They previously rendered in pink
+     (#ec4899), which belonged to no part of this palette.
+     --------------------------------------------------------------------- */
+  .glass-card {
+    background: hsl(var(--card) / 0.72);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid hsl(var(--brand-700) / 0.10);
+    box-shadow: var(--shadow-md);
+  }
+  .dark .glass-card {
+    background: hsl(var(--surface-2) / 0.7);
+    border-color: hsl(var(--gold-500) / 0.12);
+  }
+
+  .premium-glow {
+    transition: transform var(--dur-base) var(--ease-out-quint),
+                box-shadow var(--dur-base) var(--ease-out-quint);
+  }
+  .premium-glow:hover {
+    box-shadow: var(--shadow-lg), 0 0 0 1px hsl(var(--gold-500) / 0.35);
+    transform: translateY(-2px);
+  }
+
+  .metallic-bg {
+    background: linear-gradient(135deg, hsl(var(--sand-50)) 0%, hsl(var(--sand-100)) 100%);
+    border: 1px solid hsl(var(--sand-200));
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.7), var(--shadow-sm);
+  }
+  .dark .metallic-bg {
+    background: linear-gradient(135deg, hsl(var(--surface-2)) 0%, hsl(var(--surface-1)) 100%);
+    border-color: hsl(var(--border));
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04), var(--shadow-sm);
+  }
+
+  /* Gold foil, replacing the purple-to-orange gradient. */
+  .metallic-text {
+    background: linear-gradient(100deg,
+      hsl(var(--gold-700)) 0%,
+      hsl(var(--gold-400)) 35%,
+      hsl(var(--gold-200)) 50%,
+      hsl(var(--gold-500)) 65%,
+      hsl(var(--gold-700)) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    font-weight: 800;
+  }
+
+  .text-gradient-brand {
+    background: linear-gradient(120deg, hsl(var(--brand-700)), hsl(var(--brand-500)) 60%, hsl(var(--gold-600)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* Hairline rule echoing a ledger's ruled lines. */
+  .rule-gold {
+    background-image: linear-gradient(90deg, transparent, hsl(var(--gold-500) / 0.5), transparent);
+    height: 1px;
   }
 }
 
+/* --- Ambient effects, all re-tinted to brand ------------------------------ */
+.cursor-glow {
+  position: fixed;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, hsl(var(--brand-600) / 0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--dur-slow);
+}
+
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 3px;
+  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--gold-500)));
+  z-index: 10005;
+  box-shadow: 0 0 12px hsl(var(--gold-500) / 0.4);
+  transition: width 0.1s ease-out;
+}
+
+.premium-heading-card h3,
+.premium-heading-card .premium-heading {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 6px;
+}
+
+.premium-heading-card h3::after,
+.premium-heading-card .premium-heading::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 40px;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--gold-500)));
+  transition: transform var(--dur-slow) var(--ease-out-quint);
+  transform-origin: center;
+}
+
+.premium-heading-card:hover h3::after,
+.premium-heading-card:hover .premium-heading::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.shapes-container {
+  position: fixed;
+  inset: 0;
+  perspective: 1000px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.floating-shape {
+  position: absolute;
+  border: 1px solid hsl(var(--brand-700) / 0.10);
+  border-radius: 24px;
+  animation: float3D 18s infinite ease-in-out;
+  backdrop-filter: blur(2px);
+}
+
+.shape-1 { width: 200px; height: 200px; top: 10%; left: 5%;  background: hsl(var(--brand-700) / 0.025); animation-delay: 0s; }
+.shape-2 { width: 150px; height: 150px; top: 60%; right: 10%; background: hsl(var(--gold-500) / 0.03); border-color: hsl(var(--gold-500) / 0.14); animation-delay: -4s; }
+.shape-3 { width: 300px; height: 300px; bottom: -5%; left: 50%; background: hsl(var(--brand-700) / 0.02); border-radius: 50%; animation-delay: -8s; }
+
+@keyframes float3D {
+  0%, 100% { transform: translateY(0) rotateX(0) rotateY(0); }
+  50%      { transform: translateY(-25px) rotateX(8deg) rotateY(-8deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Respect the OS setting. Ambient motion is decoration, never information. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .floating-shape,
+  .shapes-container,
+  .cursor-glow { display: none; }
+}
+
+/* --- Print: a ledger gets printed, so this is a first-class surface ------- */
 @page {
   size: A4;
   margin: 1.27cm;
 }
 
 @media print {
-  .no-print,
-  div[class*="bg-black/80"],
-  div[class*="backdrop-blur"],
-  [data-radix-pointer-down-outside],
-  button[aria-label="Close"],
-  div[role="dialog"] button {
-    display: none !important;
-  }
-  
-  .print-only {
-    display: block !important;
-  }
-  
-  body {
-    background: white !important;
-    color: black !important;
-  }
-  
-  /* Reset Dialog Content styling to be clean for printing */
-  div[role="dialog"] {
-    position: static !important;
-    left: auto !important;
-    top: auto !important;
-    transform: none !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    background: white !important;
-    color: black !important;
-  }
-  
-  /* Remove scrollbars from the wrapper inside Dialog Content on print */
-  div[role="dialog"] .overflow-y-auto {
-    overflow: visible !important;
-    max-height: none !important;
-  }
-  
-  /* Hide the semi-transparent dialog overlay backdrop */
-  div[data-state="open"] {
-    background-color: transparent !important;
+  .cursor-glow,
+  .shapes-container,
+  .scroll-progress,
+  .no-print { display: none !important; }
+
+  body { background: #fff !important; color: #000 !important; }
+
+  .glass-card,
+  .metallic-bg {
+    background: #fff !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
+    border: 1px solid #ddd !important;
   }
 
-  /* A4 single-page invoice wrapper */
-  .invoice-wrapper {
-    width: 210mm !important;
-    max-width: 210mm !important;
-    min-height: 270mm;
-    max-height: 297mm;
-    margin: 0 auto !important;
-    overflow: hidden !important;
-    page-break-after: avoid;
-    page-break-inside: avoid;
-    padding: 10mm !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-}
-
-.print-only {
-  display: none;
+  /* Keep rows and totals from splitting across pages. */
+  tr, .avoid-break { break-inside: avoid; }
+  thead { display: table-header-group; }
 }

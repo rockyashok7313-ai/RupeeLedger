@@ -2672,12 +2672,16 @@ export default function RupeeLedger() {
 
   if (!isLoaded) {
     return (
-      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 border border-primary/20 mb-4">
-            <span className="text-3xl font-extrabold text-white">Γé╣</span>
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-sand-950 text-sand-50">
+        <div className="flex flex-col items-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/20">
+            <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
           </div>
-          <p className="text-sm text-slate-400 font-medium">Loading RupeeLedger...</p>
+          <p className="text-sm font-medium text-sand-400">Loading RupeeLedger…</p>
+          {/* A determinate-looking sliver reads as progress; a pulsing block reads as a stall. */}
+          <div className="mt-4 h-0.5 w-32 overflow-hidden rounded-full bg-sand-800">
+            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
+          </div>
         </div>
       </div>
     );
@@ -2686,34 +2690,47 @@ export default function RupeeLedger() {
   if (showLogin) {
     return (
       <>
-      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 overflow-y-auto p-4 animate-in fade-in duration-300">
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center overflow-y-auto bg-sand-950 p-4 text-sand-50 animate-in fade-in duration-300">
+        {/* Warm brand wash instead of a flat slate field, so the login shares
+            the ledger's palette rather than looking like a different product. */}
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 -z-10"
+          style={{
+            background:
+              "radial-gradient(60rem 40rem at 50% -10%, hsl(var(--brand-700) / 0.28), transparent 60%), radial-gradient(40rem 30rem at 90% 110%, hsl(var(--gold-700) / 0.18), transparent 60%)",
+          }}
+        />
         <Toaster />
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
-          
+        <div className="w-full max-w-md space-y-6 rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-xl backdrop-blur-xl">
+
           {/* Brand Logo Header */}
           <div className="flex flex-col items-center space-y-2 text-center">
-            <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 border border-primary/20">
-              <span className="text-3xl font-extrabold text-white">Γé╣</span>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/25">
+              <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white mt-2">RupeeLedger</h1>
-            <p className="text-xs text-muted-foreground">Select authentication profile to open your account ledger</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">RupeeLedger</h1>
+            <div className="rule-gold w-16" aria-hidden />
+            <p className="text-xs text-sand-400">Select an authentication profile to open your ledger</p>
           </div>
 
           {/* Login Mode Tab Switches */}
-          <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div role="tablist" aria-label="Authentication method" className="grid grid-cols-4 gap-1 rounded-lg border border-white/10 bg-black/25 p-1">
             {(["google", "phone", "whatsapp", "email"] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
+                role="tab"
+                aria-selected={loginTab === tab}
                 onClick={() => {
                   setLoginTab(tab);
                   setOtpSent(false);
                   setWhatsappOtpSent(false);
                 }}
-                className={`py-1.5 text-[10px] font-semibold rounded transition-all capitalize ${
-                  loginTab === tab 
-                    ? "bg-primary text-white shadow-sm" 
-                    : "text-muted-foreground hover:text-slate-200"
+                className={`rounded py-1.5 text-2xs font-semibold capitalize transition-all duration-base ease-out-quint ${
+                  loginTab === tab
+                    ? "bg-gradient-to-br from-brand-600 to-brand-700 text-primary-foreground shadow-sm"
+                    : "text-sand-400 hover:bg-white/5 hover:text-sand-100"
                 }`}
               >
                 {tab === 'whatsapp' ? 'WhatsApp' : tab}
@@ -2733,7 +2750,7 @@ export default function RupeeLedger() {
                 <button
                   type="button"
                   onClick={handleGoogleLogin}
-                  className="w-full flex items-center justify-center gap-3 bg-white text-slate-900 font-bold hover:bg-slate-100 active:scale-[0.98] transition-all h-11 px-4 rounded-lg shadow-md border"
+                  className="w-full flex items-center justify-center gap-3 bg-white text-sand-900 font-bold hover:bg-sand-100 active:scale-[0.98] transition-all h-11 px-4 rounded-lg shadow-md border"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24">
                     <path
@@ -2763,15 +2780,15 @@ export default function RupeeLedger() {
               <div className="space-y-4">
                 {!otpSent ? (
                   <div className="space-y-3">
-                    <Label htmlFor="phoneLogin" className="text-xs text-slate-300">Enter Contact Phone Number</Label>
+                    <Label htmlFor="phoneLogin" className="text-xs text-sand-300">Enter Contact Phone Number</Label>
                     <div className="flex gap-2">
-                      <span className="flex items-center justify-center bg-slate-950 border border-slate-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
+                      <span className="flex items-center justify-center bg-sand-950 border border-sand-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
                       <Input
                         id="phoneLogin"
                         type="tel"
                         maxLength={10}
                         placeholder="9876543210"
-                        className="bg-slate-950 border-slate-800 text-white h-11"
+                        className="bg-sand-950 border-sand-800 text-white h-11"
                         value={phoneInput}
                         onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       />
@@ -2786,10 +2803,10 @@ export default function RupeeLedger() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Label htmlFor="otpCode" className="text-xs text-slate-300">Enter 6-Digit OTP Code</Label>
+                    <Label htmlFor="otpCode" className="text-xs text-sand-300">Enter 6-Digit OTP Code</Label>
                     {generatedOtp && (
-                      <div className="bg-slate-800 rounded-lg p-3 text-center">
-                        <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                      <div className="bg-sand-800 rounded-lg p-3 text-center">
+                        <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
                         <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{generatedOtp}</p>
                       </div>
                     )}
@@ -2798,7 +2815,7 @@ export default function RupeeLedger() {
                       type="text"
                       maxLength={6}
                       placeholder="xxxxxx"
-                      className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                      className="bg-sand-950 border-sand-800 text-white text-center font-mono tracking-widest text-lg h-11"
                       value={otpInput}
                       onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     />
@@ -2807,7 +2824,7 @@ export default function RupeeLedger() {
                         type="button"
                         variant="outline"
                         onClick={() => setOtpSent(false)}
-                        className="flex-1 h-11 bg-transparent border-slate-800 hover:bg-slate-850 hover:text-white"
+                        className="flex-1 h-11 bg-transparent border-sand-800 hover:bg-sand-800 hover:text-white"
                       >
                         Back
                       </Button>
@@ -2829,15 +2846,15 @@ export default function RupeeLedger() {
               <div className="space-y-4">
                 {!whatsappOtpSent ? (
                   <div className="space-y-3">
-                    <Label htmlFor="whatsappLogin" className="text-xs text-slate-300">Enter WhatsApp Phone Number</Label>
+                    <Label htmlFor="whatsappLogin" className="text-xs text-sand-300">Enter WhatsApp Phone Number</Label>
                     <div className="flex gap-2">
-                      <span className="flex items-center justify-center bg-slate-950 border border-slate-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
+                      <span className="flex items-center justify-center bg-sand-950 border border-sand-800 text-sm font-semibold rounded-lg px-3 h-11 shrink-0">+91</span>
                       <Input
                         id="whatsappLogin"
                         type="tel"
                         maxLength={10}
                         placeholder="9876543210"
-                        className="bg-slate-950 border-slate-800 text-white h-11"
+                        className="bg-sand-950 border-sand-800 text-white h-11"
                         value={whatsappInput}
                         onChange={(e) => setWhatsappInput(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       />
@@ -2853,10 +2870,10 @@ export default function RupeeLedger() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Label htmlFor="whatsappOtpCode" className="text-xs text-slate-300">Enter 6-Digit WhatsApp OTP</Label>
+                    <Label htmlFor="whatsappOtpCode" className="text-xs text-sand-300">Enter 6-Digit WhatsApp OTP</Label>
                     {whatsappGeneratedOtp && (
-                      <div className="bg-slate-800 rounded-lg p-3 text-center">
-                        <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                      <div className="bg-sand-800 rounded-lg p-3 text-center">
+                        <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
                         <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{whatsappGeneratedOtp}</p>
                       </div>
                     )}
@@ -2865,7 +2882,7 @@ export default function RupeeLedger() {
                       type="text"
                       maxLength={6}
                       placeholder="xxxxxx"
-                      className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                      className="bg-sand-950 border-sand-800 text-white text-center font-mono tracking-widest text-lg h-11"
                       value={whatsappOtpInput}
                       onChange={(e) => setWhatsappOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     />
@@ -2874,7 +2891,7 @@ export default function RupeeLedger() {
                         type="button"
                         variant="outline"
                         onClick={() => { setWhatsappOtpSent(false); setWhatsappOtpInput(''); }}
-                        className="flex-1 h-11 bg-transparent border-slate-800 hover:bg-slate-850 hover:text-white"
+                        className="flex-1 h-11 bg-transparent border-sand-800 hover:bg-sand-800 hover:text-white"
                       >
                         Back
                       </Button>
@@ -2912,12 +2929,12 @@ export default function RupeeLedger() {
                     {!emailOtpSent ? (
                       <>
                         <div className="space-y-1">
-                          <Label htmlFor="emailOtpAddr" className="text-xs text-slate-300">Email Address</Label>
+                          <Label htmlFor="emailOtpAddr" className="text-xs text-sand-300">Email Address</Label>
                           <Input
                             id="emailOtpAddr"
                             type="email"
                             placeholder="name@company.com"
-                            className="bg-slate-950 border-slate-800 text-white h-11"
+                            className="bg-sand-950 border-sand-800 text-white h-11"
                             value={emailInput}
                             onChange={(e) => setEmailInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSendEmailOtp()}
@@ -2934,15 +2951,15 @@ export default function RupeeLedger() {
                       </>
                     ) : (
                       <>
-                        <p className="text-xs text-slate-400">OTP sent to <span className="text-white font-semibold">{emailInput}</span></p>
+                        <p className="text-xs text-sand-400">OTP sent to <span className="text-white font-semibold">{emailInput}</span></p>
                         <div className="space-y-1">
-                          <Label htmlFor="emailOtpCode" className="text-xs text-slate-300">Enter 6-Digit OTP</Label>
+                          <Label htmlFor="emailOtpCode" className="text-xs text-sand-300">Enter 6-Digit OTP</Label>
                           <Input
                             id="emailOtpCode"
                             type="text"
                             maxLength={6}
                             placeholder="xxxxxx"
-                            className="bg-slate-950 border-slate-800 text-white text-center font-mono tracking-widest text-lg h-11"
+                            className="bg-sand-950 border-sand-800 text-white text-center font-mono tracking-widest text-lg h-11"
                             value={emailOtpInput}
                             onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                             onKeyDown={(e) => e.key === 'Enter' && handleVerifyEmailOtp()}
@@ -2950,7 +2967,7 @@ export default function RupeeLedger() {
                           />
                         </div>
                         <div className="flex gap-2">
-                          <Button type="button" variant="outline" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }} className="flex-1 h-11 bg-transparent border-slate-800 hover:text-white">Back</Button>
+                          <Button type="button" variant="outline" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }} className="flex-1 h-11 bg-transparent border-sand-800 hover:text-white">Back</Button>
                           <Button type="button" onClick={handleVerifyEmailOtp} disabled={emailOtpLoading} className="flex-1 h-11 bg-primary text-white hover:bg-primary/95">
                             {emailOtpLoading ? 'Verifying...' : 'Verify & Sign In'}
                           </Button>
@@ -2965,13 +2982,13 @@ export default function RupeeLedger() {
                 {emailLoginMode === 'password' && (
                   <form onSubmit={handleEmailLogin} className="space-y-3">
                     <div className="space-y-1">
-                      <Label htmlFor="emailInput" className="text-xs text-slate-300">Email Address</Label>
-                      <Input id="emailInput" type="email" required placeholder="name@company.com" className="bg-slate-950 border-slate-800 text-white h-11" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
+                      <Label htmlFor="emailInput" className="text-xs text-sand-300">Email Address</Label>
+                      <Input id="emailInput" type="email" required placeholder="name@company.com" className="bg-sand-950 border-sand-800 text-white h-11" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} />
                     </div>
                     <div className="space-y-1 relative">
-                      <Label htmlFor="passInput" className="text-xs text-slate-300">Password</Label>
-                      <Input id="passInput" type={showPassword ? "text" : "password"} required placeholder="••••••••" className="bg-slate-950 border-slate-800 text-white h-11 pr-10" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} />
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-7 text-slate-400 hover:text-white transition-colors">
+                      <Label htmlFor="passInput" className="text-xs text-sand-300">Password</Label>
+                      <Input id="passInput" type={showPassword ? "text" : "password"} required placeholder="••••••••" className="bg-sand-950 border-sand-800 text-white h-11 pr-10" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-7 text-sand-400 hover:text-white transition-colors">
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
@@ -2988,7 +3005,7 @@ export default function RupeeLedger() {
             By authenticating, you agree to our terms. All sessions require a verified login and maintain a secure cloud ledger bridge.
           </p>
 
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2 border-t border-sand-800">
             <Button
               variant="ghost"
               onClick={() => {
@@ -3003,7 +3020,7 @@ export default function RupeeLedger() {
                 setIsLoaded(true);
                 localStorage.setItem("rupee_ledger_user", JSON.stringify(profile));
               }}
-              className="w-full text-slate-400 hover:text-white hover:bg-slate-800 text-xs h-10"
+              className="w-full text-sand-400 hover:text-white hover:bg-sand-800 text-xs h-10"
             >
               Continue Offline (Guest Mode)
             </Button>
@@ -3014,24 +3031,24 @@ export default function RupeeLedger() {
       {/* Guest Account Upgrade Modal */}
       {showGuestUpgradeModal && (
         <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-sm bg-sand-900 border border-amber-500/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center space-y-2">
               <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
                 <span className="text-2xl">🔒</span>
               </div>
               <h2 className="text-lg font-bold text-white">Account Upgrade Required</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <p className="text-xs text-sand-400 leading-relaxed">
                 Your 7-day guest plan has expired. Link your email to continue accessing your ledger and save your data permanently to the cloud.
               </p>
             </div>
 
             {!guestUpgradeOtpSent ? (
               <div className="space-y-3">
-                <Label className="text-xs text-slate-300">Your Email Address</Label>
+                <Label className="text-xs text-sand-300">Your Email Address</Label>
                 <Input
                   type="email"
                   placeholder="name@company.com"
-                  className="bg-slate-950 border-slate-700 text-white h-11"
+                  className="bg-sand-950 border-sand-700 text-white h-11"
                   value={guestUpgradeEmail}
                   onChange={(e) => setGuestUpgradeEmail(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendGuestUpgradeOtp()}
@@ -3047,26 +3064,26 @@ export default function RupeeLedger() {
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-slate-400">OTP sent to <span className="text-white font-semibold">{guestUpgradeEmail}</span></p>
+                <p className="text-xs text-sand-400">OTP sent to <span className="text-white font-semibold">{guestUpgradeEmail}</span></p>
                 {guestUpgradeDevOtp && (
-                  <div className="bg-slate-800 rounded-lg p-3 text-center">
-                    <p className="text-[10px] text-slate-400 mb-1">Demo OTP</p>
+                  <div className="bg-sand-800 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
                     <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{guestUpgradeDevOtp}</p>
                   </div>
                 )}
-                <Label className="text-xs text-slate-300">Enter 6-Digit OTP</Label>
+                <Label className="text-xs text-sand-300">Enter 6-Digit OTP</Label>
                 <Input
                   type="text"
                   maxLength={6}
                   placeholder="xxxxxx"
-                  className="bg-slate-950 border-slate-700 text-white text-center font-mono tracking-widest text-lg h-11"
+                  className="bg-sand-950 border-sand-700 text-white text-center font-mono tracking-widest text-lg h-11"
                   value={guestUpgradeOtp}
                   onChange={(e) => setGuestUpgradeOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   onKeyDown={(e) => e.key === 'Enter' && handleVerifyGuestUpgrade()}
                   autoFocus
                 />
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => { setGuestUpgradeOtpSent(false); setGuestUpgradeOtp(''); }} className="flex-1 h-11 bg-transparent border-slate-700 hover:text-white text-xs">Back</Button>
+                  <Button variant="outline" onClick={() => { setGuestUpgradeOtpSent(false); setGuestUpgradeOtp(''); }} className="flex-1 h-11 bg-transparent border-sand-700 hover:text-white text-xs">Back</Button>
                   <Button onClick={handleVerifyGuestUpgrade} disabled={guestUpgradeLoading} className="flex-1 h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold">
                     {guestUpgradeLoading ? 'Linking...' : 'Verify & Link'}
                   </Button>
@@ -3083,7 +3100,7 @@ export default function RupeeLedger() {
 
   if (isLocked && isLoaded) {
     return (
-      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 animate-in fade-in duration-300">
+      <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-sand-950 text-sand-100 animate-in fade-in duration-300">
         <Toaster />
         <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-8">
           {/* Logo / Brand */}
@@ -3099,7 +3116,7 @@ export default function RupeeLedger() {
 
           <div className="space-y-3 w-full">
             <p className="text-sm font-semibold tracking-wide uppercase text-primary">Ledger Secured</p>
-            <h2 className="text-lg text-slate-300">Enter PIN to Unlock</h2>
+            <h2 className="text-lg text-sand-300">Enter PIN to Unlock</h2>
             
             {/* Visual PIN Dots */}
             <div className="flex justify-center gap-4 py-4">
@@ -3121,7 +3138,7 @@ export default function RupeeLedger() {
                 key={num}
                 type="button"
                 onClick={() => handleKeyPress(num)}
-                className="h-14 w-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xl font-bold hover:bg-slate-800 hover:border-slate-700 active:scale-95 transition-all duration-100"
+                className="h-14 w-14 rounded-full bg-sand-900 border border-sand-800 flex items-center justify-center text-xl font-bold hover:bg-sand-800 hover:border-sand-700 active:scale-95 transition-all duration-100"
               >
                 {num}
               </button>
@@ -3136,7 +3153,7 @@ export default function RupeeLedger() {
             <button
               type="button"
               onClick={() => handleKeyPress("0")}
-              className="h-14 w-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-xl font-bold hover:bg-slate-800 hover:border-slate-700 active:scale-95 transition-all duration-100"
+              className="h-14 w-14 rounded-full bg-sand-900 border border-sand-800 flex items-center justify-center text-xl font-bold hover:bg-sand-800 hover:border-sand-700 active:scale-95 transition-all duration-100"
             >
               0
             </button>
@@ -3155,9 +3172,9 @@ export default function RupeeLedger() {
 
   if (isTrialExpired && isLoaded) {
     return (
-      <div className="fixed inset-0 z-[15000] flex flex-col items-center justify-center bg-slate-950 text-slate-100 animate-in fade-in duration-300">
+      <div className="fixed inset-0 z-[15000] flex flex-col items-center justify-center bg-sand-950 text-sand-100 animate-in fade-in duration-300">
         <Toaster />
-        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-6 bg-slate-900 border border-red-500/20 rounded-3xl shadow-2xl">
+        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-6 bg-sand-900 border border-red-500/20 rounded-3xl shadow-2xl">
           {/* Logo / Expiry Icon */}
           <div className="flex flex-col items-center space-y-3">
             <div className="h-16 w-16 bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/30">
@@ -3165,19 +3182,19 @@ export default function RupeeLedger() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-white">Free Trial Expired</h1>
-              <p className="text-xs text-slate-400 mt-1">Your 7-day free trial usage period has ended.</p>
+              <p className="text-xs text-sand-400 mt-1">Your 7-day free trial usage period has ended.</p>
             </div>
           </div>
 
-          <div className="w-full space-y-4 pt-4 border-t border-slate-800">
-            <div className="bg-slate-950 rounded-xl p-4 text-left border border-slate-800 space-y-2">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Select a Subscription Plan</p>
-              <div className="flex justify-between items-center text-sm py-1 border-b border-slate-900">
-                <span className="text-slate-300">Monthly Pro License</span>
+          <div className="w-full space-y-4 pt-4 border-t border-sand-800">
+            <div className="bg-sand-950 rounded-xl p-4 text-left border border-sand-800 space-y-2">
+              <p className="text-xs font-semibold text-sand-400 uppercase tracking-widest">Select a Subscription Plan</p>
+              <div className="flex justify-between items-center text-sm py-1 border-b border-sand-900">
+                <span className="text-sand-300">Monthly Pro License</span>
                 <span className="font-bold text-white">₹199 / month</span>
               </div>
               <div className="flex justify-between items-center text-sm py-1">
-                <span className="text-slate-300">Annual Pro License</span>
+                <span className="text-sand-300">Annual Pro License</span>
                 <span className="font-bold text-amber-400">₹1,999 / year</span>
               </div>
             </div>
@@ -3185,7 +3202,7 @@ export default function RupeeLedger() {
             <div className="grid grid-cols-2 gap-3">
               <Button 
                 onClick={() => handleBuyLicenseKey("monthly")}
-                className="h-11 bg-slate-950 border border-slate-800 hover:bg-slate-900 text-white font-bold"
+                className="h-11 bg-sand-950 border border-sand-800 hover:bg-sand-900 text-white font-bold"
               >
                 Buy Monthly
               </Button>
@@ -3198,35 +3215,35 @@ export default function RupeeLedger() {
             </div>
           </div>
 
-          <div className="w-full space-y-3 pt-4 border-t border-slate-800">
-            <Label className="text-xs text-left block text-slate-300">Already have an Activation Key?</Label>
+          <div className="w-full space-y-3 pt-4 border-t border-sand-800">
+            <Label className="text-xs text-left block text-sand-300">Already have an Activation Key?</Label>
             <div className="flex gap-2">
               <Input
                 type="text"
                 placeholder="RL-PRO-XXXX-XXXX-XXXX"
-                className="bg-slate-950 border-slate-800 text-white font-mono tracking-wider text-xs h-11"
+                className="bg-sand-950 border-sand-800 text-white font-mono tracking-wider text-xs h-11"
                 value={licenseInput}
                 onChange={(e) => setLicenseInput(e.target.value)}
               />
               <Button 
                 onClick={handleActivateKey}
-                className="h-11 px-4 bg-slate-850 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs"
+                className="h-11 px-4 bg-sand-800 hover:bg-sand-800 border border-sand-700 text-white font-bold text-xs"
               >
                 Activate
               </Button>
             </div>
           </div>
 
-          <div className="w-full pt-4 border-t border-slate-800 text-slate-400 space-y-1">
-            <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Support & Inquiries</p>
-            <p className="text-xs font-semibold text-slate-300">Owner: L.ASHOK KUMAR, COIMBATORE</p>
+          <div className="w-full pt-4 border-t border-sand-800 text-sand-400 space-y-1">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-sand-500">Support & Inquiries</p>
+            <p className="text-xs font-semibold text-sand-300">Owner: L.ASHOK KUMAR, COIMBATORE</p>
             <p className="text-xs">Mobile: <a href="tel:+919791335351" className="text-amber-400 font-bold hover:underline">9791335351</a></p>
           </div>
 
           <div className="w-full pt-2">
             <button 
               onClick={handleLogout}
-              className="text-xs text-slate-400 hover:text-white underline transition-all"
+              className="text-xs text-sand-400 hover:text-white underline transition-all"
             >
               Sign Out & Switch Account
             </button>
@@ -3412,7 +3429,7 @@ export default function RupeeLedger() {
         <main className="flex-1 overflow-auto p-4 md:p-8 relative">
           {/* Global Header / Branch Selector */}
           <div className="flex items-center justify-between mb-8 border-b pb-4">
-            <h1 className="text-xl font-bold tracking-tight text-slate-800">
+            <h1 className="text-xl font-bold tracking-tight text-sand-800">
               {businessProfile.companyName || "RupeeLedger"}
             </h1>
             <div className="flex items-center gap-4">
@@ -3434,7 +3451,7 @@ export default function RupeeLedger() {
                   handleBranchChange(val);
                 }
               }}>
-                <SelectTrigger className="w-auto min-w-[200px] h-9 bg-slate-100 border-slate-200">
+                <SelectTrigger className="w-auto min-w-[200px] h-9 bg-sand-100 border-sand-200">
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-green-500"></div>
                     <SelectValue placeholder="Select Branch" />
@@ -3691,7 +3708,7 @@ export default function RupeeLedger() {
                                 setLedgerStartDate("");
                                 setLedgerEndDate("");
                               }}
-                              className="text-xs h-10 hover:bg-slate-100"
+                              className="text-xs h-10 hover:bg-sand-100"
                             >
                               Reset
                             </Button>
@@ -3847,7 +3864,7 @@ export default function RupeeLedger() {
                 </div>
                 
                 <div className="w-full sm:w-[220px]">
-                  <Label htmlFor="analyticsFilter" className="text-xs font-semibold text-slate-700 block mb-1">Filter Portfolio</Label>
+                  <Label htmlFor="analyticsFilter" className="text-xs font-semibold text-sand-700 block mb-1">Filter Portfolio</Label>
                   <Select 
                     value={analyticsAccountId} 
                     onValueChange={(val) => setAnalyticsAccountId(val)}
@@ -3867,23 +3884,23 @@ export default function RupeeLedger() {
 
               {/* Key Summary metrics for last 6 months */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-slate-50/50">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 bg-sand-50/50">
                   <CardHeader className="py-4">
-                    <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Inflow</CardDescription>
+                    <CardDescription className="text-xs uppercase font-bold text-sand-500">6-Month Total Inflow</CardDescription>
                     <CardTitle className="premium-heading text-2xl text-green-600 font-bold">
                       <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.income, 0)} />
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-slate-50/50">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 bg-sand-50/50">
                   <CardHeader className="py-4">
-                    <CardDescription className="text-xs uppercase font-bold text-slate-500">6-Month Total Outflow</CardDescription>
+                    <CardDescription className="text-xs uppercase font-bold text-sand-500">6-Month Total Outflow</CardDescription>
                     <CardTitle className="premium-heading text-2xl text-destructive font-bold">
                       <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.expenses, 0)} />
                     </CardTitle>
                   </CardHeader>
                 </Card>
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 bg-primary/5 border-primary/10">
+                <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 bg-primary/5 border-primary/10">
                   <CardHeader className="py-4">
                     <CardDescription className="text-xs uppercase font-bold text-primary/80">Average Monthly Cash Flow</CardDescription>
                     <CardTitle className="premium-heading text-2xl font-bold">
@@ -3903,9 +3920,9 @@ export default function RupeeLedger() {
               {/* Charts grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Cash Flow Line Chart */}
-                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4 lg:col-span-2">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4 lg:col-span-2">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Net Cash Flow Trend</h3>
+                    <h3 className="text-lg font-bold text-sand-800">Net Cash Flow Trend</h3>
                     <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
                   </div>
                   <div className="h-[300px] w-full pt-4">
@@ -3929,7 +3946,7 @@ export default function RupeeLedger() {
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-sand-50 text-muted-foreground text-sm italic">
                         No financial activity recorded in the last 6 months.
                       </div>
                     )}
@@ -3937,9 +3954,9 @@ export default function RupeeLedger() {
                 </Card>
 
                 {/* Income vs Expenses Double Bar Chart */}
-                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Monthly Inflow vs Outflow</h3>
+                    <h3 className="text-lg font-bold text-sand-800">Monthly Inflow vs Outflow</h3>
                     <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
                   </div>
                   <div className="h-[280px] w-full pt-4">
@@ -3959,7 +3976,7 @@ export default function RupeeLedger() {
                         </BarChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-sand-50 text-muted-foreground text-sm italic">
                         No transactions recorded yet.
                       </div>
                     )}
@@ -3967,9 +3984,9 @@ export default function RupeeLedger() {
                 </Card>
 
                 {/* Expense Graph */}
-                <Card className="glass-card premium-glow premium-heading-card shadow-md border-slate-200/80 p-6 space-y-4">
+                <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800">Monthly Expenses Trend</h3>
+                    <h3 className="text-lg font-bold text-sand-800">Monthly Expenses Trend</h3>
                     <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
                   </div>
                   <div className="h-[280px] w-full pt-4">
@@ -3993,7 +4010,7 @@ export default function RupeeLedger() {
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground text-sm italic">
+                      <div className="h-full w-full flex items-center justify-center border-2 border-dashed rounded-lg bg-sand-50 text-muted-foreground text-sm italic">
                         No expense logs recorded yet.
                       </div>
                     )}
@@ -4036,26 +4053,26 @@ export default function RupeeLedger() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* User Profile / Session Card */}
                   {user && (
-                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
+                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 md:col-span-2">
                       <CardHeader>
                         <CardTitle className="premium-heading premium-heading">User Profile & Session</CardTitle>
                         <CardDescription>Manage your active authenticated cloud identity</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-sand-50 border rounded-lg">
                           <div className="flex items-center space-x-4">
                             <img 
                               src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
                               alt="User Avatar" 
-                              className="h-16 w-16 rounded-full border bg-slate-100 p-1" 
+                              className="h-16 w-16 rounded-full border bg-sand-100 p-1" 
                             />
                             <div>
-                              <p className="font-bold text-lg text-slate-800">{user.name}</p>
-                              {user.email && <p className="text-sm text-slate-500 font-mono">{user.email}</p>}
-                              {user.phone && <p className="text-sm text-slate-500 font-mono">+91 {user.phone}</p>}
+                              <p className="font-bold text-lg text-sand-800">{user.name}</p>
+                              {user.email && <p className="text-sm text-sand-500 font-mono">{user.email}</p>}
+                              {user.phone && <p className="text-sm text-sand-500 font-mono">+91 {user.phone}</p>}
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className={`h-2 w-2 rounded-full ${user.authMethod === 'guest' ? 'bg-amber-500' : 'bg-green-500'}`} />
-                                <span className="text-xs font-semibold text-slate-600 capitalize">
+                                <span className="text-xs font-semibold text-sand-600 capitalize">
                                   Auth Profile: {user.authMethod} Mode
                                 </span>
                               </div>
@@ -4074,7 +4091,7 @@ export default function RupeeLedger() {
                   )}
 
                   {/* Business Profile Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Business Profile Settings</CardTitle>
                       <CardDescription>Configure custom headers for invoices, reports, and statements</CardDescription>
@@ -4082,7 +4099,7 @@ export default function RupeeLedger() {
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-1.5">
-                          <Label htmlFor="compName" className="text-xs font-semibold text-slate-700">Company / Business Name</Label>
+                          <Label htmlFor="compName" className="text-xs font-semibold text-sand-700">Company / Business Name</Label>
                           <Input 
                             id="compName" 
                             value={businessProfile.companyName} 
@@ -4091,7 +4108,7 @@ export default function RupeeLedger() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="compAddress" className="text-xs font-semibold text-slate-700">Business Address</Label>
+                          <Label htmlFor="compAddress" className="text-xs font-semibold text-sand-700">Business Address</Label>
                           <Input 
                             id="compAddress" 
                             value={businessProfile.address} 
@@ -4101,7 +4118,7 @@ export default function RupeeLedger() {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <Label htmlFor="compGSTIN" className="text-xs font-semibold text-slate-700">GSTIN (Optional)</Label>
+                            <Label htmlFor="compGSTIN" className="text-xs font-semibold text-sand-700">GSTIN (Optional)</Label>
                             <Input 
                               id="compGSTIN" 
                               value={businessProfile.gstin} 
@@ -4110,7 +4127,7 @@ export default function RupeeLedger() {
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="compPhone" className="text-xs font-semibold text-slate-700">Contact Phone</Label>
+                            <Label htmlFor="compPhone" className="text-xs font-semibold text-sand-700">Contact Phone</Label>
                             <Input 
                               id="compPhone" 
                               value={businessProfile.phone} 
@@ -4120,7 +4137,7 @@ export default function RupeeLedger() {
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <Label htmlFor="printFooter" className="text-xs font-semibold text-slate-700">Print Statement Footer Message</Label>
+                          <Label htmlFor="printFooter" className="text-xs font-semibold text-sand-700">Print Statement Footer Message</Label>
                           <Input 
                             id="printFooter" 
                             value={businessProfile.printFooter} 
@@ -4130,11 +4147,11 @@ export default function RupeeLedger() {
                         </div>
 
                         {/* Bank Details Section */}
-                        <div className="pt-4 border-t border-slate-200 mt-2 space-y-4">
-                          <h4 className="text-sm font-bold text-slate-800">Bank Account Details (Optional)</h4>
+                        <div className="pt-4 border-t border-sand-200 mt-2 space-y-4">
+                          <h4 className="text-sm font-bold text-sand-800">Bank Account Details (Optional)</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
-                              <Label htmlFor="bankName" className="text-xs font-semibold text-slate-700">Bank Name</Label>
+                              <Label htmlFor="bankName" className="text-xs font-semibold text-sand-700">Bank Name</Label>
                               <Input 
                                 id="bankName" 
                                 value={businessProfile.bankName || ''} 
@@ -4143,7 +4160,7 @@ export default function RupeeLedger() {
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor="bankAccountNo" className="text-xs font-semibold text-slate-700">Account Number</Label>
+                              <Label htmlFor="bankAccountNo" className="text-xs font-semibold text-sand-700">Account Number</Label>
                               <Input 
                                 id="bankAccountNo" 
                                 value={businessProfile.bankAccountNumber || ''} 
@@ -4152,7 +4169,7 @@ export default function RupeeLedger() {
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor="bankIfsc" className="text-xs font-semibold text-slate-700">IFSC Code</Label>
+                              <Label htmlFor="bankIfsc" className="text-xs font-semibold text-sand-700">IFSC Code</Label>
                               <Input 
                                 id="bankIfsc" 
                                 value={businessProfile.bankIfsc || ''} 
@@ -4162,7 +4179,7 @@ export default function RupeeLedger() {
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor="bankBranch" className="text-xs font-semibold text-slate-700">Branch Name</Label>
+                              <Label htmlFor="bankBranch" className="text-xs font-semibold text-sand-700">Branch Name</Label>
                               <Input 
                                 id="bankBranch" 
                                 value={businessProfile.bankBranch || ''} 
@@ -4177,16 +4194,16 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Team & Multi-User Management Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Team & Multi-User</CardTitle>
                       <CardDescription>Manage user access and roles for your ledger</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-slate-50 border rounded-lg">
+                      <div className="flex items-center justify-between p-4 bg-sand-50 border rounded-lg">
                         <div>
-                          <p className="font-semibold text-sm text-slate-800">Active Users</p>
-                          <p className="text-xs text-slate-500 mt-0.5">
+                          <p className="font-semibold text-sm text-sand-800">Active Users</p>
+                          <p className="text-xs text-sand-500 mt-0.5">
                             {getDerivedTier(subscription) === 'FREE' ? '1 / 1 User' : 
                              getDerivedTier(subscription) === 'MONTHLY' ? '1 / 5 Users' : 
                              '1 / Unlimited Users'}
@@ -4216,16 +4233,16 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Help & Support Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Help & Support</CardTitle>
                       <CardDescription>Contact us for assistance or dedicated account management</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between p-4 bg-slate-50 border rounded-lg">
+                      <div className="flex items-center justify-between p-4 bg-sand-50 border rounded-lg">
                         <div>
-                          <p className="font-semibold text-sm text-slate-800">Your Support Level</p>
-                          <p className="text-xs text-slate-500 mt-0.5">
+                          <p className="font-semibold text-sm text-sand-800">Your Support Level</p>
+                          <p className="text-xs text-sand-500 mt-0.5">
                             {getDerivedTier(subscription) === 'FREE' ? 'Email Support' : 
                              getDerivedTier(subscription) === 'MONTHLY' ? 'Priority Support' : 
                              'Dedicated Account Manager'}
@@ -4248,7 +4265,7 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Security Lock Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Security Lock</CardTitle>
                       <CardDescription>Secure your local ledger with a 4-digit PIN code</CardDescription>
@@ -4274,8 +4291,8 @@ export default function RupeeLedger() {
                         </button>
                       </div>
 
-                      <div className="space-y-3 p-4 bg-muted/20 rounded-lg border border-dashed border-slate-300">
-                        <Label htmlFor="pinCode" className="text-xs font-semibold text-slate-700">Set 4-Digit Numeric PIN</Label>
+                      <div className="space-y-3 p-4 bg-muted/20 rounded-lg border border-dashed border-sand-300">
+                        <Label htmlFor="pinCode" className="text-xs font-semibold text-sand-700">Set 4-Digit Numeric PIN</Label>
                         <div className="flex flex-col sm:flex-row gap-3">
                           <Input 
                             id="pinCode" 
@@ -4297,7 +4314,7 @@ export default function RupeeLedger() {
                   </Card>
 
                   {/* Subscription & Billing Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 md:col-span-2">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Subscription & Billing</CardTitle>
                       <CardDescription>Manage your business subscription and license tier</CardDescription>
@@ -4306,28 +4323,28 @@ export default function RupeeLedger() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
                           <p className="text-[10px] uppercase font-bold text-primary/80">License Tier</p>
-                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.plan}</p>
+                          <p className="text-lg font-bold mt-1 text-sand-800">{subscription.plan}</p>
                           <span className="inline-block mt-2 px-2.5 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 rounded-full">
                             {subscription.status.toUpperCase()}
                           </span>
                         </div>
 
-                        <div className="p-4 bg-slate-50 rounded-lg border">
-                          <p className="text-[10px] uppercase font-bold text-slate-500">Rate / Billing Plan</p>
-                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.price}</p>
+                        <div className="p-4 bg-sand-50 rounded-lg border">
+                          <p className="text-[10px] uppercase font-bold text-sand-500">Rate / Billing Plan</p>
+                          <p className="text-lg font-bold mt-1 text-sand-800">{subscription.price}</p>
                           <p className="text-xs text-muted-foreground mt-1">Charged via monthly auto-invoice</p>
                         </div>
 
-                        <div className="p-4 bg-slate-50 rounded-lg border">
-                          <p className="text-[10px] uppercase font-bold text-slate-500 font-semibold text-primary">Renewal Period</p>
-                          <p className="text-lg font-bold mt-1 text-slate-800">{subscription.renewalDate}</p>
+                        <div className="p-4 bg-sand-50 rounded-lg border">
+                          <p className="text-[10px] uppercase font-bold text-sand-500 font-semibold text-primary">Renewal Period</p>
+                          <p className="text-lg font-bold mt-1 text-sand-800">{subscription.renewalDate}</p>
                           <p className="text-xs text-muted-foreground mt-1 font-semibold text-primary">
                             {daysRemaining} Days Left in Cycle
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 border rounded-lg">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-sand-50 border rounded-lg">
                         <div className="space-y-1 flex-1">
                           <p className="font-semibold text-sm">Purchase Pro Activation Key</p>
                           <p className="text-xs text-muted-foreground">Buy a monthly (30 Days - ₹199) or annual (365 Days - ₹1,999) activation key via Razorpay.</p>
@@ -4336,7 +4353,7 @@ export default function RupeeLedger() {
                               onClick={() => handleBuyLicenseKey("monthly")} 
                               variant="outline" 
                               size="sm"
-                              className="font-medium text-xs bg-white hover:bg-slate-100"
+                              className="font-medium text-xs bg-white hover:bg-sand-100"
                             >
                               Buy Monthly Key (₹199)
                             </Button>
@@ -4353,7 +4370,7 @@ export default function RupeeLedger() {
                       </div>
 
                       <div className="space-y-3 pt-2 border-t">
-                        <Label htmlFor="licenseKeyInput" className="text-xs font-semibold text-slate-700">Activate Annual License Key</Label>
+                        <Label htmlFor="licenseKeyInput" className="text-xs font-semibold text-sand-700">Activate Annual License Key</Label>
                         <div className="flex gap-2 max-w-md">
                           <Input 
                             id="licenseKeyInput" 
@@ -4366,16 +4383,16 @@ export default function RupeeLedger() {
                             Verify & Activate
                           </Button>
                         </div>
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-3 rounded-lg border gap-2 text-xs">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-sand-50 p-3 rounded-lg border gap-2 text-xs">
                           <span className="text-muted-foreground font-medium">
-                            Current active system key: <span className="font-mono font-bold text-slate-800 bg-white border px-1.5 py-0.5 rounded">{subscription.licenseKey || "None"}</span>
+                            Current active system key: <span className="font-mono font-bold text-sand-800 bg-white border px-1.5 py-0.5 rounded">{subscription.licenseKey || "None"}</span>
                           </span>
                           {subscription.licenseKey && subscription.licenseKey !== "FREE-TRIAL" && (
                             <div className="flex gap-2 w-full sm:w-auto justify-end">
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className="h-7 text-[10px] bg-white text-slate-700 border-slate-200"
+                                className="h-7 text-[10px] bg-white text-sand-700 border-sand-200"
                                 onClick={() => {
                                   navigator.clipboard.writeText(subscription.licenseKey || "");
                                   toast({ title: "Key Copied", description: "License key copied to clipboard." });
@@ -4417,7 +4434,7 @@ export default function RupeeLedger() {
 
                   {/* Reseller & License Selling Panel */}
                   {isOwner && (
-                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
+                    <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 md:col-span-2">
                       <CardHeader>
                         <CardTitle className="premium-heading text-primary flex items-center gap-2">
                           <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -4428,9 +4445,9 @@ export default function RupeeLedger() {
                         <CardDescription>Generate unique activation license keys to sell/distribute to client profiles</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-6">
-                        <div className="flex flex-col sm:flex-row items-end gap-4 p-4 bg-slate-50 border rounded-lg">
+                        <div className="flex flex-col sm:flex-row items-end gap-4 p-4 bg-sand-50 border rounded-lg">
                           <div className="space-y-1.5 flex-1">
-                            <Label htmlFor="keyDurationSelect" className="text-xs font-semibold text-slate-700">License Key Type / Duration</Label>
+                            <Label htmlFor="keyDurationSelect" className="text-xs font-semibold text-sand-700">License Key Type / Duration</Label>
                             <Select 
                               value={vendorKeyDuration} 
                               onValueChange={(val) => setVendorKeyDuration(val as "monthly" | "annual")}
@@ -4454,15 +4471,15 @@ export default function RupeeLedger() {
                         </div>
 
                         <div className="space-y-3 pt-2">
-                          <Label className="text-xs font-semibold text-slate-700">Reseller Key Inventory & Logs</Label>
+                          <Label className="text-xs font-semibold text-sand-700">Reseller Key Inventory & Logs</Label>
                           {generatedKeysList.length === 0 ? (
-                            <div className="text-center p-6 border border-dashed rounded-lg bg-slate-50/50">
+                            <div className="text-center p-6 border border-dashed rounded-lg bg-sand-50/50">
                               <p className="text-xs text-muted-foreground">No license keys generated yet. Click generate above to create your first client activation key.</p>
                             </div>
                           ) : (
                             <div className="border rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
-                              <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                              <table className="min-w-full divide-y divide-sand-100 text-left text-xs">
+                                <thead className="bg-sand-50 text-sand-500 font-bold uppercase tracking-wider text-[10px]">
                                   <tr>
                                     <th className="px-4 py-2">License Key</th>
                                     <th className="px-4 py-2">Duration</th>
@@ -4471,16 +4488,16 @@ export default function RupeeLedger() {
                                     <th className="px-4 py-2 text-right">Action</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 font-medium">
+                                <tbody className="divide-y divide-sand-100 font-medium">
                                   {generatedKeysList.map((item, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50/80">
-                                      <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-slate-700">{item.key}</td>
+                                    <tr key={idx} className="hover:bg-sand-50/80">
+                                      <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-sand-700">{item.key}</td>
                                       <td className="px-4 py-2.5">{item.duration}</td>
-                                      <td className="px-4 py-2.5 text-slate-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
+                                      <td className="px-4 py-2.5 text-sand-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
                                       <td className="px-4 py-2.5">
                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                           item.status === 'used' 
-                                            ? 'bg-slate-100 text-slate-600' 
+                                            ? 'bg-sand-100 text-sand-600' 
                                             : 'bg-green-100 text-green-800'
                                         }`}>
                                           {item.status.toUpperCase()}
@@ -4513,7 +4530,7 @@ export default function RupeeLedger() {
 
 
                   {/* WhatsApp API Key Settings Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading text-primary flex items-center gap-2">
                         <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -4525,7 +4542,7 @@ export default function RupeeLedger() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-1.5">
-                        <Label htmlFor="wasenderApiKeyInput" className="text-xs font-semibold text-slate-700">WASender API Key</Label>
+                        <Label htmlFor="wasenderApiKeyInput" className="text-xs font-semibold text-sand-700">WASender API Key</Label>
                         <Input 
                           id="wasenderApiKeyInput" 
                           type="password"
@@ -4545,7 +4562,7 @@ export default function RupeeLedger() {
                   </Card>
 
 {/* Data & Backups Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Data & Backups</CardTitle>
                       <CardDescription>Keep your financial data safe</CardDescription>
@@ -4635,21 +4652,21 @@ export default function RupeeLedger() {
                       {/* Supabase Config Check */}
                       {isOwner && (
                         <div className="pt-4 mt-2 border-t space-y-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Database Engine</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-sand-400">Database Engine</h4>
                           <div className="grid grid-cols-2 gap-2 text-xs p-3 bg-muted/40 rounded-lg border">
                             <div>
-                              <p className="text-slate-500 font-semibold">Active Engine</p>
-                              <p className="font-sans text-slate-800 font-bold truncate">
+                              <p className="text-sand-500 font-semibold">Active Engine</p>
+                              <p className="font-sans text-sand-800 font-bold truncate">
                                 Supabase API
                               </p>
                             </div>
                             <div>
-                              <p className="text-slate-500 font-semibold">Sync Status</p>
+                              <p className="text-sand-500 font-semibold">Sync Status</p>
                               <p className="font-semibold mt-0.5">
                                 {user && user.authMethod !== 'guest' ? (
                                   <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Cloud Synced</span>
                                 ) : (
-                                  <span className="text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold font-mono">Guest Local</span>
+                                  <span className="text-sand-500 bg-sand-100 px-2 py-0.5 rounded border border-sand-200 font-bold font-mono">Guest Local</span>
                                 )}
                               </p>
                             </div>
@@ -4662,7 +4679,7 @@ export default function RupeeLedger() {
                   
 
 {/* About Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">About RupeeLedger</CardTitle>
                       <CardDescription>Application details</CardDescription>
@@ -4683,7 +4700,7 @@ export default function RupeeLedger() {
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Owner / Support</span>
-                            <span className="font-bold text-slate-800 text-right">L.ASHOK KUMAR, COIMBATORE (9791335351)</span>
+                            <span className="font-bold text-sand-800 text-right">L.ASHOK KUMAR, COIMBATORE (9791335351)</span>
 </div>
                           <Button 
                             onClick={handleGenerateLicenseKey} 
@@ -4695,15 +4712,15 @@ export default function RupeeLedger() {
                         </div>
 
                         <div className="space-y-3 pt-2">
-                          <Label className="text-xs font-semibold text-slate-700">Reseller Key Inventory & Logs</Label>
+                          <Label className="text-xs font-semibold text-sand-700">Reseller Key Inventory & Logs</Label>
                           {generatedKeysList.length === 0 ? (
-                            <div className="text-center p-6 border border-dashed rounded-lg bg-slate-50/50">
+                            <div className="text-center p-6 border border-dashed rounded-lg bg-sand-50/50">
                               <p className="text-xs text-muted-foreground">No license keys generated yet. Click generate above to create your first client activation key.</p>
                             </div>
                           ) : (
                             <div className="border rounded-lg overflow-hidden bg-white max-h-[220px] overflow-y-auto">
-                              <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                              <table className="min-w-full divide-y divide-sand-100 text-left text-xs">
+                                <thead className="bg-sand-50 text-sand-500 font-bold uppercase tracking-wider text-[10px]">
                                   <tr>
                                     <th className="px-4 py-2">License Key</th>
                                     <th className="px-4 py-2">Duration</th>
@@ -4712,16 +4729,16 @@ export default function RupeeLedger() {
                                     <th className="px-4 py-2 text-right">Action</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 font-medium">
+                                <tbody className="divide-y divide-sand-100 font-medium">
                                   {generatedKeysList.map((item, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50/80">
-                                      <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-slate-700">{item.key}</td>
+                                    <tr key={idx} className="hover:bg-sand-50/80">
+                                      <td className="px-4 py-2.5 font-mono text-[11px] select-all font-bold text-sand-700">{item.key}</td>
                                       <td className="px-4 py-2.5">{item.duration}</td>
-                                      <td className="px-4 py-2.5 text-slate-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
+                                      <td className="px-4 py-2.5 text-sand-500">{format(item.createdAt, "dd-MM-yyyy HH:mm")}</td>
                                       <td className="px-4 py-2.5">
                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                           item.status === 'used' 
-                                            ? 'bg-slate-100 text-slate-600' 
+                                            ? 'bg-sand-100 text-sand-600' 
                                             : 'bg-green-100 text-green-800'
                                         }`}>
                                           {item.status.toUpperCase()}
@@ -4752,7 +4769,7 @@ export default function RupeeLedger() {
                   
 
                   {/* Integrations & API Card */}
-                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-slate-200/80 md:col-span-2">
+                  <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 md:col-span-2">
                     <CardHeader>
                       <CardTitle className="premium-heading premium-heading">Enterprise Integrations & API</CardTitle>
                       <CardDescription>Connect RupeeLedger with external services (Yearly Plan Required)</CardDescription>
@@ -4760,46 +4777,46 @@ export default function RupeeLedger() {
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
+                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-sand-50/50">
                           <div>
                             <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">WhatsApp Integration</h4>
+                              <h4 className="font-bold text-sand-800">WhatsApp Integration</h4>
                               <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
-                            <p className="text-sm text-slate-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
+                            <p className="text-sm text-sand-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
                           </div>
                           <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("WhatsApp Integration", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "WhatsApp Integration will be available in the next update." }))}>Configure WhatsApp</Button>
                         </div>
 
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
+                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-sand-50/50">
                           <div>
                             <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">API Access</h4>
+                              <h4 className="font-bold text-sand-800">API Access</h4>
                               <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
-                            <p className="text-sm text-slate-600 mb-4">Generate API keys to connect RupeeLedger data with your own internal tools, dashboards, or external e-commerce platforms.</p>
+                            <p className="text-sm text-sand-600 mb-4">Generate API keys to connect RupeeLedger data with your own internal tools, dashboards, or external e-commerce platforms.</p>
                           </div>
                           <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("API Access", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "API Access will be available in the next update." }))}>Generate API Keys</Button>
                         </div>
 
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
+                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-sand-50/50">
                           <div>
                             <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">Custom Branding</h4>
+                              <h4 className="font-bold text-sand-800">Custom Branding</h4>
                               <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
-                            <p className="text-sm text-slate-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
+                            <p className="text-sm text-sand-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
                           </div>
                           <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Custom Branding", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Custom Branding will be available in the next update." }))}>Edit Branding</Button>
                         </div>
 
-                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-slate-50/50">
+                        <div className="border rounded-lg p-4 flex flex-col justify-between h-full bg-sand-50/50">
                           <div>
                             <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-bold text-slate-800">Dedicated Account Manager</h4>
+                              <h4 className="font-bold text-sand-800">Dedicated Account Manager</h4>
                               <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
-                            <p className="text-sm text-slate-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
+                            <p className="text-sm text-sand-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
                           </div>
                           <Button variant="outline" className="w-full" onClick={() => handleFeatureAccess("Dedicated Account Manager", "YEARLY", () => toast({ title: "Feature Coming Soon", description: "Dedicated Account Manager will be available in the next update." }))}>Contact Manager</Button>
                         </div>
@@ -4898,7 +4915,7 @@ export default function RupeeLedger() {
                   placeholder="e.g. +91 99999 99999" 
                 />
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="space-y-2 pt-2 border-t border-sand-100">
                 <Label className="text-muted-foreground font-semibold">Bank Details</Label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <Input id="bankName" name="bankName" defaultValue={editingAccount?.bankName} placeholder="Bank Name" />
@@ -5105,7 +5122,7 @@ export default function RupeeLedger() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between font-mono text-base font-bold text-center select-all tracking-wider text-slate-800">
+            <div className="p-3 bg-sand-50 border rounded-lg flex items-center justify-between font-mono text-base font-bold text-center select-all tracking-wider text-sand-800">
               {boughtKey?.key}
               <Button 
                 onClick={() => {
@@ -5116,7 +5133,7 @@ export default function RupeeLedger() {
                 }}
                 size="sm"
                 variant="ghost"
-                className="ml-2 hover:bg-slate-200/50"
+                className="ml-2 hover:bg-sand-200/50"
               >
                 Copy
               </Button>
