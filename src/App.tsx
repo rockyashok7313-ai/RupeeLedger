@@ -75,6 +75,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
 import { GSTModule } from "@/components/gst/GSTModule";
+import { InventoryModule } from "@/components/erp/InventoryModule";
+import { PurchaseModule } from "@/components/erp/PurchaseModule";
+import { SalesModule } from "@/components/erp/SalesModule";
+import { AccountingReports } from "@/components/erp/AccountingReports";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -421,10 +425,21 @@ export default function RupeeLedger() {
     "admin@rupeeledger.com"
   ], []);
 
+  const OWNER_PHONES = useMemo(() => [
+    "9791335351"
+  ], []);
+
+  const OWNER_IDS = useMemo(() => [
+    "eb29773a-126e-4f90-9422-d3f2213dffe1"
+  ], []);
+
   const isOwner = useMemo(() => {
-    return !!(user && user.authMethod !== 'guest' && user.email && 
-      OWNER_EMAILS.includes(user.email.toLowerCase()));
-  }, [user, OWNER_EMAILS]);
+    return !!(user && user.authMethod !== 'guest' && (
+      (user.email && OWNER_EMAILS.includes(user.email.toLowerCase())) ||
+      (user.id && user.id.startsWith('p_') && OWNER_PHONES.includes(user.id.replace('p_', ''))) ||
+      (user.id && OWNER_IDS.includes(user.id))
+    ));
+  }, [user, OWNER_EMAILS, OWNER_PHONES, OWNER_IDS]);
 
   const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
     let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}_${activeBranchId}`);
@@ -3405,6 +3420,39 @@ export default function RupeeLedger() {
             >
               <History className="mr-2 h-4 w-4" /> Ledger View
             </Button>
+            
+            <div className="pt-4 pb-1">
+              <p className="text-[10px] font-bold text-primary-foreground/50 uppercase tracking-wider px-4">ERP Modules</p>
+            </div>
+            <Button 
+              variant={activeTab === "inventory" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("inventory")}
+            >
+              <LayoutDashboard className="mr-2 h-4 w-4" /> Inventory & Stock
+            </Button>
+            <Button 
+              variant={activeTab === "purchase" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("purchase")}
+            >
+              <FileText className="mr-2 h-4 w-4" /> Purchase & AP
+            </Button>
+            <Button 
+              variant={activeTab === "sales" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("sales")}
+            >
+              <TrendingUp className="mr-2 h-4 w-4" /> Sales & AR
+            </Button>
+            <Button 
+              variant={activeTab === "maintenance" ? "secondary" : "ghost"} 
+              className="w-full justify-start font-medium"
+              onClick={() => setActiveTab("maintenance")}
+            >
+              <FileText className="mr-2 h-4 w-4" /> Accounting Reports
+            </Button>
+
             <Button 
               variant={activeTab === "analytics" ? "secondary" : "ghost"} 
               className="w-full justify-start font-medium"
@@ -4855,6 +4903,43 @@ export default function RupeeLedger() {
                     </CardContent>
                   </Card>
                 </div>
+            </div>
+          )}
+          {activeTab === "inventory" && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <InventoryModule 
+                inventory={inventory} 
+                setInventory={setInventory} 
+                invoices={invoices} 
+              />
+            </div>
+          )}
+
+          {activeTab === "purchase" && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <PurchaseModule 
+                expenses={expenses}
+                setExpenses={setExpenses}
+                clients={clients}
+              />
+            </div>
+          )}
+
+          {activeTab === "sales" && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <SalesModule 
+                invoices={invoices}
+                clients={clients}
+              />
+            </div>
+          )}
+
+          {activeTab === "maintenance" && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
+              <AccountingReports 
+                transactions={transactions}
+                accounts={accounts}
+              />
             </div>
           )}
         </main>
