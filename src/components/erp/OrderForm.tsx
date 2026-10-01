@@ -235,9 +235,9 @@ export function OrderForm({ type, token, initialData, onClose, onSaved }: OrderF
   };
 
   return (
-    <div className="bg-white/90 backdrop-blur-xl border border-slate-200 shadow-xl rounded-xl p-6">
+    <div className="bg-card/90 backdrop-blur-xl border border-border shadow-xl rounded-xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-slate-800">
+        <h3 className="text-xl font-bold text-foreground">
           {initialData ? 'Edit' : 'New'} {isSale ? 'Sale' : 'Purchase'} {isInvoice ? 'Invoice' : 'Order'}
         </h3>
         <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
@@ -308,7 +308,7 @@ export function OrderForm({ type, token, initialData, onClose, onSaved }: OrderF
 
       <div className="border rounded-lg overflow-hidden mb-6">
         <Table>
-          <TableHeader className="bg-slate-50">
+          <TableHeader className="bg-muted/60">
             <TableRow>
               <TableHead>Product *</TableHead>
               <TableHead className="w-24">Qty</TableHead>
@@ -358,17 +358,17 @@ export function OrderForm({ type, token, initialData, onClose, onSaved }: OrderF
             })}
           </TableBody>
         </Table>
-        <div className="p-3 bg-slate-50 border-t">
+        <div className="p-3 bg-muted/60 border-t">
           <Button variant="outline" size="sm" onClick={addLine}><Plus className="h-4 w-4 mr-2"/> Add Row</Button>
         </div>
       </div>
 
       <div className="flex justify-end mb-6">
         <div className="w-64 space-y-2 text-sm">
-          <div className="flex justify-between text-slate-600"><span>Taxable Amount:</span> <span>₹{totals.beforeTax.toFixed(2)}</span></div>
-          <div className="flex justify-between text-slate-600"><span>CGST:</span> <span>₹{totals.cgst.toFixed(2)}</span></div>
-          <div className="flex justify-between text-slate-600"><span>SGST:</span> <span>₹{totals.sgst.toFixed(2)}</span></div>
-          <div className="flex justify-between font-bold text-lg text-slate-800 pt-2 border-t"><span>Grand Total:</span> <span>₹{totals.grandTotal.toFixed(2)}</span></div>
+          <div className="flex justify-between text-foreground/80"><span>Taxable Amount:</span> <span>₹{totals.beforeTax.toFixed(2)}</span></div>
+          <div className="flex justify-between text-foreground/80"><span>CGST:</span> <span>₹{totals.cgst.toFixed(2)}</span></div>
+          <div className="flex justify-between text-foreground/80"><span>SGST:</span> <span>₹{totals.sgst.toFixed(2)}</span></div>
+          <div className="flex justify-between font-bold text-lg text-foreground pt-2 border-t"><span>Grand Total:</span> <span>₹{totals.grandTotal.toFixed(2)}</span></div>
         </div>
       </div>
 

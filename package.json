@@ -1,6 +1,6 @@
 {
-  "name": "nextn",
-  "version": "0.1.0",
+  "name": "rupeeledger",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,15 +11,14 @@
     "cap:ios": "npm run build:mobile && npx cap sync ios && npx cap open ios",
     "start": "node api/index.js",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "deploy": "npx -y firebase-tools@latest deploy"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.0",
     "@capacitor/splash-screen": "^8.0.2",
-    "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@genkit-ai/google-genai": "^1.28.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "@hookform/resolvers": "^4.1.3",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
@@ -55,8 +54,6 @@
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.0",
-    "firebase": "^12.16.0",
-    "genkit": "^1.28.0",
     "helmet": "^8.3.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
@@ -89,7 +86,6 @@
     "@types/react-dom": "^19.2.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
-    "genkit-cli": "^1.28.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",

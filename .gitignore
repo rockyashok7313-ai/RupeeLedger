@@ -48,22 +48,18 @@ serviceAccountKey.json
 # genkit
 .genkit/
 
-# scratch & test files
+# scratch, debug & log dumps
 scratch/
+out/
 test_*.js
+test_*.mjs
 check_*.js
 fix_*.js
-*.txt
-*.json
-!package.json
-!package-lock.json
-!firebase.json
-!vercel.json
-!tsconfig*.json
-!components.json
-!components.json
-!studio.json
-!recent_logs*.json
+debug_*.js
+temp.html
+*.zip
+recent_logs*.json
+*.log
 
 # One-off MongoDB->Supabase migration workspace (contains credentials)
 .migration/

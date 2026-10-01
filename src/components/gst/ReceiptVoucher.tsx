@@ -94,10 +94,10 @@ export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoi
         </div>
 
         {isAdding && (
-          <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
+          <div className="bg-muted/60 p-4 rounded-lg border mb-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Select Client (Optional)</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Select Client (Optional)</label>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={selectedClientId}
@@ -110,7 +110,7 @@ export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoi
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Invoice ID *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Invoice ID *</label>
                 {selectedClientId ? (
                   <select 
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -129,11 +129,11 @@ export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoi
                 )}
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Amount Received (₹) *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount Received (₹) *</label>
                 <Input type="number" value={newReceipt.amount || ''} onChange={e => setNewReceipt({...newReceipt, amount: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Payment Method</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Payment Method</label>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={newReceipt.paymentMethod}
@@ -160,21 +160,21 @@ export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoi
         ) : (
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-muted/60 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Date</th>
-                  <th className="p-3 font-medium text-gray-500">Invoice ID</th>
-                  <th className="p-3 font-medium text-gray-500">Method</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Amount</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Actions</th>
+                  <th className="p-3 font-medium text-muted-foreground">Date</th>
+                  <th className="p-3 font-medium text-muted-foreground">Invoice ID</th>
+                  <th className="p-3 font-medium text-muted-foreground">Method</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Amount</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredReceipts.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="p-3 text-gray-600">{new Date(rec.date).toLocaleDateString()}</td>
+                  <tr key={rec.id} className="hover:bg-muted/60 transition-colors">
+                    <td className="p-3 text-foreground/80">{new Date(rec.date).toLocaleDateString()}</td>
                     <td className="p-3 font-medium">{rec.invoiceId}</td>
-                    <td className="p-3 text-gray-600">{rec.paymentMethod}</td>
+                    <td className="p-3 text-foreground/80">{rec.paymentMethod}</td>
                     <td className="p-3 text-right font-medium text-green-600">₹{rec.amount.toFixed(2)}</td>
                     <td className="p-3 text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(rec.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">

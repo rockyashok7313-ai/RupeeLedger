@@ -71,14 +71,14 @@ export function ClientsView({ clients = [], setClients }: Props) {
         </div>
 
         {isAdding && (
-          <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
+          <div className="bg-muted/60 p-4 rounded-lg border mb-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Party Name *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Party Name *</label>
                 <Input value={newClient.name || ''} onChange={e => setNewClient({...newClient, name: e.target.value})} placeholder="Acme Corp" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Party Type</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Party Type</label>
                 <select 
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={newClient.type || 'client'}
@@ -91,15 +91,15 @@ export function ClientsView({ clients = [], setClients }: Props) {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">GSTIN</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">GSTIN</label>
                 <Input value={newClient.gstin || ''} onChange={e => setNewClient({...newClient, gstin: e.target.value})} placeholder="29ABCDE1234F1Z5" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Phone</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Phone</label>
                 <Input value={newClient.phone || ''} onChange={e => setNewClient({...newClient, phone: e.target.value})} placeholder="+91 9876543210" />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Billing Address</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Billing Address</label>
                 <Input value={newClient.address || ''} onChange={e => setNewClient({...newClient, address: e.target.value})} placeholder="123 Business Park, City, State" />
               </div>
             </div>
@@ -117,19 +117,19 @@ export function ClientsView({ clients = [], setClients }: Props) {
         ) : (
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-muted/60 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Party Name</th>
-                  <th className="p-3 font-medium text-gray-500">Type</th>
-                  <th className="p-3 font-medium text-gray-500">GSTIN</th>
-                  <th className="p-3 font-medium text-gray-500">Phone</th>
-                  <th className="p-3 font-medium text-gray-500">Address</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Actions</th>
+                  <th className="p-3 font-medium text-muted-foreground">Party Name</th>
+                  <th className="p-3 font-medium text-muted-foreground">Type</th>
+                  <th className="p-3 font-medium text-muted-foreground">GSTIN</th>
+                  <th className="p-3 font-medium text-muted-foreground">Phone</th>
+                  <th className="p-3 font-medium text-muted-foreground">Address</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredClients.map((client) => (
-                  <tr key={client.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr key={client.id} className="hover:bg-muted/60 transition-colors">
                     <td className="p-3 font-medium">{client.name}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 text-xs rounded-full font-medium ${
@@ -141,9 +141,9 @@ export function ClientsView({ clients = [], setClients }: Props) {
                         {client.type === 'vendor' ? 'Vendor' : client.type === 'agent' ? 'Agent' : client.type === 'both' ? 'Both' : 'Client'}
                       </span>
                     </td>
-                    <td className="p-3 text-gray-500 font-mono text-xs">{client.gstin || '-'}</td>
-                    <td className="p-3 text-gray-500">{client.phone || '-'}</td>
-                    <td className="p-3 text-gray-500 truncate max-w-[200px]">{client.address || '-'}</td>
+                    <td className="p-3 text-muted-foreground font-mono text-xs">{client.gstin || '-'}</td>
+                    <td className="p-3 text-muted-foreground">{client.phone || '-'}</td>
+                    <td className="p-3 text-muted-foreground truncate max-w-[200px]">{client.address || '-'}</td>
                     <td className="p-3 text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
                         <Trash2 className="h-4 w-4" />

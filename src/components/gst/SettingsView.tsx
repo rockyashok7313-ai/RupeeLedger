@@ -33,7 +33,7 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
         <CardContent className="space-y-8">
           
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Business Details & Logo</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Business Details & Logo</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Company / Business Name</Label>
@@ -92,7 +92,7 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
           </div>
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
-              <h3 className="text-sm font-semibold text-gray-900">Multi-Business Profiles</h3>
+              <h3 className="text-sm font-semibold text-foreground">Multi-Business Profiles</h3>
               <Button variant="outline" size="sm" onClick={() => {
                 const profiles = JSON.parse(localStorage.getItem('saved_gst_profiles') || '[]');
                 profiles.push(localProfile);
@@ -106,12 +106,12 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
             <div className="space-y-3">
               {(() => {
                 const profiles: BusinessProfile[] = JSON.parse(localStorage.getItem('saved_gst_profiles') || '[]');
-                if (profiles.length === 0) return <p className="text-xs text-gray-500">No saved profiles found. Configure your settings and click "Save Current Profile" to add one.</p>;
+                if (profiles.length === 0) return <p className="text-xs text-muted-foreground">No saved profiles found. Configure your settings and click "Save Current Profile" to add one.</p>;
                 return profiles.map((p, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
+                  <div key={idx} className="flex justify-between items-center p-3 border rounded-lg bg-muted/60">
                     <div>
                       <p className="font-semibold text-sm">{p.companyName || 'Unnamed Business'}</p>
-                      <p className="text-xs text-gray-500">GSTIN: {p.gstin || 'N/A'}</p>
+                      <p className="text-xs text-muted-foreground">GSTIN: {p.gstin || 'N/A'}</p>
                     </div>
                     <Button size="sm" variant="secondary" onClick={() => {
                       setLocalProfile(p);
@@ -130,7 +130,7 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
 
 
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Numbering & Terms</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Numbering & Terms</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Invoice Prefix</Label>
@@ -178,7 +178,7 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Bank Details (For receiving payments)</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Bank Details (For receiving payments)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Bank Name</Label>
@@ -217,16 +217,16 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
 
           
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Cloud Integrations</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Cloud Integrations</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 border rounded-lg bg-gray-50 flex items-center justify-between">
+              <div className="p-4 border rounded-lg bg-muted/60 flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold text-gray-800">Google Drive Backup</h4>
-                  <p className="text-xs text-gray-500 mt-1">Sync your JSON returns & PDF invoices directly to your Drive.</p>
+                  <h4 className="font-semibold text-foreground">Google Drive Backup</h4>
+                  <p className="text-xs text-muted-foreground mt-1">Sync your JSON returns & PDF invoices directly to your Drive.</p>
                 </div>
                 <Button 
                   variant="outline" 
-                  className="bg-white"
+                  className="bg-card"
                   onClick={() => {
                     const btn = document.getElementById('drive-btn');
                     if (btn) btn.innerHTML = 'Connecting...';
@@ -253,7 +253,7 @@ export function SettingsView({ businessProfile, setBusinessProfile }: Props) {
             >
               Force Sign Out
             </Button>
-            <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={handleSave} className="bg-primary hover:bg-primary/90">
               <Save className="h-4 w-4 mr-2" /> Save Settings
             </Button>
           </div>

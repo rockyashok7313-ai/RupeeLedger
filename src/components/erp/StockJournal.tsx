@@ -107,9 +107,9 @@ export function StockJournal({ token }: { token: string | null }) {
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="border rounded-md bg-white/50 overflow-hidden mt-4">
+        <div className="border rounded-md bg-card/50 overflow-hidden mt-4">
           <Table>
-            <TableHeader className="bg-slate-50/80">
+            <TableHeader className="bg-muted/60">
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
@@ -147,7 +147,7 @@ export function StockJournal({ token }: { token: string | null }) {
                     <TableCell>{products.find(p => p.product_id === item.product_id)?.product_name || item.product_id}</TableCell>
                     <TableCell>{warehouses.find(w => w.warehouse_id === item.warehouse_id)?.warehouse_name || item.warehouse_id}</TableCell>
                     <TableCell className="text-right font-bold">{item.quantity}</TableCell>
-                    <TableCell className="text-slate-500 text-sm">{item.reference_id || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{item.reference_id || '-'}</TableCell>
                   </TableRow>
                 ))
               )}

@@ -1,6 +1,0 @@
-{
-  "apphosting": {
-    "backendId": "rupeeledger-web",
-    "rootDir": "."
-  }
-}

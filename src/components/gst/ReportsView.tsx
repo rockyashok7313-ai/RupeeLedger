@@ -202,15 +202,15 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground/80 flex items-center gap-2">
                 <BarChart className="h-4 w-4" /> Monthly P&L (Revenue vs Expenses)
               </h3>
-              <div className="h-64 rounded-md border p-4 flex items-end justify-between gap-2 bg-white">
+              <div className="h-64 rounded-md border p-4 flex items-end justify-between gap-2 bg-card">
                 {stats.monthlyRevenue.map((rev, i) => (
                   <div key={i} className="flex flex-col items-center flex-1 group">
                     <div className="w-full relative flex justify-center items-end h-full gap-1">
                       <div 
-                        className="w-1/2 bg-blue-500/80 rounded-t-sm transition-all duration-300 group-hover:bg-blue-600"
+                        className="w-1/2 bg-primary/70 rounded-t-sm transition-all duration-300 group-hover:bg-primary"
                         title={`Revenue: ₹${rev.toFixed(0)}`}
                         style={{ height: `${(rev / stats.maxMonthRev) * 100}%`, minHeight: rev > 0 ? '4px' : '0' }}
                       />
@@ -220,7 +220,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                         style={{ height: `${(stats.monthlyExpenses[i] / stats.maxMonthRev) * 100}%`, minHeight: stats.monthlyExpenses[i] > 0 ? '4px' : '0' }}
                       />
                     </div>
-                    <span className="text-[10px] sm:text-xs text-gray-500 mt-2">{months[i]}</span>
+                    <span className="text-[10px] sm:text-xs text-muted-foreground mt-2">{months[i]}</span>
                   </div>
                 ))}
               </div>
@@ -228,7 +228,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
 
             <div className="space-y-6">
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Outstanding Aging</h3>
+                <h3 className="text-sm font-semibold text-foreground/80 border-b pb-2">Outstanding Aging</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-yellow-50 text-yellow-800 rounded">
                     <span>1 - 30 Days</span>
@@ -246,13 +246,13 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Top Clients (YTD)</h3>
+                <h3 className="text-sm font-semibold text-foreground/80 border-b pb-2">Top Clients (YTD)</h3>
                 <div className="space-y-2 text-sm">
-                  {stats.topClients.length === 0 && <p className="text-gray-500 text-xs">No sales data yet.</p>}
+                  {stats.topClients.length === 0 && <p className="text-muted-foreground text-xs">No sales data yet.</p>}
                   {stats.topClients.map(([name, amount], idx) => (
                     <div key={idx} className="flex justify-between items-center p-2 border rounded">
                       <span className="truncate w-32 font-medium" title={name}>{name}</span>
-                      <span className="font-bold text-gray-700">₹{amount.toFixed(2)}</span>
+                      <span className="font-bold text-foreground/80">₹{amount.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -272,16 +272,16 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
           </CardHeader>
           <CardContent>
             {tcsInvoices.length === 0 ? (
-              <div className="text-center p-8 text-gray-500 border rounded">No TCS collected yet.</div>
+              <div className="text-center p-8 text-muted-foreground border rounded">No TCS collected yet.</div>
             ) : (
               <table className="w-full text-sm text-left border rounded">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted/60">
                   <tr>
                     <th className="p-3">Date</th>
                     <th className="p-3">Invoice No</th>
                     <th className="p-3">Client</th>
                     <th className="p-3 text-right">Invoice Total</th>
-                    <th className="p-3 text-right font-medium text-blue-600">TCS Collected</th>
+                    <th className="p-3 text-right font-medium text-primary">TCS Collected</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -291,7 +291,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                       <td className="p-3 font-medium">{inv.invoiceNumber}</td>
                       <td className="p-3">{inv.clientName}</td>
                       <td className="p-3 text-right">₹{inv.total.toFixed(2)}</td>
-                      <td className="p-3 text-right font-medium text-blue-600">₹{inv.tcsAmount?.toFixed(2)}</td>
+                      <td className="p-3 text-right font-medium text-primary">₹{inv.tcsAmount?.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -309,7 +309,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
           </CardHeader>
           <CardContent>
             <div className="mb-4">
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Select Party</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Select Party</label>
               <select 
                 className="flex h-10 w-full max-w-md items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={statementClientId}
@@ -321,12 +321,12 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
             </div>
 
             {statementClientId && partyStatement.length === 0 && (
-              <div className="text-center p-8 text-gray-500 border rounded">No transactions found for this party.</div>
+              <div className="text-center p-8 text-muted-foreground border rounded">No transactions found for this party.</div>
             )}
 
             {statementClientId && partyStatement.length > 0 && (
               <table className="w-full text-sm text-left border rounded">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted/60">
                   <tr>
                     <th className="p-3">Date</th>
                     <th className="p-3">Invoice No</th>
@@ -350,7 +350,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                           {entry.invoiceNo ? (
                             <button 
                               onClick={() => entry.invoiceId && onEditInvoice && onEditInvoice(entry.invoiceId)}
-                              className="text-blue-600 hover:underline font-medium"
+                              className="text-primary hover:underline font-medium"
                             >
                               {entry.invoiceNo}
                             </button>
@@ -362,8 +362,8 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                         <td className="p-3 text-right">{entry.cgst !== undefined ? `₹${entry.cgst.toFixed(2)}` : '-'}</td>
                         <td className="p-3 text-right">{entry.sgst !== undefined ? `₹${entry.sgst.toFixed(2)}` : '-'}</td>
                         <td className="p-3 text-right">{entry.igst !== undefined ? `₹${entry.igst.toFixed(2)}` : '-'}</td>
-                        <td className="p-3 text-right text-gray-900 font-medium">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)} (Dr)` : entry.credit > 0 ? `₹${entry.credit.toFixed(2)} (Cr)` : '-'}</td>
-                        <td className={`p-3 text-right font-medium ${runningBalance > 0 ? 'text-emerald-600' : runningBalance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        <td className="p-3 text-right text-foreground font-medium">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)} (Dr)` : entry.credit > 0 ? `₹${entry.credit.toFixed(2)} (Cr)` : '-'}</td>
+                        <td className={`p-3 text-right font-medium ${runningBalance > 0 ? 'text-emerald-600' : runningBalance < 0 ? 'text-red-600' : 'text-foreground'}`}>
                           ₹{Math.abs(runningBalance).toFixed(2)} {runningBalance > 0 ? 'Dr' : runningBalance < 0 ? 'Cr' : ''}
                         </td>
                       </tr>
@@ -401,13 +401,13 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
               <div className="space-y-4">
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="border-b bg-gray-50/50">
-                      <th className="p-3 font-medium text-gray-500">Date</th>
-                      <th className="p-3 font-medium text-gray-500">Ref / Invoice No</th>
-                      <th className="p-3 font-medium text-gray-500">Type</th>
-                      <th className="p-3 font-medium text-gray-500 text-right">Debit (Paid)</th>
-                      <th className="p-3 font-medium text-gray-500 text-right">Credit (Earned)</th>
-                      <th className="p-3 font-medium text-gray-500 text-right">Balance</th>
+                    <tr className="border-b bg-muted/60">
+                      <th className="p-3 font-medium text-muted-foreground">Date</th>
+                      <th className="p-3 font-medium text-muted-foreground">Ref / Invoice No</th>
+                      <th className="p-3 font-medium text-muted-foreground">Type</th>
+                      <th className="p-3 font-medium text-muted-foreground text-right">Debit (Paid)</th>
+                      <th className="p-3 font-medium text-muted-foreground text-right">Credit (Earned)</th>
+                      <th className="p-3 font-medium text-muted-foreground text-right">Balance</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -448,11 +448,11 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                             totalPaid += entry.debit;
                             
                             return (
-                              <tr key={entry.id} className="border-b hover:bg-gray-50">
+                              <tr key={entry.id} className="border-b hover:bg-muted/60">
                                 <td className="p-3">{new Date(entry.date).toLocaleDateString()}</td>
                                 <td className="p-3 font-medium">
                                   {entry.ref}
-                                  <div className="text-xs text-gray-400 font-normal">{entry.details}</div>
+                                  <div className="text-xs text-muted-foreground font-normal">{entry.details}</div>
                                 </td>
                                 <td className="p-3">
                                   <span className={`px-2 py-1 rounded-full text-xs ${entry.credit > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -461,18 +461,18 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                                 </td>
                                 <td className="p-3 text-right text-red-600">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)}` : '-'}</td>
                                 <td className="p-3 text-right text-emerald-600">{entry.credit > 0 ? `₹${entry.credit.toFixed(2)}` : '-'}</td>
-                                <td className="p-3 text-right font-bold text-gray-700">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? '(Cr)' : '(Dr)'}</td>
+                                <td className="p-3 text-right font-bold text-foreground/80">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? '(Cr)' : '(Dr)'}</td>
                               </tr>
                             );
                           })}
                           {ledgerEntries.length === 0 && (
-                            <tr><td colSpan={6} className="p-8 text-center text-gray-500">No transactions found for this agent.</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No transactions found for this agent.</td></tr>
                           )}
-                          <tr className="bg-gray-100 border-t-2 border-gray-200">
-                            <td colSpan={3} className="p-3 text-right font-bold text-gray-700">Totals</td>
+                          <tr className="bg-muted border-t-2 border-border">
+                            <td colSpan={3} className="p-3 text-right font-bold text-foreground/80">Totals</td>
                             <td className="p-3 text-right font-bold text-red-700">₹{totalPaid.toFixed(2)}</td>
                             <td className="p-3 text-right font-bold text-emerald-700">₹{totalEarned.toFixed(2)}</td>
-                            <td className="p-3 text-right font-bold text-gray-900 text-lg">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
+                            <td className="p-3 text-right font-bold text-foreground text-lg">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
                           </tr>
                         </>
                       );
@@ -493,11 +493,11 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
           </CardHeader>
           <CardContent>
             {invoices.length === 0 ? (
-              <div className="text-center p-8 text-gray-500 border rounded">No sales invoices found.</div>
+              <div className="text-center p-8 text-muted-foreground border rounded">No sales invoices found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left border rounded">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-muted/60">
                     <tr>
                       <th className="p-3">Date</th>
                       <th className="p-3">Invoice No</th>
@@ -515,13 +515,13 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
                         <td className="p-3">{inv.clientName}</td>
                         <td className="p-3 text-right">₹{inv.total.toFixed(2)}</td>
                         <td className="p-3 text-center">
-                          <span className={`px-2 py-1 rounded text-xs ${inv.status === 'paid' ? 'bg-green-100 text-green-700' : inv.status === 'draft' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          <span className={`px-2 py-1 rounded text-xs ${inv.status === 'paid' ? 'bg-green-100 text-green-700' : inv.status === 'draft' ? 'bg-muted text-foreground/80' : 'bg-yellow-100 text-yellow-700'}`}>
                             {inv.status.toUpperCase()}
                           </span>
                         </td>
                         <td className="p-3 text-right">
                           {onEditInvoice && (
-                            <Button variant="ghost" size="sm" onClick={() => onEditInvoice(inv.id)} className="text-blue-600">
+                            <Button variant="ghost" size="sm" onClick={() => onEditInvoice(inv.id)} className="text-primary">
                               Edit
                             </Button>
                           )}
@@ -549,11 +549,11 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
           </CardHeader>
           <CardContent>
             {expenses.length === 0 ? (
-              <div className="text-center p-8 text-gray-500 border rounded">No purchase invoices found.</div>
+              <div className="text-center p-8 text-muted-foreground border rounded">No purchase invoices found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left border rounded">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-muted/60">
                     <tr>
                       <th className="p-3">Date</th>
                       <th className="p-3">Category</th>

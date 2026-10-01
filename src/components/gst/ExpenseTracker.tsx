@@ -78,34 +78,34 @@ export function ExpenseTracker({ expenses = [], setExpenses }: Props) {
         </div>
 
         {isAdding && (
-          <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
+          <div className="bg-muted/60 p-4 rounded-lg border mb-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="lg:col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Vendor Name *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Vendor Name *</label>
                 <Input value={newExpense.vendorName || ''} onChange={e => setNewExpense({...newExpense, vendorName: e.target.value})} placeholder="Office Supplies Co." />
               </div>
               <div className="lg:col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Vendor GSTIN</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Vendor GSTIN</label>
                 <Input value={newExpense.gstin || ''} onChange={e => setNewExpense({...newExpense, gstin: e.target.value})} placeholder="29ABCDE1234F1Z5" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Amount (₹) *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount (₹) *</label>
                 <Input type="number" value={newExpense.amount || ''} onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">CGST (₹)</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">CGST (₹)</label>
                 <Input type="number" value={newExpense.cgst || ''} onChange={e => setNewExpense({...newExpense, cgst: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">SGST (₹)</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">SGST (₹)</label>
                 <Input type="number" value={newExpense.sgst || ''} onChange={e => setNewExpense({...newExpense, sgst: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">IGST (₹)</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">IGST (₹)</label>
                 <Input type="number" value={newExpense.igst || ''} onChange={e => setNewExpense({...newExpense, igst: parseFloat(e.target.value)})} placeholder="0.00" />
               </div>
               <div className="lg:col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Category</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
                 <Input value={newExpense.category || ''} onChange={e => setNewExpense({...newExpense, category: e.target.value})} placeholder="Office Supplies" />
               </div>
             </div>
@@ -123,22 +123,22 @@ export function ExpenseTracker({ expenses = [], setExpenses }: Props) {
         ) : (
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-muted/60 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Date</th>
-                  <th className="p-3 font-medium text-gray-500">Vendor / Category</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Amount</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">ITC (GST)</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Actions</th>
+                  <th className="p-3 font-medium text-muted-foreground">Date</th>
+                  <th className="p-3 font-medium text-muted-foreground">Vendor / Category</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Amount</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">ITC (GST)</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredExpenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="p-3 text-gray-600">{new Date(exp.date).toLocaleDateString()}</td>
+                  <tr key={exp.id} className="hover:bg-muted/60 transition-colors">
+                    <td className="p-3 text-foreground/80">{new Date(exp.date).toLocaleDateString()}</td>
                     <td className="p-3">
-                      <div className="font-medium text-gray-900">{exp.vendorName}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{exp.category} {exp.gstin && `• GSTIN: ${exp.gstin}`}</div>
+                      <div className="font-medium text-foreground">{exp.vendorName}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{exp.category} {exp.gstin && `• GSTIN: ${exp.gstin}`}</div>
                     </td>
                     <td className="p-3 text-right font-medium">₹{exp.amount.toFixed(2)}</td>
                     <td className="p-3 text-right text-green-600 font-medium">

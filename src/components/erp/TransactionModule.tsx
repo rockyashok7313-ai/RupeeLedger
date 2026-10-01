@@ -207,14 +207,14 @@ export function TransactionModule({ title, type, token }: TransactionModuleProps
                 placeholder={`Search ${title}...`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-white/50"
+                className="pl-9 bg-card/50"
               />
             </div>
           </div>
 
-          <div className="border rounded-md bg-white/50 overflow-hidden">
+          <div className="border rounded-md bg-card/50 overflow-hidden">
             <Table>
-              <TableHeader className="bg-slate-50/80">
+              <TableHeader className="bg-muted/60">
                 <TableRow>
                   <TableHead>Doc No.</TableHead>
                   <TableHead>Date</TableHead>
@@ -255,15 +255,15 @@ export function TransactionModule({ title, type, token }: TransactionModuleProps
                         <TableCell className="text-right font-semibold">₹{(item.grand_total || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditingItem(item)}>
-                            <Pencil className="h-4 w-4 text-slate-600" />
+                            <Pencil className="h-4 w-4 text-foreground/80" />
                           </Button>
                           {(type === 'sale_invoices' || type === 'delivery_challans') && (
                             <Button variant="ghost" size="icon" title="Download Sale Invoice" onClick={() => handlePrint(item)}>
-                              <Download className="h-4 w-4 text-slate-600" />
+                              <Download className="h-4 w-4 text-foreground/80" />
                             </Button>
                           )}
                           <Button variant="ghost" size="icon" title="Print" onClick={() => handlePrint(item)}>
-                            <Printer className="h-4 w-4 text-slate-600" />
+                            <Printer className="h-4 w-4 text-foreground/80" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(item)}>
                             <Trash2 className="h-4 w-4 text-red-500" />

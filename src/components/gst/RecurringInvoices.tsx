@@ -67,18 +67,18 @@ export function RecurringInvoices({ recurringTemplates = [], setRecurringTemplat
         ) : (
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-muted/60 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Client ID</th>
-                  <th className="p-3 font-medium text-gray-500">Interval</th>
-                  <th className="p-3 font-medium text-gray-500">Next Run</th>
-                  <th className="p-3 font-medium text-gray-500">Status</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Actions</th>
+                  <th className="p-3 font-medium text-muted-foreground">Client ID</th>
+                  <th className="p-3 font-medium text-muted-foreground">Interval</th>
+                  <th className="p-3 font-medium text-muted-foreground">Next Run</th>
+                  <th className="p-3 font-medium text-muted-foreground">Status</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredTemplates.map((template) => (
-                  <tr key={template.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr key={template.id} className="hover:bg-muted/60 transition-colors">
                     <td className="p-3 font-medium">{template.clientId}</td>
                     <td className="p-3">
                       <select 
@@ -102,7 +102,7 @@ export function RecurringInvoices({ recurringTemplates = [], setRecurringTemplat
                       {template.active ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Paused</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-muted text-foreground/80">Paused</span>
                       )}
                     </td>
                     <td className="p-3 text-right flex justify-end gap-2">

@@ -135,9 +135,9 @@ export function GSTRReports({ token }: { token: string | null }) {
           </div>
         </div>
 
-        <div className="border rounded-md bg-white/50 overflow-hidden">
+        <div className="border rounded-md bg-card/50 overflow-hidden">
           <Table>
-            <TableHeader className="bg-slate-50">
+            <TableHeader className="bg-muted/60">
               <TableRow>
                 <TableHead>Doc No.</TableHead>
                 <TableHead>Date</TableHead>
@@ -174,7 +174,7 @@ export function GSTRReports({ token }: { token: string | null }) {
                     <TableCell className="text-right">₹{(item.igst_total || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell className="text-right">₹{(item.cgst_total || 0).toLocaleString('en-IN')}</TableCell>
                     <TableCell className="text-right">₹{(item.sgst_total || 0).toLocaleString('en-IN')}</TableCell>
-                    <TableCell className="text-right font-bold text-slate-800">₹{(item.grand_total || 0).toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="text-right font-bold text-foreground">₹{(item.grand_total || 0).toLocaleString('en-IN')}</TableCell>
                   </TableRow>
                 ))
               )}

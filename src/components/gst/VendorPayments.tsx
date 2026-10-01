@@ -81,10 +81,10 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
         </div>
 
         {isAdding && (
-          <div className="bg-gray-50 p-4 rounded-lg border mb-4 space-y-4">
+          <div className="bg-muted/60 p-4 rounded-lg border mb-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Vendor *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Vendor *</label>
                 <select 
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={newPayment.vendorId || ''}
@@ -95,7 +95,7 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Payment Account *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Payment Account *</label>
                 <select 
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   value={newPayment.accountId || ''}
@@ -106,11 +106,11 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Amount *</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount *</label>
                 <Input type="number" value={newPayment.amount || ''} onChange={e => setNewPayment({...newPayment, amount: Number(e.target.value)})} placeholder="0.00" />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Description</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label>
                 <Input value={newPayment.description || ''} onChange={e => setNewPayment({...newPayment, description: e.target.value})} placeholder="Payment for Inv #..." />
               </div>
             </div>
@@ -128,14 +128,14 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
         ) : (
           <div className="rounded-md border overflow-hidden">
             <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-muted/60 border-b">
                 <tr>
-                  <th className="p-3 font-medium text-gray-500">Date</th>
-                  <th className="p-3 font-medium text-gray-500">Vendor</th>
-                  <th className="p-3 font-medium text-gray-500">Account</th>
-                  <th className="p-3 font-medium text-gray-500">Description</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Amount</th>
-                  <th className="p-3 font-medium text-gray-500 text-right">Actions</th>
+                  <th className="p-3 font-medium text-muted-foreground">Date</th>
+                  <th className="p-3 font-medium text-muted-foreground">Vendor</th>
+                  <th className="p-3 font-medium text-muted-foreground">Account</th>
+                  <th className="p-3 font-medium text-muted-foreground">Description</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Amount</th>
+                  <th className="p-3 font-medium text-muted-foreground text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -143,11 +143,11 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
                   const vendor = clients.find(c => c.id === payment.vendorId);
                   const account = accounts.find(a => a.id === payment.accountId);
                   return (
-                    <tr key={payment.id} className="hover:bg-gray-50/50 transition-colors">
+                    <tr key={payment.id} className="hover:bg-muted/60 transition-colors">
                       <td className="p-3">{new Date(payment.date).toLocaleDateString()}</td>
                       <td className="p-3 font-medium">{vendor?.name || 'Unknown Vendor'}</td>
                       <td className="p-3">{account?.name || 'Unknown Account'}</td>
-                      <td className="p-3 text-gray-500">{payment.description}</td>
+                      <td className="p-3 text-muted-foreground">{payment.description}</td>
                       <td className="p-3 text-right font-medium text-red-600">₹{payment.amount.toLocaleString()}</td>
                       <td className="p-3 text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(payment.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">

@@ -22,13 +22,13 @@ export function UpgradeModal({ isOpen, onClose, featureName, requiredTier }: Upg
             Feature Locked
           </DialogTitle>
           <DialogDescription className="pt-2 text-base">
-            <span className="font-semibold text-slate-800">{featureName}</span> is only available on the {isYearly ? 'Yearly' : 'Monthly'} plan and above.
+            <span className="font-semibold text-foreground">{featureName}</span> is only available on the {isYearly ? 'Yearly' : 'Monthly'} plan and above.
           </DialogDescription>
         </DialogHeader>
         
         <div className="bg-primary/5 p-4 rounded-lg my-2 border border-primary/10">
           <h4 className="font-semibold text-primary mb-2">Upgrade to {isYearly ? 'Yearly' : 'Monthly'} to get:</h4>
-          <ul className="space-y-2 text-sm text-slate-600">
+          <ul className="space-y-2 text-sm text-foreground/80">
             {isYearly ? (
               <>
                 <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Unlimited Users</li>

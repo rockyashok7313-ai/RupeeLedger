@@ -46,7 +46,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete, isActive }: Ac
         }
       }}
       className={cn(
-        "group relative isolate cursor-pointer overflow-hidden rounded-lg border",
+        "group relative isolate cursor-pointer overflow-hidden rounded-xl border",
         "transition-[transform,box-shadow,border-color] duration-base ease-out-quint",
         "hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.995]",
         isActive
@@ -87,7 +87,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete, isActive }: Ac
       </div>
 
       <CardHeader className="flex flex-row items-start justify-between space-y-0 p-4 pb-2 pl-5">
-        <CardTitle className="truncate pr-8 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <CardTitle className="line-clamp-2 pr-8 text-sm font-semibold leading-snug text-foreground" title={account.name}>
           {account.name}
         </CardTitle>
         <span className="shrink-0 rounded-md bg-muted p-1.5 text-muted-foreground transition-colors duration-base group-hover:bg-secondary group-hover:text-secondary-foreground">

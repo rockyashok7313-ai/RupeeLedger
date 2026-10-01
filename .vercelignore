@@ -1,0 +1,12 @@
+# Never upload local secrets or junk with `vercel` CLI deploys.
+.env
+.env.*
+serviceAccountKey.json
+*-adminsdk-*.json
+*.pem
+scratch/
+out/
+recent_logs*.json
+vercel_logs*
+*.zip
+.migration/

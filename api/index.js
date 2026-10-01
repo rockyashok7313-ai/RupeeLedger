@@ -39331,6 +39331,9 @@ function renderLayout({ title, businessProfile, content, size = "A4", watermark 
     thead {
       display: table-header-group; /* Repeats header on every page */
     }
+    tfoot {
+      display: table-row-group;
+    }
     tr {
       page-break-inside: avoid; /* Prevents rows from splitting across pages */
     }

@@ -66,7 +66,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
         <div className="w-full max-w-sm">
           <label className="text-xs font-medium text-gray-500 mb-1 block">Select Invoice to Preview</label>
           <select 
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={selectedInvoiceId}
             onChange={(e) => setSelectedInvoiceId(e.target.value)}
           >
@@ -89,7 +89,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
           <Button onClick={handleDownloadPDF} variant="outline" className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50" disabled={!invoice}>
             <FileDown className="h-4 w-4 mr-2" /> Download PDF
           </Button>
-          <Button onClick={handlePrint} variant="default" className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold" disabled={!invoice}>
+          <Button onClick={handlePrint} variant="default" className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground font-bold" disabled={!invoice}>
             <Printer className="h-4 w-4 mr-2" /> Print
           </Button>
         </div>
@@ -98,7 +98,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
       <div className="flex-1 min-h-[600px] border border-slate-200 rounded-lg overflow-hidden bg-slate-100 relative">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
         )}
         {!invoice ? (

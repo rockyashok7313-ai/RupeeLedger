@@ -163,17 +163,17 @@ export function MasterDataModule({ title, type, idField, fields, token }: Master
               placeholder={`Search ${title}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 bg-white/50"
+              className="pl-9 bg-card/50"
             />
           </div>
         </div>
 
-        <div className="border rounded-md bg-white/50 overflow-hidden">
+        <div className="border rounded-md bg-card/50 overflow-hidden">
           <Table>
-            <TableHeader className="bg-slate-50/80">
+            <TableHeader className="bg-muted/60">
               <TableRow>
                 {fields.slice(0, 4).map(f => (
-                  <TableHead key={f.key} className="font-semibold text-slate-700">{f.label}</TableHead>
+                  <TableHead key={f.key} className="font-semibold text-foreground/80">{f.label}</TableHead>
                 ))}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>

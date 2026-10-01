@@ -8,13 +8,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'logo.png'],
+      includeAssets: ['apple-touch-icon.png', 'logo.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
         name: 'RupeeLedger Pro',
         short_name: 'RupeeLedger',
-        description: 'Advanced Indian Payroll & Ledger Management',
-        theme_color: '#db2777',
-        background_color: '#0f172a',
+        description: 'Daily cash ledger, GST invoicing and stock for Indian businesses',
+        theme_color: '#8f1d1d',
+        background_color: '#faf8f5',
         display: 'standalone',
         icons: [
           {

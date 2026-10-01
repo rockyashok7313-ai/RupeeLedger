@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { 
   Plus, 
   ArrowUpRight, 
@@ -22,19 +22,18 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-  UserPlus
+  UserPlus,
+  Loader2,
+  Search,
+  Moon,
+  Sun,
+  Boxes,
+  LogOut,
+  Command
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from "firebase/auth";
 // Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionForm } from "@/components/TransactionForm";
@@ -72,9 +71,16 @@ import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { VoucherPrint } from "@/components/VoucherPrint";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useTheme } from "@/hooks/use-theme";
+import { ERP_SECTIONS, ERP_SECTION_LABELS, type ErpSection } from "@/components/erp/erp-sections";
+import { CommandPalette, type PaletteItem } from "@/components/shell/CommandPalette";
+import { cn } from "@/lib/utils";
+import { MobileTabBar } from "@/components/shell/MobileTabBar";
+import { CashflowStrip } from "@/components/shell/CashflowStrip";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
-import { GSTModule } from "@/components/gst/GSTModule";
+const GSTModule = lazy(() => import("@/components/gst/GSTModule").then(m => ({ default: m.GSTModule })));
+const ErpHub = lazy(() => import("@/components/erp/ErpHub").then(m => ({ default: m.ErpHub })));
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -197,6 +203,77 @@ export const getDerivedTier = (sub: Subscription): "FREE" | "MONTHLY" | "YEARLY"
   return "MONTHLY";
 };
 
+const APP_TABS = ["dashboard", "ledger", "analytics", "gst", "erp", "settings"] as const;
+type AppTab = (typeof APP_TABS)[number];
+
+function readTabFromUrl(): AppTab {
+  if (typeof window === "undefined") return "dashboard";
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return (APP_TABS as readonly string[]).includes(t || "") ? (t as AppTab) : "dashboard";
+}
+
+function readErpSectionFromUrl(): ErpSection {
+  if (typeof window === "undefined") return "products";
+  const s = new URLSearchParams(window.location.search).get("erp");
+  return (ERP_SECTIONS as readonly string[]).includes(s || "") ? (s as ErpSection) : "products";
+}
+
+function writeUrlParams(params: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null) url.searchParams.delete(k);
+    else url.searchParams.set(k, v);
+  }
+  if (url.href !== window.location.href) window.history.pushState(null, "", url);
+}
+
+const NAV_GROUPS: {
+  label: string;
+  items: { label: string; tab: AppTab | null; icon: React.ComponentType<{ className?: string }>; keywords?: string }[];
+}[] = [
+  {
+    label: "Money",
+    items: [
+      { label: "Today", tab: "dashboard", icon: LayoutDashboard, keywords: "home dashboard overview" },
+      { label: "Ledgers", tab: "ledger", icon: History, keywords: "accounts statement khata" },
+      { label: "Cash flow", tab: "analytics", icon: TrendingUp, keywords: "analytics charts income expense" },
+      { label: "Daily report", tab: null, icon: CalendarDays, keywords: "day book print" },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { label: "GST & invoices", tab: "gst", icon: FileText, keywords: "bill tax gstr receipt" },
+      { label: "Stock & orders", tab: "erp", icon: Boxes, keywords: "erp inventory purchase sales products" },
+    ],
+  },
+];
+
+const TAB_TITLES: Record<AppTab, string> = {
+  dashboard: "Today",
+  ledger: "Ledgers",
+  analytics: "Cash flow",
+  gst: "GST & invoices",
+  erp: "Stock & orders",
+  settings: "Settings",
+};
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function ModuleLoading() {
+  return (
+    <div className="flex items-center justify-center py-24 text-muted-foreground gap-3" role="status">
+      <Loader2 className="h-5 w-5 animate-spin" />
+      <span className="text-sm">Opening module…</span>
+    </div>
+  );
+}
+
 export default function RupeeLedger() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -207,8 +284,38 @@ export default function RupeeLedger() {
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTemplate[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "ledger" | "analytics" | "gst" | "inventory" | "purchase" | "sales" | "maintenance" | "settings">("dashboard");
-  const [erpTab, setErpTab] = useState<"inventory" | "purchase" | "sales" | "returns" | "reports" | "maintenance">("inventory");
+  // The open screen lives in the URL (?tab=), so a refresh, the back button or a
+  // shared link lands on the same screen instead of always resetting to the dashboard.
+  const [activeTab, setActiveTabState] = useState<AppTab>(readTabFromUrl);
+  const [erpSection, setErpSectionState] = useState<ErpSection>(readErpSectionFromUrl);
+  const setActiveTab = (tab: AppTab) => {
+    setActiveTabState(tab);
+    writeUrlParams({ tab: tab === "dashboard" ? null : tab, erp: tab === "erp" ? erpSection : null });
+  };
+  const setErpSection = (section: ErpSection) => {
+    setErpSectionState(section);
+    writeUrlParams({ erp: section });
+  };
+  useEffect(() => {
+    const onPop = () => {
+      setActiveTabState(readTabFromUrl());
+      setErpSectionState(readErpSectionFromUrl());
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const theme = useTheme();
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsCommandOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [ledgerStartDate, setLedgerStartDate] = useState("");
   const [ledgerEndDate, setLedgerEndDate] = useState("");
@@ -3283,271 +3390,283 @@ export default function RupeeLedger() {
     );
   }
 
+  const branchSelect = (
+      <Select value={activeBranchId} onValueChange={(val) => {
+        if (val === 'new_branch') {
+          handleFeatureAccess("Multi-Branch Support", "YEARLY", () => {
+            const newName = prompt("Enter new branch name (e.g., 'Retail Store', 'Warehouse'):");
+            if (newName) {
+              const newId = 'branch_' + Date.now();
+              const currentBranches = businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}];
+              const updatedBranches = [...currentBranches, {id: newId, name: newName}];
+              const updatedProfile = {...businessProfile, branches: updatedBranches};
+              setBusinessProfile(updatedProfile);
+              localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(updatedProfile));
+              window.location.href = `/?branch=${newId}`;
+            }
+          });
+        } else {
+          handleBranchChange(val);
+        }
+      }}>
+        <SelectTrigger className="w-full md:w-auto md:min-w-[200px] h-9 bg-card" aria-label="Branch">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-credit" aria-hidden></div>
+            <SelectValue placeholder="Select Branch" />
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          {(businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}]).map(b => (
+            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+          ))}
+          <SelectItem value="new_branch" className="text-primary font-semibold">+ Add New Branch</SelectItem>
+        </SelectContent>
+      </Select>
+  );
+
+  const paletteItems: PaletteItem[] = [
+    ...NAV_GROUPS.flatMap((g) =>
+      g.items.map((item) => ({
+        id: `nav-${item.label}`,
+        label: item.label,
+        group: "Go to",
+        icon: item.icon,
+        keywords: item.keywords,
+        run: () => (item.tab ? setActiveTab(item.tab) : setIsDailyReportOpen(true)),
+      })),
+    ),
+    { id: "nav-settings", label: "Settings", group: "Go to", icon: SettingsIcon, keywords: "profile backup security subscription", run: () => setActiveTab("settings") },
+    {
+      id: "act-entry", label: "Post a new entry", group: "Actions", icon: Plus, keywords: "transaction credit debit add record",
+      run: () => {
+        setActiveTab("dashboard");
+        setTimeout(() => {
+          const el = document.getElementById("entry-form");
+          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+          el?.querySelector<HTMLElement>("input, textarea, button[role=combobox]")?.focus();
+        }, 80);
+      },
+    },
+    { id: "act-ledger", label: "Add a ledger", group: "Actions", icon: UserPlus, keywords: "account customer party new", run: () => { setNewAccountContext("company"); setIsNewAccountOpen(true); } },
+    { id: "act-theme", label: theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme", group: "Actions", icon: theme.resolved === "dark" ? Sun : Moon, keywords: "dark mode night appearance", run: theme.toggle },
+    ...ERP_SECTIONS.map((s) => ({
+      id: `erp-${s}`, label: ERP_SECTION_LABELS[s], group: "Stock & orders", icon: Boxes, keywords: "erp inventory",
+      run: () => { setErpSectionState(s); setActiveTabState("erp"); writeUrlParams({ tab: "erp", erp: s }); },
+    })),
+    ...accounts.map((acc) => ({
+      id: `acc-${acc.id}`,
+      label: acc.name,
+      group: "Ledgers",
+      icon: History,
+      hint: new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(acc.currentBalance),
+      keywords: `${acc.type} ${acc.phone || ""} ${acc.gstin || ""}`,
+      run: () => { setSelectedAccountId(acc.id); setActiveTab("ledger"); },
+    })),
+    ...(user ? [{ id: "act-logout", label: "Sign out", group: "Actions", icon: LogOut, keywords: "logout exit", run: handleLogout }] : []),
+  ];
+
   return (
     <div className="min-h-screen flex flex-col no-print bg-background text-foreground">
       <Toaster />
-      
-      {/* Mobile Top Bar */}
-      <header className="flex md:hidden items-center justify-between p-4 bg-primary text-primary-foreground shadow-md border-b">
-        <div className="flex items-center space-x-3">
-          <div className="cursor-pointer">
-            {user ? (
-              <img 
-                src={user.avatarUrl || "/logo.png"} 
-                alt="User Profile" 
-                className="h-8 w-8 rounded-full border border-accent/20 bg-primary-foreground/10" 
-              />
-            ) : (
-              <img src="/logo.png" alt="RupeeLedger Logo" className="h-8 w-8 rounded-lg object-cover border border-accent/20" />
-            )}
+      <CommandPalette open={isCommandOpen} onOpenChange={setIsCommandOpen} items={paletteItems} />
+      <MobileTabBar active={activeTab} onChange={setActiveTab} onSearch={() => setIsCommandOpen(true)} />
+
+      {/* Phone top bar */}
+      <header className="md:hidden sticky top-0 z-30 chrome-glass border-b" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="flex items-center justify-between gap-3 px-4 h-14">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src="/logo-96.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
+            <div className="min-w-0">
+              <p className="font-headline font-semibold leading-tight truncate">{businessProfile.companyName || "RupeeLedger"}</p>
+              {user && (
+                <p className="text-[11px] text-muted-foreground leading-none truncate">
+                  {user.authMethod === "guest" ? "Saved on this phone" : "Synced to cloud"}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0">
-            <h1 className="text-base font-bold tracking-tight leading-tight">RupeeLedger</h1>
-            {user && (
-              <p className="text-[9px] text-primary-foreground/75 font-semibold truncate leading-none mt-0.5">
-                {user.name} ({user.authMethod === 'guest' ? 'Guest' : 'Synced'})
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          {user && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-xs text-red-200 hover:text-red-100 hover:bg-red-900/30 px-2 h-9 font-bold"
-              onClick={handleLogout}
-              title="Sign Out"
-            >
-              Sign Out
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsDailyReportOpen(true)} aria-label="Daily report">
+              <CalendarDays className="h-[18px] w-[18px]" />
             </Button>
-          )}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
-            onClick={() => setIsDailyReportOpen(true)}
-            title="Daily Reports"
-          >
-            <CalendarDays className="h-4 w-4" />
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
-            onClick={() => setActiveTab(activeTab === "analytics" ? "dashboard" : "analytics")}
-            title="Analytics"
-          >
-            <TrendingUp className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-9 w-9 text-primary-foreground hover:bg-primary-foreground/10"
-            onClick={() => setActiveTab(activeTab === "settings" ? "dashboard" : "settings")}
-            title="Settings"
-          >
-            <SettingsIcon className="h-4 w-4" />
-          </Button>
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={theme.toggle} aria-label={theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+              {theme.resolved === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setActiveTab("settings")} aria-label="Settings">
+              <SettingsIcon className="h-[18px] w-[18px]" />
+            </Button>
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1">
         {/* Sidebar */}
-        <aside className="hidden md:flex flex-col w-64 bg-primary text-primary-foreground p-6 shadow-xl border-r">
-          <div className="flex items-center space-x-3 mb-6">
-            <img src="/logo.png" alt="RupeeLedger Logo" className="h-10 w-10 rounded-lg object-cover shadow-md border border-accent/20" />
-            <h1 className="text-xl font-bold tracking-tight">RupeeLedger</h1>
-          </div>
-
-          {/* User Profile Card */}
-          {user && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div className="flex items-center space-x-3 p-3 bg-primary-foreground/5 border border-primary-foreground/10 rounded-xl mb-6 shadow-sm cursor-pointer hover:bg-primary-foreground/10 transition-colors">
-                  <img 
-                    src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
-                    alt="User Avatar" 
-                    className="h-10 w-10 rounded-full border border-primary-foreground/20 bg-primary-foreground/10" 
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate text-white">{user.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-ping shrink-0" />
-                      <p className="text-[10px] text-primary-foreground/70 font-semibold truncate uppercase tracking-wider">
-                        {user.authMethod === 'guest' ? 'Local Guest' : 'Cloud Synced'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600 font-bold cursor-pointer">
-                  Sign Out {user.authMethod === 'guest' ? 'Guest' : 'Session'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          <nav className="space-y-2">
-            <Button 
-              variant={activeTab === "dashboard" ? "secondary" : "ghost"} 
-              className="w-full justify-start font-medium"
-              onClick={() => setActiveTab("dashboard")}
-            >
-              <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
-            </Button>
-            <Button 
-              variant={activeTab === "ledger" ? "secondary" : "ghost"} 
-              className="w-full justify-start font-medium"
-              onClick={() => setActiveTab("ledger")}
-            >
-              <History className="mr-2 h-4 w-4" /> Ledger View
-            </Button>
-            <Button 
-              variant={activeTab === "analytics" ? "secondary" : "ghost"} 
-              className="w-full justify-start font-medium"
-              onClick={() => setActiveTab("analytics")}
-            >
-              <TrendingUp className="mr-2 h-4 w-4" /> Cash Flow Analytics
-            </Button>
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start font-medium"
-              onClick={() => setIsDailyReportOpen(true)}
-            >
-              <CalendarDays className="mr-2 h-4 w-4" /> Daily Reports
-            </Button>
-            <Button 
-              variant={activeTab === "gst" ? "secondary" : "ghost"} 
-              className="w-full justify-start font-medium"
-              onClick={() => setActiveTab("gst")}
-            >
-              <FileText className="mr-2 h-4 w-4" /> GST & Invoices
-            </Button>
-            <Button 
-              variant={activeTab === "settings" ? "secondary" : "ghost"} 
-              className="w-full justify-start font-medium"
-              onClick={() => setActiveTab("settings")}
-            >
-              <SettingsIcon className="mr-2 h-4 w-4" /> Settings
-            </Button>
-          </nav>
-
-          <div className="mt-auto pt-6 border-t border-primary-foreground/10">
-            <div className="mb-4">
-              <p className="text-xs uppercase text-primary-foreground/60 font-semibold mb-1">Total Net Worth</p>
-              <div className="text-xl font-bold">
-                <CurrencyDisplay amount={totalBalance} />
+        <aside className="hidden md:flex flex-col w-[264px] shrink-0 sticky top-0 h-screen p-3">
+          <div className="flex flex-col flex-1 rounded-2xl bg-card elev-2 p-4 overflow-y-auto">
+            <div className="flex items-center gap-3 px-1 pb-6">
+              <img src="/logo-96.png" alt="" className="h-9 w-9 rounded-xl object-cover" />
+              <div className="min-w-0">
+                <p className="font-headline text-lg font-semibold leading-tight">RupeeLedger</p>
+                <p className="text-xs text-muted-foreground truncate">{businessProfile.companyName || "Your business"}</p>
               </div>
             </div>
-          {user && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="w-full justify-start text-xs font-semibold text-primary-foreground/75 hover:bg-primary-foreground/10 hover:text-white mb-2 h-8"
-              >
-                Sign Out Session
-              </Button>
-            )}
-            <p className="text-[10px] text-primary-foreground/40 text-center">v1.2.1 - Private Ledger</p>
+
+
+            <nav aria-label="Main" className="space-y-5">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <p className="px-3 mb-1.5 text-xs font-medium text-muted-foreground">{group.label}</p>
+                  <ul className="space-y-0.5">
+                    {group.items.map((item) => {
+                      const on = item.tab ? activeTab === item.tab : false;
+                      const Icon = item.icon;
+                      return (
+                        <li key={item.label}>
+                          <button
+                            type="button"
+                            onClick={() => (item.tab ? setActiveTab(item.tab) : setIsDailyReportOpen(true))}
+                            aria-current={on ? "page" : undefined}
+                            className={cn(
+                              "relative w-full flex items-center gap-3 h-9 px-3 rounded-lg text-sm transition-colors duration-fast",
+                              on
+                                ? "bg-brand-50 text-brand-800 font-semibold dark:bg-brand-950/70 dark:text-brand-100"
+                                : "text-foreground/75 hover:bg-surface-2 hover:text-foreground",
+                            )}
+                          >
+                            {on && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-gold-500" aria-hidden />}
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {item.label}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+
+            <div className="mt-auto pt-5 space-y-3">
+              {user && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-surface-2 transition-colors duration-fast text-left">
+                      <img
+                        src={user.avatarUrl || "/logo-96.png"}
+                        alt=""
+                        className="h-8 w-8 rounded-full bg-muted object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{user.name}</p>
+                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", user.authMethod === "guest" ? "bg-gold-500" : "bg-credit")} aria-hidden />
+                          {user.authMethod === "guest" ? "Saved on this device" : "Synced to cloud"}
+                        </p>
+                      </div>
+                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="top" className="w-56">
+                    <DropdownMenuItem onClick={theme.toggle} className="cursor-pointer">
+                      {theme.resolved === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                      {theme.resolved === "dark" ? "Light theme" : "Dark theme"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setActiveTab("settings")} className="cursor-pointer">
+                      <SettingsIcon className="mr-2 h-4 w-4" /> Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" /> Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
         </aside>
 
-        <main className="flex-1 overflow-auto p-4 md:p-8 relative">
-          {/* Global Header / Branch Selector */}
-          <div className="flex items-center justify-between mb-8 border-b pb-4">
-            <h1 className="text-xl font-bold tracking-tight text-sand-800">
-              {businessProfile.companyName || "RupeeLedger"}
-            </h1>
-            <div className="flex items-center gap-4">
-              <Select value={activeBranchId} onValueChange={(val) => {
-                if (val === 'new_branch') {
-                  handleFeatureAccess("Multi-Branch Support", "YEARLY", () => {
-                    const newName = prompt("Enter new branch name (e.g., 'Retail Store', 'Warehouse'):");
-                    if (newName) {
-                      const newId = 'branch_' + Date.now();
-                      const currentBranches = businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}];
-                      const updatedBranches = [...currentBranches, {id: newId, name: newName}];
-                      const updatedProfile = {...businessProfile, branches: updatedBranches};
-                      setBusinessProfile(updatedProfile);
-                      localStorage.setItem("rupee_ledger_business_profile", JSON.stringify(updatedProfile));
-                      window.location.href = `/?branch=${newId}`;
-                    }
-                  });
-                } else {
-                  handleBranchChange(val);
-                }
-              }}>
-                <SelectTrigger className="w-auto min-w-[200px] h-9 bg-sand-100 border-sand-200">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    <SelectValue placeholder="Select Branch" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  {(businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}]).map(b => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                  ))}
-                  <SelectItem value="new_branch" className="text-blue-600 font-semibold">+ Add New Branch</SelectItem>
-                </SelectContent>
-              </Select>
+        <main className="flex-1 min-w-0 relative pb-tabbar">
+          {/* Desktop top bar */}
+          <div className="hidden md:block sticky top-0 z-20 chrome-glass">
+            <div className="flex items-center justify-between gap-4 px-8 h-16">
+              <h1 className="sr-only">{TAB_TITLES[activeTab]}</h1>
+              <button
+                type="button"
+                onClick={() => setIsCommandOpen(true)}
+                className="flex items-center gap-2.5 h-10 w-full max-w-md px-3.5 rounded-xl bg-card elev-1 text-sm text-muted-foreground hover:text-foreground transition-colors duration-fast"
+              >
+                <Search className="h-4 w-4" />
+                <span className="flex-1 text-left">Find a ledger, screen or action</span>
+                <kbd className="text-2xs border rounded px-1.5 py-px bg-surface-2">Ctrl K</kbd>
+              </button>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={theme.toggle} aria-label={theme.resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+                  {theme.resolved === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
+                {branchSelect}
+              </div>
             </div>
           </div>
 
+          <div className="px-4 py-5 md:px-8 md:py-6">
+          <div className="md:hidden mb-5">{branchSelect}</div>
+
           {activeTab === "dashboard" && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-primary">Accounts Overview</h2>
-                  <p className="text-muted-foreground">Monitor and manage your diverse portfolios</p>
+                  <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, d MMMM")}</p>
+                  <h2 className="font-headline text-3xl md:text-4xl font-semibold mt-0.5">{greeting()}{user?.name && user.authMethod !== "guest" ? `, ${user.name.split(" ")[0]}` : ""}</h2>
                 </div>
-                
                 <div className="flex gap-2 w-full sm:w-auto">
                   <Button variant="outline" onClick={() => setIsDailyReportOpen(true)} className="flex-1 sm:flex-none">
-                    <CalendarDays className="mr-2 h-4 w-4" /> Reports
+                    <CalendarDays className="mr-2 h-4 w-4" /> Daily report
                   </Button>
-                  <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }} className="flex-1 sm:flex-none bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm">
-                    <Plus className="mr-2 h-4 w-4" /> Add Account
+                  <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }} className="flex-1 sm:flex-none">
+                    <Plus className="mr-2 h-4 w-4" /> Add ledger
                   </Button>
                 </div>
               </div>
 
-              {/* Summary Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm">
-                  <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Inflow</p>
-                    <div className="text-2xl font-bold mt-1 text-green-600">
-                      <CurrencyDisplay amount={todayStats.credit} />
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                <section className="khata-cover rounded-2xl pl-10 pr-6 py-6 lg:col-span-2 flex flex-col" aria-label="Net position">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-sm font-medium khata-muted">Net position</h3>
+                    <span className="text-xs khata-muted">{accounts.length} {accounts.length === 1 ? "ledger" : "ledgers"}</span>
+                  </div>
+                  <CurrencyDisplay amount={totalBalance} className="font-headline text-4xl md:text-[2.75rem] leading-tight mt-2 text-gold-50 break-all" />
+                  <div className="khata-rule my-5" />
+                  <dl className="space-y-2.5 text-sm mt-auto">
+                    <div className="flex items-center justify-between">
+                      <dt className="flex items-center gap-2 khata-muted"><ArrowUpRight className="h-4 w-4" /> Came in today</dt>
+                      <dd><CurrencyDisplay amount={todayStats.credit} className="text-gold-50" /></dd>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm">
-                  <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Outflow</p>
-                    <div className="text-2xl font-bold mt-1 text-destructive">
-                      <CurrencyDisplay amount={todayStats.debit} />
+                    <div className="flex items-center justify-between">
+                      <dt className="flex items-center gap-2 khata-muted"><ArrowDownLeft className="h-4 w-4" /> Went out today</dt>
+                      <dd><CurrencyDisplay amount={todayStats.debit} className="text-gold-50" /></dd>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="glass-card premium-glow premium-heading-card shadow-sm hidden lg:block border-primary/10">
-                  <CardContent className="pt-6">
-                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Today&apos;s Net Change</p>
-                    <div className="text-2xl font-bold mt-1">
-                      <CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign />
+                    <div className="khata-rule opacity-60" />
+                    <div className="flex items-center justify-between">
+                      <dt className="khata-muted">Net today</dt>
+                      <dd><CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign className="text-gold-200" /></dd>
                     </div>
-                  </CardContent>
-                </Card>
+                  </dl>
+                </section>
+                <div className="lg:col-span-3">
+                  <CashflowStrip transactions={transactions} />
+                </div>
               </div>
 
+              <div className="flex items-baseline justify-between pt-2">
+                <h3 className="font-headline text-lg font-semibold">Ledgers</h3>
+                {accounts.length > 0 && (
+                  <Button variant="link" className="h-auto p-0 text-sm" onClick={() => setActiveTab("ledger")}>Open ledger view</Button>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {accounts.length === 0 ? (
-                  <div className="col-span-full py-12 text-center border-2 border-dashed rounded-lg bg-card/50">
-                    <p className="text-muted-foreground mb-4">No accounts yet. Start by creating one.</p>
-                    <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }} variant="outline">Create My First Account</Button>
+                  <div className="col-span-full py-12 px-6 text-center border-2 border-dashed rounded-2xl">
+                    <p className="font-medium">Your khata is empty</p>
+                    <p className="text-sm text-muted-foreground mt-1 mb-5">Add a ledger for your cash box, a bank account or a customer to start posting entries.</p>
+                    <Button onClick={() => { setNewAccountContext('company'); setIsNewAccountOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Add your first ledger</Button>
                   </div>
                 ) : (
                   accounts.map((acc) => (
@@ -3567,8 +3686,8 @@ export default function RupeeLedger() {
               </div>
 
               {accounts.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  <div className="lg:col-span-2 scroll-mt-24" id="entry-form">
                     <TransactionForm 
                       accounts={accounts}
                       defaultAccountId={selectedAccountId}
@@ -3576,35 +3695,37 @@ export default function RupeeLedger() {
                       onCreateCustomer={() => { setNewAccountContext('buyer'); setIsNewAccountOpen(true); }}
                     />
                   </div>
-                  <div className="space-y-4">
-                    <h3 className="font-semibold text-primary">Global Recent Activity</h3>
-                    <div className="bg-card p-6 rounded-lg shadow-sm border border-primary/5 space-y-4">
-                      {transactions.length === 0 ? (
-                        <p className="text-sm text-muted-foreground italic">No transactions recorded yet.</p>
-                      ) : (
-                        transactions.sort((a,b) => b.date - a.date).slice(0, 5).map(t => {
+                  <section className="rounded-2xl bg-card elev-2 p-5" aria-labelledby="recent-title">
+                    <h3 id="recent-title" className="font-headline text-lg font-semibold mb-3">Recent entries</h3>
+                    {transactions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-6">Entries you post appear here, newest first.</p>
+                    ) : (
+                      <ul className="divide-y">
+                        {[...transactions].sort((a,b) => b.date - a.date).slice(0, 6).map(t => {
                           const acc = accounts.find(a => a.id === t.accountId);
+                          const isIn = t.type === 'Credit';
                           return (
-                            <div key={t.id} className="flex justify-between items-center text-sm border-b border-muted last:border-0 pb-2">
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-medium text-xs text-muted-foreground uppercase tracking-tighter truncate">{acc?.name}</span>
-                                <div className="flex items-center">
-                                  {t.type === 'Credit' ? (
-                                    <ArrowUpRight className="h-3 w-3 text-green-500 mr-1 shrink-0" />
-                                  ) : (
-                                    <ArrowDownLeft className="h-3 w-3 text-destructive mr-1 shrink-0" />
-                                  )}
-                                  <span className="truncate">{t.description}</span>
-                                </div>
-                              </div>
-                              <CurrencyDisplay amount={t.amount} className={t.type === 'Credit' ? 'text-green-600 ml-2' : 'text-destructive ml-2'} />
-                            </div>
+                            <li key={t.id}>
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedAccountId(t.accountId); setActiveTab("ledger"); }}
+                                className="w-full flex items-center gap-3 py-2.5 text-left rounded-md hover:bg-surface-2 -mx-2 px-2 transition-colors duration-fast"
+                              >
+                                <span className={cn("grid place-items-center h-8 w-8 rounded-full shrink-0", isIn ? "bg-credit-subtle text-credit" : "bg-debit-subtle text-debit")}>
+                                  {isIn ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                                </span>
+                                <span className="flex-1 min-w-0">
+                                  <span className="block text-sm font-medium truncate">{t.description || (isIn ? "Received" : "Paid")}</span>
+                                  <span className="block text-xs text-muted-foreground truncate">{acc?.name}, {format(new Date(t.date), "d MMM, h:mm a")}</span>
+                                </span>
+                                <CurrencyDisplay amount={t.amount} className={isIn ? 'amount-credit text-sm' : 'amount-debit text-sm'} />
+                              </button>
+                            </li>
                           );
-                        })
-                      )}
-                      <Button variant="link" onClick={() => setActiveTab("ledger")} className="w-full text-xs">View Full Ledgers</Button>
-                    </div>
-                  </div>
+                        })}
+                      </ul>
+                    )}
+                  </section>
                 </div>
               )}
             </div>
@@ -3641,7 +3762,7 @@ export default function RupeeLedger() {
                          <Button variant="ghost" size="icon" onClick={() => setActiveTab("dashboard")} className="h-8 w-8">
                            <ChevronLeft className="h-4 w-4" />
                          </Button>
-                         <h2 className="text-3xl font-bold text-primary">{selectedAccount?.name}</h2>
+                         <h2 className="font-headline text-3xl font-semibold">{selectedAccount?.name}</h2>
                        </div>
                         <p className="text-muted-foreground ml-10 italic mb-2">Detailed Transaction Ledger</p>
                         {selectedAccount && (selectedAccount.gstin || selectedAccount.phone || selectedAccount.address) && (
@@ -3889,7 +4010,7 @@ export default function RupeeLedger() {
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-primary">Cash Flow Analytics</h2>
+                  <h2 className="font-headline text-3xl font-semibold">Cash Flow Analytics</h2>
                   <p className="text-muted-foreground font-medium text-sm">Visual insights into your income, expenses, and cash flow trends</p>
                 </div>
                 
@@ -3952,7 +4073,7 @@ export default function RupeeLedger() {
                 {/* Cash Flow Line Chart */}
                 <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4 lg:col-span-2">
                   <div>
-                    <h3 className="text-lg font-bold text-sand-800">Net Cash Flow Trend</h3>
+                    <h3 className="font-headline text-lg font-semibold text-foreground">Net Cash Flow Trend</h3>
                     <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
                   </div>
                   <div className="h-[300px] w-full pt-4">
@@ -3961,18 +4082,18 @@ export default function RupeeLedger() {
                         <AreaChart data={analyticsData}>
                           <defs>
                             <linearGradient id="colorNetFlow" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0}/>
+                              <stop offset="5%" stopColor="hsl(var(--gold-500))" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="hsl(var(--gold-500))" stopOpacity={0.0}/>
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                          <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
                             contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Net Cash Flow"]}
                           />
-                          <Area type="monotone" dataKey="net" stroke="#0ea5e9" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
+                          <Area type="monotone" dataKey="net" stroke="hsl(var(--gold-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
@@ -3986,23 +4107,23 @@ export default function RupeeLedger() {
                 {/* Income vs Expenses Double Bar Chart */}
                 <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4">
                   <div>
-                    <h3 className="text-lg font-bold text-sand-800">Monthly Inflow vs Outflow</h3>
+                    <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Inflow vs Outflow</h3>
                     <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
                   </div>
                   <div className="h-[280px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsData} margin={{ left: -10 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                          <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
                             contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
                             formatter={(value) => `₹${Number(value).toLocaleString("en-IN")}`}
                           />
                           <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                          <Bar dataKey="income" name="Inflow (Credits)" fill="#10b981" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="expenses" name="Outflow (Debits)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="income" name="Inflow (Credits)" fill="hsl(var(--credit))" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="expenses" name="Outflow (Debits)" fill="hsl(var(--debit))" radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     ) : (
@@ -4016,7 +4137,7 @@ export default function RupeeLedger() {
                 {/* Expense Graph */}
                 <Card className="glass-card premium-glow premium-heading-card shadow-md border-sand-200/80 p-6 space-y-4">
                   <div>
-                    <h3 className="text-lg font-bold text-sand-800">Monthly Expenses Trend</h3>
+                    <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Expenses Trend</h3>
                     <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
                   </div>
                   <div className="h-[280px] w-full pt-4">
@@ -4025,18 +4146,18 @@ export default function RupeeLedger() {
                         <AreaChart data={analyticsData}>
                           <defs>
                             <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0}/>
+                              <stop offset="5%" stopColor="hsl(var(--debit))" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="hsl(var(--debit))" stopOpacity={0.0}/>
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
-                          <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                          <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
                             contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Total Outflow"]}
                           />
-                          <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
+                          <Area type="monotone" dataKey="expenses" stroke="hsl(var(--debit))" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
@@ -4053,6 +4174,7 @@ export default function RupeeLedger() {
           {activeTab === "gst" && (
             <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
               <ErrorBoundary>
+                <Suspense fallback={<ModuleLoading />}>
                 <GSTModule
                   businessProfile={businessProfile}
                   setBusinessProfile={setBusinessProfile}
@@ -4069,6 +4191,21 @@ export default function RupeeLedger() {
                   receipts={receipts}
                   setReceipts={setReceipts}
                 />
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {activeTab === "erp" && (
+            <div className="animate-in fade-in duration-300 pb-12">
+              <ErrorBoundary>
+                <Suspense fallback={<ModuleLoading />}>
+                  <ErpHub
+                    getToken={getAuthToken}
+                    section={erpSection}
+                    onSectionChange={setErpSection}
+                  />
+                </Suspense>
               </ErrorBoundary>
             </div>
           )}
@@ -4076,7 +4213,7 @@ export default function RupeeLedger() {
           {activeTab === "settings" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
                <div>
-                  <h2 className="text-3xl font-bold text-primary">System Settings</h2>
+                  <h2 className="font-headline text-3xl font-semibold">System Settings</h2>
                   <p className="text-muted-foreground font-medium text-sm">Manage business profile, subscription, security, and backups</p>
                 </div>
 
@@ -4092,8 +4229,8 @@ export default function RupeeLedger() {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-sand-50 border rounded-lg">
                           <div className="flex items-center space-x-4">
                             <img 
-                              src={user.avatarUrl || "https://api.dicebear.com/7.x/bottts/svg?seed=user"} 
-                              alt="User Avatar" 
+                              src={user.avatarUrl || "/logo-96.png"} 
+                              alt="" 
                               className="h-16 w-16 rounded-full border bg-sand-100 p-1" 
                             />
                             <div>
@@ -4585,7 +4722,7 @@ export default function RupeeLedger() {
                           }} 
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          Get your API key from <a href="https://www.wasenderapi.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">wasenderapi.com</a>. Leave blank to use the system default key.
+                          Get your API key from <a href="https://www.wasenderapi.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">wasenderapi.com</a>. Leave blank to use the system default key.
                         </p>
                       </div>
                     </CardContent>
@@ -4857,6 +4994,7 @@ export default function RupeeLedger() {
                 </div>
             </div>
           )}
+          </div>
         </main>
       </div>
 

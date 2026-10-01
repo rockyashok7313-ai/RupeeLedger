@@ -136,7 +136,7 @@ export function WhatsAppShareDialog({
             <MessageSquare className="h-5 w-5 text-green-500" />
             {title}
           </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs">
+          <DialogDescription className="text-muted-foreground text-xs">
             Send directly via WASender API (server-side) or open standard WhatsApp Web.
           </DialogDescription>
         </DialogHeader>
@@ -185,7 +185,7 @@ export function WhatsAppShareDialog({
               onChange={(e) => setDocUrl(e.target.value)}
               className="bg-slate-900 border-slate-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1 text-xs"
             />
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[10px] text-muted-foreground">
               Will send as an interactive document message if WASender API is used.
             </p>
           </div>

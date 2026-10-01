@@ -72,7 +72,7 @@ export function GSTModule({
   return (
     <div className="space-y-6">
       {/* Navigation Bar */}
-      <div className="bg-white/50 backdrop-blur-sm border rounded-xl p-2 flex gap-1 overflow-x-auto print:hidden shadow-sm">
+      <div className="bg-card/50 backdrop-blur-sm border rounded-xl p-2 flex gap-1 overflow-x-auto print:hidden shadow-sm">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id || (activeTab === 'preview' && tab.id === 'generator');
@@ -85,8 +85,8 @@ export function GSTModule({
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                 isActive 
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' 
-                  : 'text-gray-600 hover:bg-blue-50 hover:text-blue-700'
+                  ? 'bg-primary text-primary-foreground shadow-sm' 
+                  : 'text-foreground/80 hover:bg-blue-50 hover:text-blue-700'
               }`}
             >
               <Icon className="h-4 w-4" />

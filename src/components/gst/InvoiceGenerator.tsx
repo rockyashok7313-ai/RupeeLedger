@@ -529,7 +529,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         </div>
 
         {invoiceType === 'Tax Invoice' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 border rounded-md bg-gray-50/50">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 border rounded-md bg-muted/60">
             <div className="space-y-2">
               <Label>Invoice Prefix</Label>
               <Input 
@@ -622,7 +622,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                 onClick={() => setIsClientDialogOpen(true)}
                 title="Quick Add New Client"
               >
-                <Plus className="h-4 w-4 text-blue-600" />
+                <Plus className="h-4 w-4 text-primary" />
               </Button>
             </div>
           </div>
@@ -693,7 +693,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         <div className="space-y-4">
           <h3 className="font-semibold border-b pb-2">Line Items</h3>
           {items.map((item, index) => (
-            <div key={index} className="flex gap-3 items-end bg-gray-50 p-3 rounded-lg border">
+            <div key={index} className="flex gap-3 items-end bg-muted/60 p-3 rounded-lg border">
               <div className="flex-1 space-y-2">
                 <Label className="text-xs">Product/Service</Label>
                 <div className="flex gap-2">
@@ -716,7 +716,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                       onClick={() => handleOpenAddItemDialog(index)}
                       title="Quick Add New Item to Catalog"
                     >
-                      <Plus className="h-4 w-4 text-blue-600" />
+                      <Plus className="h-4 w-4 text-primary" />
                     </Button>
                   </div>
                   <Input 
@@ -759,7 +759,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
 
         
         <div className="space-y-4 pt-4 border-t">
-          <div className="bg-gray-50 p-4 rounded-lg border w-full md:w-1/2 ml-auto">
+          <div className="bg-muted/60 p-4 rounded-lg border w-full md:w-1/2 ml-auto">
             <div className="flex items-center justify-between border-b pb-2 mb-2">
               <h3 className="font-semibold text-sm">Invoice Totals Summary</h3>
               <div className="flex items-center space-x-2">
@@ -768,7 +768,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                   checked={autoRoundoff}
                   onCheckedChange={setAutoRoundoff}
                 />
-                <Label htmlFor="auto-roundoff" className="text-xs text-gray-500 cursor-pointer">Auto Round Off</Label>
+                <Label htmlFor="auto-roundoff" className="text-xs text-muted-foreground cursor-pointer">Auto Round Off</Label>
               </div>
             </div>
             <div className="space-y-1 text-sm">
@@ -783,7 +783,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                 <div className="flex justify-between"><span>IGST:</span> <span>₹{calculatedTotals.igst.toFixed(2)}</span></div>
               )}
               {calculatedTotals.tcsAmount > 0 && (
-                <div className="flex justify-between text-blue-600"><span>TCS:</span> <span>₹{calculatedTotals.tcsAmount.toFixed(2)}</span></div>
+                <div className="flex justify-between text-primary"><span>TCS:</span> <span>₹{calculatedTotals.tcsAmount.toFixed(2)}</span></div>
               )}
               {calculatedTotals.roundoff !== 0 && (
                 <div className="flex justify-between"><span>Roundoff:</span> <span>₹{calculatedTotals.roundoff.toFixed(2)}</span></div>

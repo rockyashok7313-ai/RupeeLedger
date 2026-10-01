@@ -116,16 +116,16 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/50 border p-4 rounded-xl shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/50 border p-4 rounded-xl shadow-sm">
         <div>
-          <h2 className="font-semibold text-gray-900">Return Filing Period</h2>
-          <p className="text-sm text-gray-500">Select the month to calculate returns</p>
+          <h2 className="font-semibold text-foreground">Return Filing Period</h2>
+          <p className="text-sm text-muted-foreground">Select the month to calculate returns</p>
         </div>
         <input 
           type="month" 
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(e.target.value)}
-          className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
 
@@ -135,12 +135,12 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-blue-900 flex items-center justify-between">
               Outward Supplies (Sales)
-              <FileText className="h-4 w-4 text-blue-600" />
+              <FileText className="h-4 w-4 text-primary" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">₹{stats.sales.total.toFixed(2)}</div>
-            <div className="text-xs text-gray-500 mt-1 space-y-1">
+            <div className="text-2xl font-bold text-foreground">₹{stats.sales.total.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-1 space-y-1">
               <div className="flex justify-between"><span>Taxable:</span> <span>₹{stats.sales.taxableAmount.toFixed(2)}</span></div>
               <div className="flex justify-between text-blue-700"><span>CGST Collected:</span> <span>₹{stats.sales.cgst.toFixed(2)}</span></div>
               <div className="flex justify-between text-blue-700"><span>SGST Collected:</span> <span>₹{stats.sales.sgst.toFixed(2)}</span></div>
@@ -158,12 +158,12 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">₹{(stats.itc.cgst + stats.itc.sgst + stats.itc.igst).toFixed(2)}</div>
-            <div className="text-xs text-gray-500 mt-1 space-y-1">
+            <div className="text-2xl font-bold text-foreground">₹{(stats.itc.cgst + stats.itc.sgst + stats.itc.igst).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-1 space-y-1">
               <div className="flex justify-between text-emerald-700"><span>CGST Available:</span> <span>₹{stats.itc.cgst.toFixed(2)}</span></div>
               <div className="flex justify-between text-emerald-700"><span>SGST Available:</span> <span>₹{stats.itc.sgst.toFixed(2)}</span></div>
               <div className="flex justify-between text-emerald-700"><span>IGST Available:</span> <span>₹{stats.itc.igst.toFixed(2)}</span></div>
-              <div className="flex justify-between pt-1 border-t text-gray-400"><span>Based on Expenses logged</span></div>
+              <div className="flex justify-between pt-1 border-t text-muted-foreground"><span>Based on Expenses logged</span></div>
             </div>
           </CardContent>
         </Card>
@@ -178,11 +178,11 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">₹{(stats.payable.cgst + stats.payable.sgst + stats.payable.igst).toFixed(2)}</div>
-            <div className="text-xs text-gray-500 mt-1 space-y-1">
+            <div className="text-xs text-muted-foreground mt-1 space-y-1">
               <div className="flex justify-between text-amber-700"><span>CGST Payable:</span> <span>₹{stats.payable.cgst.toFixed(2)}</span></div>
               <div className="flex justify-between text-amber-700"><span>SGST Payable:</span> <span>₹{stats.payable.sgst.toFixed(2)}</span></div>
               <div className="flex justify-between text-amber-700"><span>IGST Payable:</span> <span>₹{stats.payable.igst.toFixed(2)}</span></div>
-              <div className="flex justify-between pt-1 border-t text-gray-400"><span>Formula: Collected - ITC</span></div>
+              <div className="flex justify-between pt-1 border-t text-muted-foreground"><span>Formula: Collected - ITC</span></div>
             </div>
           </CardContent>
         </Card>

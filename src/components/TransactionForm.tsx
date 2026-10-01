@@ -117,10 +117,10 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
   }
 
   return (
-    <Card className="glass-card border-none shadow-xl bg-white/80 backdrop-blur-xl">
-      <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5 pb-6 border-b border-white/20 rounded-t-xl">
-        <CardTitle className="text-xl text-primary font-semibold flex items-center gap-2">
-          New Entry
+    <Card className="rounded-2xl border-none bg-card elev-2">
+      <CardHeader className="pb-4 border-b">
+        <CardTitle className="font-headline text-lg font-semibold flex items-center gap-2">
+          New entry
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-6">
@@ -131,14 +131,14 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
               value={dateInput}
               onChange={(e) => setDateInput(e.target.value)}
               placeholder="DD-MM-YYYY"
-              className="bg-white/50 focus:bg-white"
+              className="bg-card/50 focus:bg-card"
             />
           </div>
 
           <div className="space-y-2">
             <Label>Account</Label>
             <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-              <SelectTrigger className="bg-white/50 focus:bg-white">
+              <SelectTrigger className="bg-card/50 focus:bg-card">
                 <SelectValue placeholder="Select account" />
               </SelectTrigger>
               <SelectContent>
@@ -154,13 +154,13 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
             <RadioGroup
               value={type}
               onValueChange={(val) => setType(val as TransactionType)}
-              className="flex space-x-4 p-1 bg-slate-100 rounded-lg"
+              className="flex space-x-4 p-1 bg-muted rounded-lg"
             >
-              <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-md shadow-sm border border-slate-200 w-full justify-center">
+              <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-md shadow-sm border border-border w-full justify-center">
                 <RadioGroupItem value="Credit" id="r1" className="text-green-600" />
                 <Label htmlFor="r1" className="font-semibold text-green-700 cursor-pointer">IN (+)</Label>
               </div>
-              <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-md shadow-sm border border-slate-200 w-full justify-center">
+              <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-md shadow-sm border border-border w-full justify-center">
                 <RadioGroupItem value="Debit" id="r2" className="text-red-600" />
                 <Label htmlFor="r2" className="font-semibold text-red-700 cursor-pointer">OUT (-)</Label>
               </div>
@@ -176,7 +176,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               required
-              className="bg-white/50 focus:bg-white text-lg font-medium"
+              className="bg-card/50 focus:bg-card text-lg font-medium"
             />
           </div>
 
@@ -200,7 +200,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter details..."
               required
-              className="resize-none bg-white/50 focus:bg-white"
+              className="resize-none bg-card/50 focus:bg-card"
             />
           </div>
 
