@@ -2510,6 +2510,16 @@ export default function RupeeLedger() {
     const amount = parseFloat(formData.get("amount") as string);
     const type = formData.get("type") as TransactionType;
     const description = formData.get("description") as string;
+    // The ledger can be changed too, so an entry posted to the wrong account
+    // can be moved instead of deleted and re-entered. Fall back to the current
+    // account if the chosen one no longer exists.
+    const chosenAccountId = formData.get("accountId") as string | null;
+    const accountId = chosenAccountId && accounts.some(a => a.id === chosenAccountId)
+      ? chosenAccountId
+      : editingTransaction.accountId;
+    const movedTo = accountId !== editingTransaction.accountId
+      ? accounts.find(a => a.id === accountId)?.name
+      : null;
 
     const updatedTransactions = transactions.map(t => {
       if (t.id === editingTransaction.id) {
@@ -2534,6 +2544,7 @@ export default function RupeeLedger() {
 
         return { 
           ...t, 
+          accountId,
           amount, 
           type, 
           description,
@@ -2548,7 +2559,9 @@ export default function RupeeLedger() {
 
     recalculateData(accounts, updatedTransactions);
       setTimeout(() => setEditingTransaction(null), 100);
-      toast({ title: "Transaction updated" });
+      toast(movedTo
+        ? { title: "Entry updated", description: `Moved to ${movedTo}. Both ledger balances are recalculated.` }
+        : { title: "Entry updated" });
   };
 
   const deleteTransaction = async () => {
@@ -5110,6 +5123,21 @@ export default function RupeeLedger() {
               <DialogTitle>Update Entry Record</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Ledger Account</Label>
+                <Select name="accountId" defaultValue={editingTransaction?.accountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a ledger" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {[...accounts].sort((a, b) => a.name.localeCompare(b.name)).map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Entry Classification</Label>
                 <Select name="type" defaultValue={editingTransaction?.type}>
