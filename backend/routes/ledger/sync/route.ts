@@ -20,6 +20,14 @@ const syncSchema = z.object({
   receipts: z.array(z.any()).optional(),
 });
 
+/**
+ * PostgREST caps a response at 1000 rows unless the request asks for more.
+ * A pull that silently stops at 1000 hands the client an incomplete ledger,
+ * and the push below then treats the gap as deletions. Ask for far more than
+ * any single account is expected to hold.
+ */
+const SYNC_ROW_LIMIT = 100000;
+
 /** Logical collection name -> Supabase table name. */
 const TABLES = {
   accounts: 'accounts',
@@ -87,7 +95,22 @@ async function syncArray(
   if (selectError) throw selectError;
 
   const idsToDelete = (existing || []).map(r => r.id).filter(id => !activeIds.includes(id));
-  if (idsToDelete.length > 0) {
+
+  /**
+   * Deleting by absence is only safe while the client genuinely holds every
+   * row. If it ever pushes a truncated set -- a capped response, a half-loaded
+   * client, an interrupted pull -- this would quietly erase the remainder, and
+   * a ledger cannot afford that. Removing a large share of stored rows in one
+   * push is treated as a bad payload rather than an instruction.
+   */
+  const storedCount = (existing || []).length;
+  if (storedCount > 0 && idsToDelete.length > Math.max(25, storedCount * 0.2)) {
+    console.error(
+      `[SYNC] Refusing to delete ${idsToDelete.length} of ${storedCount} rows in ${table} ` +
+      `for ${ownerId}/${branchId}: payload looks incomplete (${activeIds.length} sent). ` +
+      `Upserting without deleting.`
+    );
+  } else if (idsToDelete.length > 0) {
     const { error } = await supabase
       .from(table)
       .delete()
@@ -191,14 +214,14 @@ export async function POST(request: Request) {
         supabase.from('business_profiles').select('*').eq('user_id', ownerId).maybeSingle(),
         supabase.from('subscriptions').select('*').eq('user_id', ownerId).maybeSingle(),
         supabase.from('security_settings').select('*').eq('user_id', ownerId).maybeSingle(),
-        supabase.from(TABLES.accounts).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.transactions).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.clients).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.inventory).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.invoices).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.expenses).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.recurringTemplates).select('*').eq('user_id', ownerId).eq('branchId', branchId),
-        supabase.from(TABLES.receipts).select('*').eq('user_id', ownerId).eq('branchId', branchId),
+        supabase.from(TABLES.accounts).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.transactions).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.clients).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.inventory).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.invoices).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.expenses).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.recurringTemplates).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        supabase.from(TABLES.receipts).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
       ]);
 
       const profile = profileRes.data;
