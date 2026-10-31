@@ -4217,6 +4217,8 @@ export default function RupeeLedger() {
                     getToken={getAuthToken}
                     section={erpSection}
                     onSectionChange={setErpSection}
+                    transactions={transactions}
+                    accounts={accounts}
                   />
                 </Suspense>
               </ErrorBoundary>

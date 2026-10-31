@@ -5,6 +5,8 @@ import { MasterDataModule, type MasterField } from "./MasterDataModule";
 import { TransactionModule } from "./TransactionModule";
 import { StockJournal } from "./StockJournal";
 import { GSTRReports } from "./GSTRReports";
+import { AccountingReports } from "./AccountingReports";
+import type { Transaction, Account } from "@/lib/types";
 import { ERP_GROUPS, ERP_SECTION_LABELS, type ErpSection } from "./erp-sections";
 
 const STATE_FIELD: MasterField = { key: "state", label: "State", type: "text" };
@@ -87,13 +89,16 @@ interface ErpHubProps {
   getToken: () => Promise<string | null>;
   section: ErpSection;
   onSectionChange: (s: ErpSection) => void;
+  /** Ledger state, for the accounting section. Not served by /api/erp/*. */
+  transactions: Transaction[];
+  accounts: Account[];
 }
 
 /**
  * Stock, sales and purchase in one place. These modules were already built
  * against /api/erp/* but nothing in the app linked to them.
  */
-export function ErpHub({ getToken, section, onSectionChange }: ErpHubProps) {
+export function ErpHub({ getToken, section, onSectionChange, transactions, accounts }: ErpHubProps) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
@@ -139,7 +144,11 @@ export function ErpHub({ getToken, section, onSectionChange }: ErpHubProps) {
         ))}
       </nav>
 
-      {token === undefined ? (
+      {/* Accounting is derived from the local ledger, so it renders ahead of the
+          token gate below -- an offline or guest user can still read it. */}
+      {section === "accounting" ? (
+        <AccountingReports transactions={transactions} accounts={accounts} />
+      ) : token === undefined ? (
         <div className="flex items-center justify-center py-24 text-muted-foreground gap-3" role="status">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span className="text-sm">Checking your session…</span>
@@ -173,6 +182,9 @@ function SectionBody({ section, token }: { section: ErpSection; token: string })
       return <StockJournal token={token} />;
     case "gstr":
       return <GSTRReports token={token} />;
+    case "accounting":
+      // Handled above the token gate, since it reads the local ledger.
+      return null;
     case "sales_orders":
     case "sale_invoices":
     case "purchase_orders":
