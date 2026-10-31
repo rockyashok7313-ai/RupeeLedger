@@ -12,9 +12,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['"Hanken Grotesk Variable"', 'system-ui', 'sans-serif'],
-        headline: ['"Bricolage Grotesque Variable"', '"Hanken Grotesk Variable"', 'system-ui', 'sans-serif'],
-        code: ['monospace'],
+        // ShiftWise's pairing: Archivo for display, IBM Plex for everything
+        // else. Plex Mono carries the figures, which is why it is the code face.
+        body: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        headline: ['"Archivo Variable"', '"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        code: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',
