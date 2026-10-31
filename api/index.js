@@ -38732,6 +38732,7 @@ var syncSchema = z.object({
   recurringTemplates: z.array(z.any()).optional(),
   receipts: z.array(z.any()).optional()
 });
+var SYNC_ROW_LIMIT = 1e5;
 var TABLES = {
   accounts: "accounts",
   transactions: "transactions",
@@ -38762,7 +38763,12 @@ async function syncArray(supabase2, table, dataArray, ownerId, branchId) {
   const { data: existing, error: selectError } = await supabase2.from(table).select("id").eq("user_id", ownerId).eq("branchId", branchId);
   if (selectError) throw selectError;
   const idsToDelete = (existing || []).map((r) => r.id).filter((id) => !activeIds.includes(id));
-  if (idsToDelete.length > 0) {
+  const storedCount = (existing || []).length;
+  if (storedCount > 0 && idsToDelete.length > Math.max(25, storedCount * 0.2)) {
+    console.error(
+      `[SYNC] Refusing to delete ${idsToDelete.length} of ${storedCount} rows in ${table} for ${ownerId}/${branchId}: payload looks incomplete (${activeIds.length} sent). Upserting without deleting.`
+    );
+  } else if (idsToDelete.length > 0) {
     const { error } = await supabase2.from(table).delete().eq("user_id", ownerId).eq("branchId", branchId).in("id", idsToDelete);
     if (error) throw error;
   }
@@ -38803,13 +38809,13 @@ async function POST8(request) {
     }
     const baseUserId = userId.includes("_") ? userId.substring(0, userId.lastIndexOf("_")) : userId;
     const isOwner = decodedToken.uid === userId || decodedToken.uid === baseUserId;
-    const normalizeString2 = (str) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
-    const normalizePhone2 = (str) => str.replace(/\D/g, "").slice(-10);
-    const tokenEmail = decodedToken.email ? normalizeString2(decodedToken.email) : "";
-    const userEmail = baseUserId.startsWith("e_") ? normalizeString2(baseUserId.substring(2)) : normalizeString2(baseUserId);
+    const normalizeString3 = (str) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const normalizePhone3 = (str) => str.replace(/\D/g, "").slice(-10);
+    const tokenEmail = decodedToken.email ? normalizeString3(decodedToken.email) : "";
+    const userEmail = baseUserId.startsWith("e_") ? normalizeString3(baseUserId.substring(2)) : normalizeString3(baseUserId);
     const isEmailUser = tokenEmail && tokenEmail === userEmail;
-    const tokenPhone = decodedToken.phone_number ? normalizePhone2(decodedToken.phone_number) : "";
-    const userPhone = baseUserId.startsWith("p_") ? normalizePhone2(baseUserId.substring(2)) : normalizePhone2(baseUserId);
+    const tokenPhone = decodedToken.phone_number ? normalizePhone3(decodedToken.phone_number) : "";
+    const userPhone = baseUserId.startsWith("p_") ? normalizePhone3(baseUserId.substring(2)) : normalizePhone3(baseUserId);
     const isPhoneUser = tokenPhone && tokenPhone === userPhone;
     const isAdmin = checkIsAdmin(decodedToken);
     if (!isOwner && !isPhoneUser && !isEmailUser && !isAdmin) {
@@ -38839,14 +38845,14 @@ async function POST8(request) {
         supabase2.from("business_profiles").select("*").eq("user_id", ownerId).maybeSingle(),
         supabase2.from("subscriptions").select("*").eq("user_id", ownerId).maybeSingle(),
         supabase2.from("security_settings").select("*").eq("user_id", ownerId).maybeSingle(),
-        supabase2.from(TABLES.accounts).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.transactions).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.clients).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.inventory).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.invoices).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.expenses).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.recurringTemplates).select("*").eq("user_id", ownerId).eq("branchId", branchId),
-        supabase2.from(TABLES.receipts).select("*").eq("user_id", ownerId).eq("branchId", branchId)
+        supabase2.from(TABLES.accounts).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.transactions).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.clients).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.inventory).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.invoices).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.expenses).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.recurringTemplates).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
+        supabase2.from(TABLES.receipts).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT)
       ]);
       const profile = profileRes.data;
       return NextResponse.json({
@@ -38895,12 +38901,122 @@ async function POST8(request) {
   }
 }
 
-// backend/routes/razorpay/order/route.ts
+// backend/routes/ledger/backup/route.ts
 var route_exports9 = {};
 __export(route_exports9, {
   POST: () => POST9
 });
+var backupSchema = z.object({
+  userId: z.string().trim().min(1, "userId is required."),
+  action: z.enum(["snapshot", "list", "restore"]),
+  /** Full ledger payload, for `snapshot`. */
+  data: z.any().optional(),
+  /** Which snapshot to read back, for `restore`. */
+  backupId: z.number().int().positive().optional()
+});
+var KEEP_DAYS = 14;
+function splitBranch2(userId) {
+  const idx = userId.lastIndexOf("_");
+  if (idx > 0) {
+    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
+  }
+  return { ownerId: userId, branchId: "hq" };
+}
+var normalizeString2 = (str) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+var normalizePhone2 = (str) => str.replace(/\D/g, "").slice(-10);
+function isOwnerOf2(decoded, userId, baseUserId) {
+  if (decoded.uid === userId || decoded.uid === baseUserId) return true;
+  const tokenEmail = decoded.email ? normalizeString2(decoded.email) : "";
+  const userEmail = baseUserId.startsWith("e_") ? normalizeString2(baseUserId.substring(2)) : normalizeString2(baseUserId);
+  if (tokenEmail && tokenEmail === userEmail) return true;
+  const tokenPhone = decoded.phone_number ? normalizePhone2(decoded.phone_number) : "";
+  const userPhone = baseUserId.startsWith("p_") ? normalizePhone2(baseUserId.substring(2)) : normalizePhone2(baseUserId);
+  if (tokenPhone && tokenPhone === userPhone) return true;
+  return false;
+}
 async function POST9(request) {
+  try {
+    const parsed = backupSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      const errorMsg = parsed.error.errors.map((e) => e.message).join(", ");
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
+    }
+    const { userId, action, data, backupId } = parsed.data;
+    const token = extractToken(request);
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized: Missing or invalid token" }, { status: 401 });
+    }
+    const decoded = await verifyIdToken(token);
+    if (!decoded) {
+      return NextResponse.json({ error: "Unauthorized: Invalid token" }, { status: 401 });
+    }
+    const { ownerId, branchId } = splitBranch2(userId);
+    if (!checkIsAdmin(decoded) && !isOwnerOf2(decoded, userId, ownerId)) {
+      return NextResponse.json({ error: "Forbidden: These backups belong to another account." }, { status: 403 });
+    }
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ isOfflineFallback: true, backups: [] });
+    }
+    const supabase2 = getSupabaseAdmin();
+    if (action === "list") {
+      const { data: rows, error: error2 } = await supabase2.from("ledger_backups").select("id, taken_on, created_at, account_count, transaction_count, byte_size").eq("user_id", ownerId).eq("branchId", branchId).order("taken_on", { ascending: false }).limit(KEEP_DAYS);
+      if (error2) throw error2;
+      return NextResponse.json({ backups: rows || [] });
+    }
+    if (action === "restore") {
+      if (!backupId) {
+        return NextResponse.json({ error: "backupId is required to restore." }, { status: 400 });
+      }
+      const { data: row, error: error2 } = await supabase2.from("ledger_backups").select("id, taken_on, payload, account_count, transaction_count").eq("id", backupId).eq("user_id", ownerId).eq("branchId", branchId).maybeSingle();
+      if (error2) throw error2;
+      if (!row) {
+        return NextResponse.json({ error: "That backup was not found." }, { status: 404 });
+      }
+      return NextResponse.json({ backup: row });
+    }
+    if (!data || typeof data !== "object") {
+      return NextResponse.json({ error: "Nothing to back up." }, { status: 400 });
+    }
+    const accountCount = Array.isArray(data.accounts) ? data.accounts.length : 0;
+    const transactionCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
+    if (accountCount === 0 && transactionCount === 0) {
+      return NextResponse.json({ skipped: true, reason: "Ledger is empty; nothing worth snapshotting." });
+    }
+    const serialized = JSON.stringify(data);
+    const takenOn = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const { data: saved, error } = await supabase2.from("ledger_backups").upsert(
+      {
+        user_id: ownerId,
+        branchId,
+        taken_on: takenOn,
+        payload: data,
+        account_count: accountCount,
+        transaction_count: transactionCount,
+        byte_size: serialized.length,
+        created_at: (/* @__PURE__ */ new Date()).toISOString()
+      },
+      { onConflict: "user_id,branchId,taken_on" }
+    ).select("id, taken_on, account_count, transaction_count, byte_size").maybeSingle();
+    if (error) throw error;
+    const { error: pruneError } = await supabase2.rpc("prune_ledger_backups", {
+      p_user_id: ownerId,
+      p_branch_id: branchId,
+      p_keep: KEEP_DAYS
+    });
+    if (pruneError) console.error("[BACKUP] prune failed:", pruneError);
+    return NextResponse.json({ backup: saved, keepDays: KEEP_DAYS });
+  } catch (error) {
+    console.error("Error in /api/ledger/backup:", error);
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+  }
+}
+
+// backend/routes/razorpay/order/route.ts
+var route_exports10 = {};
+__export(route_exports10, {
+  POST: () => POST10
+});
+async function POST10(request) {
   try {
     const body = await request.json();
     const amount = body.amount || 199;
@@ -38954,9 +39070,9 @@ async function POST9(request) {
 }
 
 // backend/routes/razorpay/verify/route.ts
-var route_exports10 = {};
-__export(route_exports10, {
-  POST: () => POST10
+var route_exports11 = {};
+__export(route_exports11, {
+  POST: () => POST11
 });
 var import_crypto2 = __toESM(require("crypto"), 1);
 
@@ -39068,7 +39184,7 @@ var dispatchKeyToContact = async (contactVal, licenseKey, duration, razorpay_ord
 };
 
 // backend/routes/razorpay/verify/route.ts
-async function POST10(request) {
+async function POST11(request) {
   try {
     const body = await request.json();
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, duration, email, purchaserContact } = body;
@@ -39127,12 +39243,12 @@ async function POST10(request) {
 }
 
 // backend/routes/razorpay/webhook/route.ts
-var route_exports11 = {};
-__export(route_exports11, {
-  POST: () => POST11
+var route_exports12 = {};
+__export(route_exports12, {
+  POST: () => POST12
 });
 var import_crypto3 = __toESM(require("crypto"), 1);
-async function POST11(request) {
+async function POST12(request) {
   try {
     const rawBody = await request.text();
     const signature = request.headers.get("x-razorpay-signature");
@@ -39175,9 +39291,9 @@ async function POST11(request) {
 }
 
 // backend/routes/whatsapp/send/route.ts
-var route_exports12 = {};
-__export(route_exports12, {
-  POST: () => POST12
+var route_exports13 = {};
+__export(route_exports13, {
+  POST: () => POST13
 });
 var whatsappSendSchema = z.object({
   to: z.string().trim().min(1, 'Recipient phone "to" is required.'),
@@ -39185,7 +39301,7 @@ var whatsappSendSchema = z.object({
   documentUrl: z.string().trim().optional(),
   wasenderApiKey: z.string().trim().optional()
 });
-async function POST12(request) {
+async function POST13(request) {
   try {
     const token = extractToken(request);
     if (!token) {
@@ -39223,9 +39339,9 @@ async function POST12(request) {
 }
 
 // backend/routes/reports/render/route.ts
-var route_exports13 = {};
-__export(route_exports13, {
-  POST: () => POST13
+var route_exports14 = {};
+__export(route_exports14, {
+  POST: () => POST14
 });
 
 // backend/templates/utils.ts
@@ -39792,7 +39908,7 @@ var RenderRequestSchema = z.object({
   format: z.enum(["html", "pdf"]).default("html"),
   data: z.any()
 });
-async function POST13(req) {
+async function POST14(req) {
   let browser = null;
   try {
     const body = await req.json();
@@ -39947,12 +40063,13 @@ var routes = [
   { path: "/api/erp/transactions", module: route_exports6 },
   { path: "/api/keys", module: route_exports7 },
   { path: "/api/ledger/sync", module: route_exports8 },
-  { path: "/api/razorpay/order", module: route_exports9 },
-  { path: "/api/razorpay/verify", module: route_exports10 },
-  { path: "/api/razorpay/webhook", module: route_exports11 },
-  { path: "/api/reports/render", module: route_exports13 },
+  { path: "/api/ledger/backup", module: route_exports9 },
+  { path: "/api/razorpay/order", module: route_exports10 },
+  { path: "/api/razorpay/verify", module: route_exports11 },
+  { path: "/api/razorpay/webhook", module: route_exports12 },
+  { path: "/api/reports/render", module: route_exports14 },
   // { path: '/api/suggest-narration', module: SuggestNarration },
-  { path: "/api/whatsapp/send", module: route_exports12 }
+  { path: "/api/whatsapp/send", module: route_exports13 }
 ];
 routes.forEach((route) => {
   app.all(route.path, (req, res) => {

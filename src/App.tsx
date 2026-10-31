@@ -81,6 +81,13 @@ import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
 const GSTModule = lazy(() => import("@/components/gst/GSTModule").then(m => ({ default: m.GSTModule })));
 const ErpHub = lazy(() => import("@/components/erp/ErpHub").then(m => ({ default: m.ErpHub })));
+
+/** How many days of local auto-backup to keep on this device. */
+const LOCAL_BACKUP_SLOTS = 3;
+const LOCAL_BACKUP_SLOTS_KEY = "rupee_ledger_auto_backup_slots";
+/** When the last cloud snapshot succeeded, and why the last one failed. */
+const CLOUD_BACKUP_AT_KEY = "rupee_ledger_cloud_backup_at";
+const CLOUD_BACKUP_ERROR_KEY = "rupee_ledger_cloud_backup_error";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -633,36 +640,101 @@ export default function RupeeLedger() {
     return () => observer.disconnect();
   }, []);
 
-  // Daily Auto-Backup to LocalStorage
+  /**
+   * Daily auto-backup.
+   *
+   * Runs once a day and writes two copies:
+   *
+   *  - localStorage, rotating over LOCAL_BACKUP_SLOTS days. The previous code
+   *    kept a single slot, so the moment a bad day was written the only copy of
+   *    the good data was already gone. Rotating means a problem spotted a day
+   *    or two late is still recoverable.
+   *  - the server, via /api/ledger/backup, which keeps a dated snapshot per
+   *    day. That is the copy that survives a cleared browser or a dead PC, and
+   *    it is what lets a restore pick a date instead of taking whatever the
+   *    last local write happened to be.
+   *
+   * A cloud failure is recorded rather than swallowed, so Settings can say when
+   * the last good snapshot actually was.
+   */
   useEffect(() => {
     if (!isLoaded || accounts.length === 0) return;
-    
-    const lastBackup = localStorage.getItem("rupee_ledger_last_auto_backup_date");
+
     const today = new Date().toDateString();
-    
-    if (lastBackup !== today) {
+    if (localStorage.getItem("rupee_ledger_last_auto_backup_date") === today) return;
+
+    const backupData = {
+      accounts,
+      transactions,
+      clients,
+      inventory,
+      invoices,
+      expenses,
+      recurringTemplates,
+      receipts,
+      businessProfile,
+      subscription,
+      securitySettings,
+    };
+
+    // --- local, rotating ---------------------------------------------------
+    try {
+      const serialized = JSON.stringify(backupData);
+      const slots: { date: string; data: string }[] = JSON.parse(
+        localStorage.getItem(LOCAL_BACKUP_SLOTS_KEY) || "[]",
+      );
+      const rotated = [{ date: today, data: serialized }, ...slots.filter(s => s.date !== today)]
+        .slice(0, LOCAL_BACKUP_SLOTS);
+
       try {
-        const backupData = {
-          accounts,
-          transactions,
-          clients,
-          inventory,
-          invoices,
-          expenses,
-          recurringTemplates,
-          receipts,
-          businessProfile,
-          subscription,
-          securitySettings
-        };
-        localStorage.setItem("rupee_ledger_auto_backup_data", JSON.stringify(backupData));
-        localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
-        console.log("Daily auto-backup saved to local storage.");
-      } catch (e) {
-        console.error("Failed to save auto-backup", e);
+        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated));
+      } catch {
+        // Over quota with several days held. Keep today's and drop the rest --
+        // one recent backup beats none.
+        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated.slice(0, 1)));
       }
+
+      // The single-slot key the older restore path reads. Kept in step so a
+      // client that has not reloaded still finds something.
+      localStorage.setItem("rupee_ledger_auto_backup_data", serialized);
+      localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
+    } catch (e) {
+      console.error("Local auto-backup failed", e);
+      toast({
+        title: "Local backup failed",
+        description: "This device could not store today's backup. Your data is unchanged.",
+        variant: "destructive",
+      });
     }
-  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, isLoaded]);
+
+    // --- cloud -------------------------------------------------------------
+    if (!user || user.authMethod === "guest" || !cloudBackupEnabled) return;
+
+    (async () => {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch("/api/ledger/backup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user.id + "_" + activeBranchId,
+            action: "snapshot",
+            data: backupData,
+          }),
+        });
+        if (!res.ok) throw new Error(`Cloud backup failed (${res.status}).`);
+        const body = await res.json().catch(() => null);
+        if (body?.isOfflineFallback) throw new Error("Cloud backup is not configured on the server.");
+        localStorage.setItem(CLOUD_BACKUP_AT_KEY, new Date().toISOString());
+      } catch (e: any) {
+        console.error("Cloud auto-backup failed", e);
+        localStorage.setItem(CLOUD_BACKUP_ERROR_KEY, e?.message || "Unknown error");
+      }
+    })();
+  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, isLoaded, user, cloudBackupEnabled, activeBranchId]);
 
   useEffect(() => {
     // 1. Setup Auth Observer
