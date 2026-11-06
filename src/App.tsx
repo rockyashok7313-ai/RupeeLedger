@@ -3012,13 +3012,13 @@ export default function RupeeLedger() {
     return (
       <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-sand-950 text-sand-50">
         <div className="flex flex-col items-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/20">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-teal-500/20">
             <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
           </div>
           <p className="text-sm font-medium text-sand-400">Loading RupeeLedger…</p>
           {/* A determinate-looking sliver reads as progress; a pulsing block reads as a stall. */}
           <div className="mt-4 h-0.5 w-32 overflow-hidden rounded-full bg-sand-800">
-            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
+            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-teal-500 to-transparent" />
           </div>
         </div>
       </div>
@@ -3036,7 +3036,7 @@ export default function RupeeLedger() {
           className="pointer-events-none fixed inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(60rem 40rem at 50% -10%, hsl(var(--brand-700) / 0.28), transparent 60%), radial-gradient(40rem 30rem at 90% 110%, hsl(var(--gold-700) / 0.18), transparent 60%)",
+              "radial-gradient(60rem 40rem at 50% -10%, hsl(var(--brand-700) / 0.28), transparent 60%), radial-gradient(40rem 30rem at 90% 110%, hsl(var(--teal-700) / 0.18), transparent 60%)",
           }}
         />
         <Toaster />
@@ -3044,7 +3044,7 @@ export default function RupeeLedger() {
 
           {/* Brand Logo Header */}
           <div className="flex flex-col items-center space-y-2 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/25">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-teal-500/25">
               <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">RupeeLedger</h1>
@@ -3734,7 +3734,7 @@ export default function RupeeLedger() {
                                 : "text-foreground/75 hover:bg-surface-2 hover:text-foreground",
                             )}
                           >
-                            {on && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-gold-500" aria-hidden />}
+                            {on && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-teal-500" aria-hidden />}
                             <Icon className="h-4 w-4 shrink-0" />
                             {item.label}
                           </button>
@@ -3759,7 +3759,7 @@ export default function RupeeLedger() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{user.name}</p>
                         <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
-                          <span className={cn("h-1.5 w-1.5 rounded-full", user.authMethod === "guest" ? "bg-gold-500" : "bg-credit")} aria-hidden />
+                          <span className={cn("h-1.5 w-1.5 rounded-full", user.authMethod === "guest" ? "bg-teal-500" : "bg-credit")} aria-hidden />
                           {user.authMethod === "guest" ? "Saved on this device" : "Synced to cloud"}
                         </p>
                       </div>
@@ -3833,21 +3833,21 @@ export default function RupeeLedger() {
                     <h3 className="text-sm font-medium khata-muted">Net position</h3>
                     <span className="text-xs khata-muted">{accounts.length} {accounts.length === 1 ? "ledger" : "ledgers"}</span>
                   </div>
-                  <CurrencyDisplay amount={totalBalance} className="font-headline text-4xl md:text-[2.75rem] leading-tight mt-2 text-gold-50 break-all" />
+                  <CurrencyDisplay amount={totalBalance} className="font-headline text-4xl md:text-[2.75rem] leading-tight mt-2 text-teal-50 break-all" />
                   <div className="khata-rule my-5" />
                   <dl className="space-y-2.5 text-sm mt-auto">
                     <div className="flex items-center justify-between">
                       <dt className="flex items-center gap-2 khata-muted"><ArrowUpRight className="h-4 w-4" /> Came in today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.credit} className="text-gold-50" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.credit} className="text-teal-50" /></dd>
                     </div>
                     <div className="flex items-center justify-between">
                       <dt className="flex items-center gap-2 khata-muted"><ArrowDownLeft className="h-4 w-4" /> Went out today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.debit} className="text-gold-50" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.debit} className="text-teal-50" /></dd>
                     </div>
                     <div className="khata-rule opacity-60" />
                     <div className="flex items-center justify-between">
                       <dt className="khata-muted">Net today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign className="text-gold-200" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign className="text-teal-200" /></dd>
                     </div>
                   </dl>
                 </section>
@@ -4283,8 +4283,8 @@ export default function RupeeLedger() {
                         <AreaChart data={analyticsData}>
                           <defs>
                             <linearGradient id="colorNetFlow" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--gold-500))" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="hsl(var(--gold-500))" stopOpacity={0.0}/>
+                              <stop offset="5%" stopColor="hsl(var(--teal-500))" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="hsl(var(--teal-500))" stopOpacity={0.0}/>
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -4294,7 +4294,7 @@ export default function RupeeLedger() {
                             contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Net Cash Flow"]}
                           />
-                          <Area type="monotone" dataKey="net" stroke="hsl(var(--gold-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
+                          <Area type="monotone" dataKey="net" stroke="hsl(var(--teal-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
