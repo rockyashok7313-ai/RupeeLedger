@@ -693,13 +693,13 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
         <div className="space-y-4">
           <h3 className="font-semibold border-b pb-2">Line Items</h3>
           {items.map((item, index) => (
-            <div key={index} className="flex gap-3 items-end bg-muted/60 p-3 rounded-lg border">
-              <div className="flex-1 space-y-2">
+            <div key={index} className="flex flex-wrap gap-3 items-end bg-muted/60 p-3 rounded-lg border">
+              <div className="flex-1 min-w-[220px] space-y-2">
                 <Label className="text-xs">Product/Service</Label>
                 <div className="flex gap-2">
-                  <div className="flex gap-1.5 items-center">
-                    <select 
-                      className="flex h-10 w-96 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <div className="flex gap-1.5 items-center min-w-0 flex-1">
+                    <select
+                      className="flex h-10 w-full min-w-0 sm:w-96 rounded-md border border-input bg-background px-3 py-2 text-sm"
                       onChange={(e) => handleInventorySelect(index, e)}
                       value={item.inventoryId || ''}
                     >
@@ -747,7 +747,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                 <Label className="text-xs">GST %</Label>
                 <Input type="number" value={item.taxPercent || ''} onChange={(e) => handleItemChange(index, 'taxPercent', parseFloat(e.target.value))} />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle h-10 w-10">
+              <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="shrink-0 text-destructive hover:text-destructive/80 hover:bg-debit-subtle h-10 w-10">
                 <Trash className="h-4 w-4" />
               </Button>
             </div>

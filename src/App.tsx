@@ -2039,7 +2039,7 @@ export default function RupeeLedger() {
           email: purchaserEmail
         },
         theme: {
-          color: '#0f172a'
+          color: '#1B3A5F'
         }
       };
 
@@ -4277,7 +4277,7 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Net Cash Flow Trend</h3>
                     <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
                   </div>
-                  <div className="h-[300px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[300px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={analyticsData}>
@@ -4291,7 +4291,8 @@ export default function RupeeLedger() {
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Net Cash Flow"]}
                           />
                           <Area type="monotone" dataKey="net" stroke="hsl(var(--teal-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
@@ -4311,7 +4312,7 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Inflow vs Outflow</h3>
                     <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
                   </div>
-                  <div className="h-[280px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[280px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsData} margin={{ left: -10 }}>
@@ -4319,7 +4320,8 @@ export default function RupeeLedger() {
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => `₹${Number(value).toLocaleString("en-IN")}`}
                           />
                           <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
@@ -4341,7 +4343,7 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Expenses Trend</h3>
                     <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
                   </div>
-                  <div className="h-[280px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[280px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={analyticsData}>
@@ -4355,7 +4357,8 @@ export default function RupeeLedger() {
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Total Outflow"]}
                           />
                           <Area type="monotone" dataKey="expenses" stroke="hsl(var(--debit))" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />

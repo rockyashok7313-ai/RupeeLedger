@@ -274,28 +274,30 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
             {tcsInvoices.length === 0 ? (
               <div className="text-center p-8 text-muted-foreground border rounded">No TCS collected yet.</div>
             ) : (
-              <table className="w-full text-sm text-left border rounded">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Invoice No</th>
-                    <th className="p-3">Client</th>
-                    <th className="p-3 text-right">Invoice Total</th>
-                    <th className="p-3 text-right font-medium text-primary">TCS Collected</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {tcsInvoices.map(inv => (
-                    <tr key={inv.id}>
-                      <td className="p-3">{new Date(inv.date).toLocaleDateString()}</td>
-                      <td className="p-3 font-medium">{inv.invoiceNumber}</td>
-                      <td className="p-3">{inv.clientName}</td>
-                      <td className="p-3 text-right">₹{inv.total.toFixed(2)}</td>
-                      <td className="p-3 text-right font-medium text-primary">₹{inv.tcsAmount?.toFixed(2)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left border rounded">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Invoice No</th>
+                      <th className="p-3">Client</th>
+                      <th className="p-3 text-right">Invoice Total</th>
+                      <th className="p-3 text-right font-medium text-primary">TCS Collected</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y">
+                    {tcsInvoices.map(inv => (
+                      <tr key={inv.id}>
+                        <td className="p-3">{new Date(inv.date).toLocaleDateString()}</td>
+                        <td className="p-3 font-medium">{inv.invoiceNumber}</td>
+                        <td className="p-3">{inv.clientName}</td>
+                        <td className="p-3 text-right">₹{inv.total.toFixed(2)}</td>
+                        <td className="p-3 text-right font-medium text-primary">₹{inv.tcsAmount?.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -325,52 +327,54 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
             )}
 
             {statementClientId && partyStatement.length > 0 && (
-              <table className="w-full text-sm text-left border rounded">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Invoice No</th>
-                    <th className="p-3">Qty</th>
-                    <th className="p-3">Rate</th>
-                    <th className="p-3 text-right">Taxable</th>
-                    <th className="p-3 text-right">CGST</th>
-                    <th className="p-3 text-right">SGST</th>
-                    <th className="p-3 text-right">IGST</th>
-                    <th className="p-3 text-right">Net Amount</th>
-                    <th className="p-3 text-right">Balance</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {partyStatement.map(entry => {
-                    runningBalance += (entry.debit - entry.credit);
-                    return (
-                      <tr key={entry.id}>
-                        <td className="p-3">{new Date(entry.date).toLocaleDateString()}</td>
-                        <td className="p-3">
-                          {entry.invoiceNo ? (
-                            <button 
-                              onClick={() => entry.invoiceId && onEditInvoice && onEditInvoice(entry.invoiceId)}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              {entry.invoiceNo}
-                            </button>
-                          ) : entry.description}
-                        </td>
-                        <td className="p-3">{entry.quantity !== undefined ? entry.quantity : '-'}</td>
-                        <td className="p-3">{entry.rate !== undefined ? entry.rate : '-'}</td>
-                        <td className="p-3 text-right">{entry.taxableAmount !== undefined ? `₹${entry.taxableAmount.toFixed(2)}` : '-'}</td>
-                        <td className="p-3 text-right">{entry.cgst !== undefined ? `₹${entry.cgst.toFixed(2)}` : '-'}</td>
-                        <td className="p-3 text-right">{entry.sgst !== undefined ? `₹${entry.sgst.toFixed(2)}` : '-'}</td>
-                        <td className="p-3 text-right">{entry.igst !== undefined ? `₹${entry.igst.toFixed(2)}` : '-'}</td>
-                        <td className="p-3 text-right text-foreground font-medium">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)} (Dr)` : entry.credit > 0 ? `₹${entry.credit.toFixed(2)} (Cr)` : '-'}</td>
-                        <td className={`p-3 text-right font-medium ${runningBalance > 0 ? 'text-credit' : runningBalance < 0 ? 'text-debit' : 'text-foreground'}`}>
-                          ₹{Math.abs(runningBalance).toFixed(2)} {runningBalance > 0 ? 'Dr' : runningBalance < 0 ? 'Cr' : ''}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left border rounded">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Invoice No</th>
+                      <th className="p-3">Qty</th>
+                      <th className="p-3">Rate</th>
+                      <th className="p-3 text-right">Taxable</th>
+                      <th className="p-3 text-right">CGST</th>
+                      <th className="p-3 text-right">SGST</th>
+                      <th className="p-3 text-right">IGST</th>
+                      <th className="p-3 text-right">Net Amount</th>
+                      <th className="p-3 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {partyStatement.map(entry => {
+                      runningBalance += (entry.debit - entry.credit);
+                      return (
+                        <tr key={entry.id}>
+                          <td className="p-3">{new Date(entry.date).toLocaleDateString()}</td>
+                          <td className="p-3">
+                            {entry.invoiceNo ? (
+                              <button 
+                                onClick={() => entry.invoiceId && onEditInvoice && onEditInvoice(entry.invoiceId)}
+                                className="text-primary hover:underline font-medium"
+                              >
+                                {entry.invoiceNo}
+                              </button>
+                            ) : entry.description}
+                          </td>
+                          <td className="p-3">{entry.quantity !== undefined ? entry.quantity : '-'}</td>
+                          <td className="p-3">{entry.rate !== undefined ? entry.rate : '-'}</td>
+                          <td className="p-3 text-right">{entry.taxableAmount !== undefined ? `₹${entry.taxableAmount.toFixed(2)}` : '-'}</td>
+                          <td className="p-3 text-right">{entry.cgst !== undefined ? `₹${entry.cgst.toFixed(2)}` : '-'}</td>
+                          <td className="p-3 text-right">{entry.sgst !== undefined ? `₹${entry.sgst.toFixed(2)}` : '-'}</td>
+                          <td className="p-3 text-right">{entry.igst !== undefined ? `₹${entry.igst.toFixed(2)}` : '-'}</td>
+                          <td className="p-3 text-right text-foreground font-medium">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)} (Dr)` : entry.credit > 0 ? `₹${entry.credit.toFixed(2)} (Cr)` : '-'}</td>
+                          <td className={`p-3 text-right font-medium ${runningBalance > 0 ? 'text-credit' : runningBalance < 0 ? 'text-debit' : 'text-foreground'}`}>
+                            ₹{Math.abs(runningBalance).toFixed(2)} {runningBalance > 0 ? 'Dr' : runningBalance < 0 ? 'Cr' : ''}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -399,86 +403,88 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
 
             {agentLedgerId && (
               <div className="space-y-4">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b bg-muted/60">
-                      <th className="p-3 font-medium text-muted-foreground">Date</th>
-                      <th className="p-3 font-medium text-muted-foreground">Ref / Invoice No</th>
-                      <th className="p-3 font-medium text-muted-foreground">Type</th>
-                      <th className="p-3 font-medium text-muted-foreground text-right">Debit (Paid)</th>
-                      <th className="p-3 font-medium text-muted-foreground text-right">Credit (Earned)</th>
-                      <th className="p-3 font-medium text-muted-foreground text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const agentInvoices = invoices.filter(i => i.agentId === agentLedgerId && i.type === 'Tax Invoice' && i.agentCommissionAmount);
-                      const agentPayments = expenses.filter(e => e.vendorId === agentLedgerId);
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b bg-muted/60">
+                        <th className="p-3 font-medium text-muted-foreground">Date</th>
+                        <th className="p-3 font-medium text-muted-foreground">Ref / Invoice No</th>
+                        <th className="p-3 font-medium text-muted-foreground">Type</th>
+                        <th className="p-3 font-medium text-muted-foreground text-right">Debit (Paid)</th>
+                        <th className="p-3 font-medium text-muted-foreground text-right">Credit (Earned)</th>
+                        <th className="p-3 font-medium text-muted-foreground text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const agentInvoices = invoices.filter(i => i.agentId === agentLedgerId && i.type === 'Tax Invoice' && i.agentCommissionAmount);
+                        const agentPayments = expenses.filter(e => e.vendorId === agentLedgerId);
                       
-                      const ledgerEntries = [
-                        ...agentInvoices.map(inv => ({
-                          id: inv.id,
-                          date: inv.date,
-                          ref: inv.invoiceNumber,
-                          type: 'Commission Earned',
-                          debit: 0,
-                          credit: inv.agentCommissionAmount || 0,
-                          details: `Taxable: ₹${inv.subtotal.toFixed(2)} @ ${inv.agentCommissionPercent}%`
-                        })),
-                        ...agentPayments.map(exp => ({
-                          id: exp.id,
-                          date: exp.date,
-                          ref: exp.id.substring(0, 8),
-                          type: 'Payment Made',
-                          debit: exp.amount,
-                          credit: 0,
-                          details: exp.category
-                        }))
-                      ].sort((a, b) => a.date - b.date);
+                        const ledgerEntries = [
+                          ...agentInvoices.map(inv => ({
+                            id: inv.id,
+                            date: inv.date,
+                            ref: inv.invoiceNumber,
+                            type: 'Commission Earned',
+                            debit: 0,
+                            credit: inv.agentCommissionAmount || 0,
+                            details: `Taxable: ₹${inv.subtotal.toFixed(2)} @ ${inv.agentCommissionPercent}%`
+                          })),
+                          ...agentPayments.map(exp => ({
+                            id: exp.id,
+                            date: exp.date,
+                            ref: exp.id.substring(0, 8),
+                            type: 'Payment Made',
+                            debit: exp.amount,
+                            credit: 0,
+                            details: exp.category
+                          }))
+                        ].sort((a, b) => a.date - b.date);
 
-                      let runningBalance = 0;
-                      let totalEarned = 0;
-                      let totalPaid = 0;
+                        let runningBalance = 0;
+                        let totalEarned = 0;
+                        let totalPaid = 0;
 
-                      return (
-                        <>
-                          {ledgerEntries.map(entry => {
-                            runningBalance += (entry.credit - entry.debit);
-                            totalEarned += entry.credit;
-                            totalPaid += entry.debit;
+                        return (
+                          <>
+                            {ledgerEntries.map(entry => {
+                              runningBalance += (entry.credit - entry.debit);
+                              totalEarned += entry.credit;
+                              totalPaid += entry.debit;
                             
-                            return (
-                              <tr key={entry.id} className="border-b hover:bg-muted/60">
-                                <td className="p-3">{new Date(entry.date).toLocaleDateString()}</td>
-                                <td className="p-3 font-medium">
-                                  {entry.ref}
-                                  <div className="text-xs text-muted-foreground font-normal">{entry.details}</div>
-                                </td>
-                                <td className="p-3">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${entry.credit > 0 ? 'bg-credit-subtle text-credit' : 'bg-brand-100 text-brand-700'}`}>
-                                    {entry.type}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-right text-debit">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)}` : '-'}</td>
-                                <td className="p-3 text-right text-credit">{entry.credit > 0 ? `₹${entry.credit.toFixed(2)}` : '-'}</td>
-                                <td className="p-3 text-right font-bold text-foreground/80">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? '(Cr)' : '(Dr)'}</td>
-                              </tr>
-                            );
-                          })}
-                          {ledgerEntries.length === 0 && (
-                            <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No transactions found for this agent.</td></tr>
-                          )}
-                          <tr className="bg-muted border-t-2 border-border">
-                            <td colSpan={3} className="p-3 text-right font-bold text-foreground/80">Totals</td>
-                            <td className="p-3 text-right font-bold text-debit">₹{totalPaid.toFixed(2)}</td>
-                            <td className="p-3 text-right font-bold text-credit">₹{totalEarned.toFixed(2)}</td>
-                            <td className="p-3 text-right font-bold text-foreground text-lg">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
-                          </tr>
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
+                              return (
+                                <tr key={entry.id} className="border-b hover:bg-muted/60">
+                                  <td className="p-3">{new Date(entry.date).toLocaleDateString()}</td>
+                                  <td className="p-3 font-medium">
+                                    {entry.ref}
+                                    <div className="text-xs text-muted-foreground font-normal">{entry.details}</div>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${entry.credit > 0 ? 'bg-credit-subtle text-credit' : 'bg-brand-100 text-brand-700'}`}>
+                                      {entry.type}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right text-debit">{entry.debit > 0 ? `₹${entry.debit.toFixed(2)}` : '-'}</td>
+                                  <td className="p-3 text-right text-credit">{entry.credit > 0 ? `₹${entry.credit.toFixed(2)}` : '-'}</td>
+                                  <td className="p-3 text-right font-bold text-foreground/80">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? '(Cr)' : '(Dr)'}</td>
+                                </tr>
+                              );
+                            })}
+                            {ledgerEntries.length === 0 && (
+                              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No transactions found for this agent.</td></tr>
+                            )}
+                            <tr className="bg-muted border-t-2 border-border">
+                              <td colSpan={3} className="p-3 text-right font-bold text-foreground/80">Totals</td>
+                              <td className="p-3 text-right font-bold text-debit">₹{totalPaid.toFixed(2)}</td>
+                              <td className="p-3 text-right font-bold text-credit">₹{totalEarned.toFixed(2)}</td>
+                              <td className="p-3 text-right font-bold text-foreground text-lg">₹{runningBalance.toFixed(2)} {runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
+                            </tr>
+                          </>
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </CardContent>
