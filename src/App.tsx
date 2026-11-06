@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { computeLedger, auditBalances } from "@/lib/balance";
 import { mergeById, assessCloudPayload } from "@/lib/sync-merge";
+import { BackupRestore } from "@/components/BackupRestore";
 import { supabase } from "@/lib/supabase";
 // Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
@@ -483,6 +484,16 @@ export default function RupeeLedger() {
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  /** Days of local auto-backup held in this browser, shown in Settings. */
+  const [localBackupSlotCount, setLocalBackupSlotCount] = useState(() => {
+    // Read once on mount so Settings is accurate before today's backup runs.
+    try {
+      const slots = JSON.parse(localStorage.getItem(LOCAL_BACKUP_SLOTS_KEY) || "[]");
+      return Array.isArray(slots) ? slots.length : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [wasenderApiKey, setWasenderApiKey] = useState(() => {
     return localStorage.getItem("rupee_ledger_wasender_api_key") || "";
   });
@@ -732,6 +743,7 @@ export default function RupeeLedger() {
       // client that has not reloaded still finds something.
       localStorage.setItem("rupee_ledger_auto_backup_data", serialized);
       localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
+      setLocalBackupSlotCount(rotated.length);
     } catch (e) {
       console.error("Local auto-backup failed", e);
       toast({
@@ -2815,6 +2827,37 @@ export default function RupeeLedger() {
     } catch (e) {
       toast({ title: "Restore Failed", description: "The auto-backup data is corrupted.", variant: "destructive" });
     }
+  };
+
+  /**
+   * Applies a dated snapshot chosen from the cloud recovery history.
+   *
+   * Only reached after the preview dialog has been confirmed, so this does not
+   * ask again. Balances are recomputed from the restored entries rather than
+   * taken from the snapshot, since a snapshot written before the balance fix
+   * may carry figures that never agreed with its own rows.
+   */
+  const applyRestoredSnapshot = (payload: any) => {
+    const restoredAccounts: Account[] = Array.isArray(payload?.accounts) ? payload.accounts : [];
+    const restoredTransactions: Transaction[] = Array.isArray(payload?.transactions) ? payload.transactions : [];
+
+    if (payload?.businessProfile) setBusinessProfile(payload.businessProfile);
+    if (payload?.subscription) setSubscription(getMergedSubscription(payload.subscription));
+    if (payload?.securitySettings) setSecuritySettings(payload.securitySettings);
+    if (Array.isArray(payload?.clients)) setClients(payload.clients);
+    if (Array.isArray(payload?.inventory)) setInventory(payload.inventory);
+    if (Array.isArray(payload?.invoices)) setInvoices(payload.invoices);
+    if (Array.isArray(payload?.expenses)) setExpenses(payload.expenses);
+    if (Array.isArray(payload?.recurringTemplates)) setRecurringTemplates(payload.recurringTemplates);
+    if (Array.isArray(payload?.receipts)) setReceipts(payload.receipts);
+
+    // Recomputes balances, writes to this device, and pushes to the cloud.
+    recalculateData(restoredAccounts, restoredTransactions);
+
+    toast({
+      title: "Backup restored",
+      description: `${restoredTransactions.length.toLocaleString("en-IN")} entries across ${restoredAccounts.length} account${restoredAccounts.length === 1 ? "" : "s"} are now on this device.`,
+    });
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4901,7 +4944,7 @@ export default function RupeeLedger() {
                           <p className="font-semibold text-sm">Automatic Cloud Backup</p>
                           <p className="text-xs text-muted-foreground">
                             {user && user.authMethod !== 'guest' 
-                              ? "Automatically sync ledger changes to Firebase secure cloud storage." 
+                              ? "Keeps a dated copy of your ledger off this device, taken once a day." 
                               : "Not available in Guest Mode. Log in to enable secure cloud backups."}
                           </p>
                         </div>
@@ -4925,7 +4968,7 @@ export default function RupeeLedger() {
                         <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
                           <div className="space-y-0.5 max-w-[70%]">
                             <p className="font-semibold text-sm">Force Cloud Sync</p>
-                            <p className="text-xs text-muted-foreground">Manually upload all local accounts and records to Firestore.</p>
+                            <p className="text-xs text-muted-foreground">Upload this device's accounts and entries to the cloud right now.</p>
                           </div>
                           <Button onClick={handleCloudBackupNow} size="sm" variant="default" className="shrink-0">
                             Backup Now
@@ -4933,13 +4976,25 @@ export default function RupeeLedger() {
                         </div>
                       )}
 
+                      <BackupRestore
+                        scopedUserId={(user ? user.id : "guest_local") + "_" + activeBranchId}
+                        getToken={getAuthToken}
+                        accounts={accounts}
+                        transactions={transactions}
+                        onRestore={applyRestoredSnapshot}
+                        lastCloudBackupAt={localStorage.getItem(CLOUD_BACKUP_AT_KEY)}
+                        lastCloudBackupError={localStorage.getItem(CLOUD_BACKUP_ERROR_KEY)}
+                        localSlotCount={localBackupSlotCount}
+                        enabled={!!user && user.authMethod !== "guest" && cloudBackupEnabled}
+                      />
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-muted/30 rounded-lg border gap-4">
                         <div>
-                          <p className="font-semibold text-sm">Daily Auto-Backup</p>
-                          <p className="text-xs text-muted-foreground">Restore your data from the most recent automatic daily snapshot.</p>
+                          <p className="font-semibold text-sm">Restore today's device copy</p>
+                          <p className="text-xs text-muted-foreground">Falls back to the snapshot held in this browser, for when you are offline.</p>
                         </div>
-                        <Button onClick={handleRestoreAutoBackup} size="sm" variant="outline" className="shrink-0 text-amber-600 border-amber-200 hover:bg-amber-50">
-                          Restore Auto-Backup
+                        <Button onClick={handleRestoreAutoBackup} size="sm" variant="outline" className="shrink-0">
+                          Restore from device
                         </Button>
                       </div>
 
