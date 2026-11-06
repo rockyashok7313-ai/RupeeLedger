@@ -146,7 +146,7 @@ export function InventoryView({ inventory = [], setInventory }: Props) {
                     <td className="p-3 text-right">₹{item.basePrice.toFixed(2)}</td>
                     <td className="p-3 text-right text-muted-foreground">{item.taxRate}%</td>
                     <td className="p-3 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>

@@ -11,6 +11,7 @@ import * as ErpMaster from '../backend/routes/erp/master/route.ts';
 import * as ErpTransactions from '../backend/routes/erp/transactions/route.ts';
 import * as Keys from '../backend/routes/keys/route.ts';
 import * as LedgerSync from '../backend/routes/ledger/sync/route.ts';
+import * as LedgerBackup from '../backend/routes/ledger/backup/route.ts';
 import * as RazorpayOrder from '../backend/routes/razorpay/order/route.ts';
 import * as RazorpayVerify from '../backend/routes/razorpay/verify/route.ts';
 import * as RazorpayWebhook from '../backend/routes/razorpay/webhook/route.ts';
@@ -132,6 +133,7 @@ const routes = [
   { path: '/api/erp/transactions', module: ErpTransactions },
   { path: '/api/keys', module: Keys },
   { path: '/api/ledger/sync', module: LedgerSync },
+  { path: '/api/ledger/backup', module: LedgerBackup },
   { path: '/api/razorpay/order', module: RazorpayOrder },
   { path: '/api/razorpay/verify', module: RazorpayVerify },
   { path: '/api/razorpay/webhook', module: RazorpayWebhook },

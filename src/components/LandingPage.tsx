@@ -18,7 +18,7 @@ interface LandingPageProps {
 
 export function LandingPage({ onLoginClick }: LandingPageProps) {
   return (
-    <div className="min-h-screen bg-[#fafbfc] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#fafbfc] font-sans text-sand-900">
       {/* Navbar */}
       <nav className="flex items-center justify-between p-6 max-w-6xl mx-auto">
         <div className="flex items-center gap-2">
@@ -49,7 +49,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
           <span className="text-primary">Management Made Simple</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-lg md:text-xl text-sand-600 mb-10 max-w-2xl mx-auto leading-relaxed">
           Track expenses, generate GST invoices, manage multiple ledgers, and gain
           financial insights. Everything your business needs in one beautiful platform.
         </p>
@@ -58,12 +58,12 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
           <Button onClick={onLoginClick} size="lg" className="bg-primary hover:bg-primary/80 text-white px-8 h-14 rounded-lg font-semibold text-lg w-full sm:w-auto">
             Start Free Trial &rarr;
           </Button>
-          <Button onClick={onLoginClick} variant="secondary" size="lg" className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-8 h-14 rounded-lg font-semibold text-lg w-full sm:w-auto">
+          <Button onClick={onLoginClick} variant="secondary" size="lg" className="bg-sand-100 hover:bg-sand-200 text-sand-700 px-8 h-14 rounded-lg font-semibold text-lg w-full sm:w-auto">
             Request Demo
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-slate-500 font-medium">
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-sand-500 font-medium">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-primary" />
             <span>No credit card required</span>
@@ -80,12 +80,12 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
       </section>
 
       {/* Trusted By Section */}
-      <section className="bg-white py-12 border-y border-slate-100">
+      <section className="bg-white py-12 border-y border-sand-100">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
+          <p className="text-xs font-bold text-sand-400 uppercase tracking-widest mb-6">
             Trusted by 2,000+ Indian Businesses
           </p>
-          <div className="flex flex-wrap justify-center gap-8 md:gap-16 text-slate-300 font-bold text-xl md:text-2xl">
+          <div className="flex flex-wrap justify-center gap-8 md:gap-16 text-sand-300 font-bold text-xl md:text-2xl">
             <span>Manufacturing</span>
             <span>Retail</span>
             <span>Services</span>
@@ -99,7 +99,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
       <section className="py-24 px-4 max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-[#1a2b3b] mb-4">Everything You Need</h2>
-          <p className="text-slate-500 text-lg">Powerful features designed specifically for Indian small and medium businesses.</p>
+          <p className="text-sand-500 text-lg">Powerful features designed specifically for Indian small and medium businesses.</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -135,41 +135,41 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
               icon: Smartphone
             }
           ].map((feature, i) => (
-            <div key={i} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+            <div key={i} className="bg-white p-8 rounded-2xl border border-sand-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center mb-6">
                 <feature.icon className="h-6 w-6 text-primary" />
               </div>
               <h3 className="text-xl font-bold text-[#1a2b3b] mb-3">{feature.title}</h3>
-              <p className="text-slate-500 leading-relaxed text-sm">{feature.desc}</p>
+              <p className="text-sand-500 leading-relaxed text-sm">{feature.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section className="py-24 px-4 bg-white border-t border-slate-100">
+      <section className="py-24 px-4 bg-white border-t border-sand-100">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-[#1a2b3b] mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-slate-500 text-lg">Start free and scale as your business grows.</p>
+            <p className="text-sand-500 text-lg">Start free and scale as your business grows.</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Free Tier */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+            <div className="bg-white p-8 rounded-3xl border border-sand-200 shadow-sm flex flex-col">
               <h3 className="text-xl font-bold text-[#1a2b3b] mb-4">Free</h3>
               <div className="mb-6 flex items-baseline gap-1">
                 <span className="text-4xl font-extrabold text-[#1a2b3b]">₹0</span>
-                <span className="text-slate-500">/month</span>
+                <span className="text-sand-500">/month</span>
               </div>
-              <ul className="space-y-4 mb-8 flex-1 text-sm text-slate-600">
+              <ul className="space-y-4 mb-8 flex-1 text-sm text-sand-600">
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> 1 User</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> 1 Ledger</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> 50 Transactions/month</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Basic Reports</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Email Support</li>
               </ul>
-              <Button onClick={onLoginClick} variant="outline" className="w-full h-12 rounded-xl font-bold text-[#1a2b3b] border-slate-200 hover:bg-slate-50">
+              <Button onClick={onLoginClick} variant="outline" className="w-full h-12 rounded-xl font-bold text-[#1a2b3b] border-sand-200 hover:bg-sand-50">
                 Start Free
               </Button>
             </div>
@@ -182,9 +182,9 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
               <h3 className="text-xl font-bold text-[#1a2b3b] mb-4">Monthly</h3>
               <div className="mb-6 flex items-baseline gap-1">
                 <span className="text-4xl font-extrabold text-[#1a2b3b]">₹199</span>
-                <span className="text-slate-500">/month</span>
+                <span className="text-sand-500">/month</span>
               </div>
-              <ul className="space-y-4 mb-8 flex-1 text-sm text-slate-600">
+              <ul className="space-y-4 mb-8 flex-1 text-sm text-sand-600">
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> 5 Users</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Unlimited Ledgers</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Unlimited Transactions</li>
@@ -199,13 +199,13 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
             </div>
 
             {/* Enterprise Tier */}
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+            <div className="bg-white p-8 rounded-3xl border border-sand-200 shadow-sm flex flex-col">
               <h3 className="text-xl font-bold text-[#1a2b3b] mb-4">Yearly</h3>
               <div className="mb-6 flex items-baseline gap-1">
                 <span className="text-4xl font-extrabold text-[#1a2b3b]">₹1,999</span>
-                <span className="text-slate-500">/year</span>
+                <span className="text-sand-500">/year</span>
               </div>
-              <ul className="space-y-4 mb-8 flex-1 text-sm text-slate-600">
+              <ul className="space-y-4 mb-8 flex-1 text-sm text-sand-600">
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Unlimited Users</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Everything in Monthly</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Multi-Branch Support</li>
@@ -214,7 +214,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Custom Branding</li>
                 <li className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-primary" /> Dedicated Account Manager</li>
               </ul>
-              <Button onClick={onLoginClick} variant="outline" className="w-full h-12 rounded-xl font-bold text-[#1a2b3b] border-slate-200 hover:bg-slate-50">
+              <Button onClick={onLoginClick} variant="outline" className="w-full h-12 rounded-xl font-bold text-[#1a2b3b] border-sand-200 hover:bg-sand-50">
                 Start Trial
               </Button>
             </div>
@@ -226,7 +226,7 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
       <section className="py-24 px-4 max-w-6xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-[#1a2b3b] mb-4">Loved by Businesses</h2>
-          <p className="text-slate-500 text-lg">See what our customers say about RupeeLedger.</p>
+          <p className="text-sand-500 text-lg">See what our customers say about RupeeLedger.</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
@@ -247,16 +247,16 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
               role: "Owner, Patel Retail Chain"
             }
           ].map((testimonial, i) => (
-            <div key={i} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
+            <div key={i} className="bg-white p-8 rounded-2xl border border-sand-100 shadow-sm">
               <div className="flex gap-1 mb-4">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  <Star key={star} className="h-4 w-4 fill-amber-400 text-warning" />
                 ))}
               </div>
-              <p className="text-slate-600 mb-6 italic text-sm leading-relaxed">"{testimonial.quote}"</p>
+              <p className="text-sand-600 mb-6 italic text-sm leading-relaxed">"{testimonial.quote}"</p>
               <div>
                 <h4 className="font-bold text-[#1a2b3b] text-sm">{testimonial.name}</h4>
-                <p className="text-xs text-slate-500">{testimonial.role}</p>
+                <p className="text-xs text-sand-500">{testimonial.role}</p>
               </div>
             </div>
           ))}
@@ -269,13 +269,13 @@ export function LandingPage({ onLoginClick }: LandingPageProps) {
         <p className="text-[#e6f5f0] text-lg mb-10 max-w-2xl mx-auto">
           Join thousands of Indian businesses already using RupeeLedger.
         </p>
-        <Button onClick={onLoginClick} size="lg" className="bg-white text-primary hover:bg-slate-50 px-8 h-14 rounded-lg font-bold text-lg">
+        <Button onClick={onLoginClick} size="lg" className="bg-white text-primary hover:bg-sand-50 px-8 h-14 rounded-lg font-bold text-lg">
           Start Your Free Trial &rarr;
         </Button>
       </section>
       
       {/* Small Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-8 text-center text-sm">
+      <footer className="bg-sand-900 text-sand-400 py-8 text-center text-sm">
         <div className="flex items-center justify-center gap-2 mb-4">
           <div className="h-6 w-6 bg-primary rounded flex items-center justify-center">
             <span className="text-xs font-bold text-white">₹</span>

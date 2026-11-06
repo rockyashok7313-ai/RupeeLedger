@@ -11,7 +11,11 @@
     "cap:ios": "npm run build:mobile && npx cap sync ios && npx cap open ios",
     "start": "node api/index.js",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "backup:keygen": "node scripts/backup/keygen.ts",
+    "backup:run": "node scripts/backup/backup.ts",
+    "backup:restore": "node scripts/backup/restore.ts",
+    "backup:test": "node --test \"scripts/backup/**/*.test.ts\""
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
@@ -79,6 +83,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
+    "@electric-sql/pglite": "0.5.15",
     "@types/cors": "^2.8.19",
     "@types/dompurify": "^3.0.5",
     "@types/express": "^5.0.6",
@@ -87,6 +92,7 @@
     "@types/number-to-words": "^1.2.3",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
+    "age-encryption": "0.3.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "postcss": "^8",

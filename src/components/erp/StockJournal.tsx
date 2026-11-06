@@ -140,8 +140,8 @@ export function StockJournal({ token }: { token: string | null }) {
                     </TableCell>
                     <TableCell>
                       {item.movement_type === 'IN' 
-                        ? <span className="flex items-center text-green-600 font-semibold"><ArrowDownRight className="h-4 w-4 mr-1"/> IN</span>
-                        : <span className="flex items-center text-red-600 font-semibold"><ArrowUpRight className="h-4 w-4 mr-1"/> OUT</span>
+                        ? <span className="flex items-center text-credit font-semibold"><ArrowDownRight className="h-4 w-4 mr-1"/> IN</span>
+                        : <span className="flex items-center text-debit font-semibold"><ArrowUpRight className="h-4 w-4 mr-1"/> OUT</span>
                       }
                     </TableCell>
                     <TableCell>{products.find(p => p.product_id === item.product_id)?.product_name || item.product_id}</TableCell>

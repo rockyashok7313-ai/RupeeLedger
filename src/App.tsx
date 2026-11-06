@@ -33,6 +33,9 @@ import {
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
+import { computeLedger, auditBalances } from "@/lib/balance";
+import { mergeById, assessCloudPayload } from "@/lib/sync-merge";
+import { BackupRestore } from "@/components/BackupRestore";
 import { supabase } from "@/lib/supabase";
 // Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
@@ -81,6 +84,13 @@ import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
 const GSTModule = lazy(() => import("@/components/gst/GSTModule").then(m => ({ default: m.GSTModule })));
 const ErpHub = lazy(() => import("@/components/erp/ErpHub").then(m => ({ default: m.ErpHub })));
+
+/** How many days of local auto-backup to keep on this device. */
+const LOCAL_BACKUP_SLOTS = 3;
+const LOCAL_BACKUP_SLOTS_KEY = "rupee_ledger_auto_backup_slots";
+/** When the last cloud snapshot succeeded, and why the last one failed. */
+const CLOUD_BACKUP_AT_KEY = "rupee_ledger_cloud_backup_at";
+const CLOUD_BACKUP_ERROR_KEY = "rupee_ledger_cloud_backup_error";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -474,6 +484,16 @@ export default function RupeeLedger() {
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  /** Days of local auto-backup held in this browser, shown in Settings. */
+  const [localBackupSlotCount, setLocalBackupSlotCount] = useState(() => {
+    // Read once on mount so Settings is accurate before today's backup runs.
+    try {
+      const slots = JSON.parse(localStorage.getItem(LOCAL_BACKUP_SLOTS_KEY) || "[]");
+      return Array.isArray(slots) ? slots.length : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [wasenderApiKey, setWasenderApiKey] = useState(() => {
     return localStorage.getItem("rupee_ledger_wasender_api_key") || "";
   });
@@ -633,36 +653,135 @@ export default function RupeeLedger() {
     return () => observer.disconnect();
   }, []);
 
-  // Daily Auto-Backup to LocalStorage
+  /**
+   * Repair balances that disagree with the transactions.
+   *
+   * Balances are derived, but they are also cached on the account and on each
+   * row. Every load path -- local storage, a server pull, a restored backup --
+   * previously set them straight from whatever was stored, so a balance written
+   * while the client held an incomplete set of transactions stayed wrong until
+   * the next edit happened to recompute it.
+   *
+   * This runs after any load and quietly puts them right. It settles in one
+   * pass: once recomputed, nothing disagrees and the effect returns early.
+   */
   useEffect(() => {
     if (!isLoaded || accounts.length === 0) return;
-    
-    const lastBackup = localStorage.getItem("rupee_ledger_last_auto_backup_date");
-    const today = new Date().toDateString();
-    
-    if (lastBackup !== today) {
-      try {
-        const backupData = {
-          accounts,
-          transactions,
-          clients,
-          inventory,
-          invoices,
-          expenses,
-          recurringTemplates,
-          receipts,
-          businessProfile,
-          subscription,
-          securitySettings
-        };
-        localStorage.setItem("rupee_ledger_auto_backup_data", JSON.stringify(backupData));
-        localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
-        console.log("Daily auto-backup saved to local storage.");
-      } catch (e) {
-        console.error("Failed to save auto-backup", e);
-      }
+
+    const drift = auditBalances(accounts, transactions);
+    const { accounts: fixedAccounts, transactions: fixedTransactions } =
+      computeLedger(accounts, transactions);
+
+    // computeLedger reorders, so compare by id rather than by position.
+    const runningBefore = new Map(transactions.map(t => [t.id, t.balanceAfter]));
+    const runningChanged = fixedTransactions.some(t => runningBefore.get(t.id) !== t.balanceAfter);
+
+    if (drift.length === 0 && !runningChanged) return;
+
+    if (drift.length > 0) {
+      console.warn('[BALANCE] stored balances disagreed with the ledger; recomputed from entries', drift);
     }
-  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, isLoaded]);
+    setAccounts(fixedAccounts);
+    setTransactions(fixedTransactions);
+  }, [isLoaded, accounts, transactions]);
+
+  /**
+   * Daily auto-backup.
+   *
+   * Runs once a day and writes two copies:
+   *
+   *  - localStorage, rotating over LOCAL_BACKUP_SLOTS days. The previous code
+   *    kept a single slot, so the moment a bad day was written the only copy of
+   *    the good data was already gone. Rotating means a problem spotted a day
+   *    or two late is still recoverable.
+   *  - the server, via /api/ledger/backup, which keeps a dated snapshot per
+   *    day. That is the copy that survives a cleared browser or a dead PC, and
+   *    it is what lets a restore pick a date instead of taking whatever the
+   *    last local write happened to be.
+   *
+   * A cloud failure is recorded rather than swallowed, so Settings can say when
+   * the last good snapshot actually was.
+   */
+  useEffect(() => {
+    if (!isLoaded || accounts.length === 0) return;
+
+    const today = new Date().toDateString();
+    if (localStorage.getItem("rupee_ledger_last_auto_backup_date") === today) return;
+
+    const backupData = {
+      accounts,
+      transactions,
+      clients,
+      inventory,
+      invoices,
+      expenses,
+      recurringTemplates,
+      receipts,
+      businessProfile,
+      // Deliberately no `subscription` (carries the licence key) and no
+      // `securitySettings` (carries the app-lock PIN). Backups hold business
+      // records only; credentials are never copied into them.
+    };
+
+    // --- local, rotating ---------------------------------------------------
+    try {
+      const serialized = JSON.stringify(backupData);
+      const slots: { date: string; data: string }[] = JSON.parse(
+        localStorage.getItem(LOCAL_BACKUP_SLOTS_KEY) || "[]",
+      );
+      const rotated = [{ date: today, data: serialized }, ...slots.filter(s => s.date !== today)]
+        .slice(0, LOCAL_BACKUP_SLOTS);
+
+      try {
+        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated));
+      } catch {
+        // Over quota with several days held. Keep today's and drop the rest --
+        // one recent backup beats none.
+        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated.slice(0, 1)));
+      }
+
+      // The single-slot key the older restore path reads. Kept in step so a
+      // client that has not reloaded still finds something.
+      localStorage.setItem("rupee_ledger_auto_backup_data", serialized);
+      localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
+      setLocalBackupSlotCount(rotated.length);
+    } catch (e) {
+      console.error("Local auto-backup failed", e);
+      toast({
+        title: "Local backup failed",
+        description: "This device could not store today's backup. Your data is unchanged.",
+        variant: "destructive",
+      });
+    }
+
+    // --- cloud -------------------------------------------------------------
+    if (!user || user.authMethod === "guest" || !cloudBackupEnabled) return;
+
+    (async () => {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch("/api/ledger/backup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user.id + "_" + activeBranchId,
+            action: "snapshot",
+            data: backupData,
+          }),
+        });
+        if (!res.ok) throw new Error(`Cloud backup failed (${res.status}).`);
+        const body = await res.json().catch(() => null);
+        if (body?.isOfflineFallback) throw new Error("Cloud backup is not configured on the server.");
+        localStorage.setItem(CLOUD_BACKUP_AT_KEY, new Date().toISOString());
+      } catch (e: any) {
+        console.error("Cloud auto-backup failed", e);
+        localStorage.setItem(CLOUD_BACKUP_ERROR_KEY, e?.message || "Unknown error");
+      }
+    })();
+  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, isLoaded, user, cloudBackupEnabled, activeBranchId]);
 
   useEffect(() => {
     // 1. Setup Auth Observer
@@ -781,8 +900,7 @@ export default function RupeeLedger() {
             }
           }
 
-          setAccounts(fetchedAccounts);
-          setTransactions(fetchedTxs);
+          applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
           await fetchGeneratedKeys(supabaseUser.id);
 
           const profile: UserProfile = {
@@ -893,8 +1011,7 @@ export default function RupeeLedger() {
                         shouldLock = true;
                       }
                     }
-                    setAccounts(syncData.accounts || []);
-                    setTransactions(syncData.transactions || []);
+                    applyCloudLedger(syncData.accounts, syncData.transactions, accounts, transactions);
                     if (syncData.clients) setClients(syncData.clients);
                     if (syncData.inventory) setInventory(syncData.inventory);
                     if (syncData.invoices) setInvoices(syncData.invoices);
@@ -1268,8 +1385,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(phoneId);
         setUser(phoneUser);
         setShowLogin(false);
@@ -1413,8 +1529,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(phoneId);
         setUser(whatsappUser);
         setShowLogin(false);
@@ -1558,8 +1673,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(emailId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(emailId);
         setUser(emailUser);
         setShowLogin(false);
@@ -1926,7 +2040,7 @@ export default function RupeeLedger() {
           email: purchaserEmail
         },
         theme: {
-          color: '#0f172a'
+          color: '#1B3A5F'
         }
       };
 
@@ -2339,26 +2453,70 @@ export default function RupeeLedger() {
   }, [isLocked, pinInput, securitySettings.hashedPinCode, securitySettings.pinCode]);
 
   // Recalculate helper
-  const recalculateData = (updatedAccounts: Account[], updatedTransactions: Transaction[]) => {
-    const finalAccounts = updatedAccounts.map(acc => {
-      const accTransactions = updatedTransactions
-        .filter(t => t.accountId === acc.id)
-        .sort((a, b) => a.date - b.date);
+  /**
+   * Apply a cloud pull to the device without letting it destroy anything.
+   *
+   * Load paths used to assign the response straight into state, so an empty or
+   * truncated read replaced a good ledger with a worse one. This checks the
+   * response looks complete, then merges by id rather than overwriting, so an
+   * entry made offline or missed by the read survives. Disagreements on the
+   * same id keep the device's copy and are surfaced instead of being dropped.
+   *
+   * Returns the data actually applied so callers can keep using it.
+   */
+  const applyCloudLedger = (
+    cloudAccounts: Account[] | undefined,
+    cloudTransactions: Transaction[] | undefined,
+    localAccounts: Account[],
+    localTransactions: Transaction[],
+  ): { accounts: Account[]; transactions: Transaction[] } => {
+    const incomingAccounts = Array.isArray(cloudAccounts) ? cloudAccounts : [];
+    const incomingTransactions = Array.isArray(cloudTransactions) ? cloudTransactions : [];
 
-      let runningBalance = acc.initialBalance;
-      const recalculateTxs = accTransactions.map(t => {
-        runningBalance = t.type === 'Credit' ? runningBalance + t.amount : runningBalance - t.amount;
-        return { ...t, balanceAfter: runningBalance };
+    const verdict = assessCloudPayload(localTransactions.length, incomingTransactions.length);
+    if (!verdict.usable) {
+      console.warn("[SYNC] ignoring cloud response:", verdict.reason);
+      toast({
+        title: "Kept this device's records",
+        description: verdict.reason,
       });
+      const { accounts: a, transactions: t } = computeLedger(localAccounts, localTransactions);
+      setAccounts(a);
+      setTransactions(t);
+      return { accounts: a, transactions: t };
+    }
 
-      // Update the transaction pool for this account
-      updatedTransactions = [
-        ...updatedTransactions.filter(t => t.accountId !== acc.id),
-        ...recalculateTxs
-      ];
+    const mergedAccounts = mergeById(localAccounts, incomingAccounts);
+    const mergedTransactions = mergeById(localTransactions, incomingTransactions);
 
-      return { ...acc, currentBalance: runningBalance };
-    });
+    if (mergedTransactions.conflicts.length > 0 || mergedAccounts.conflicts.length > 0) {
+      const n = mergedTransactions.conflicts.length + mergedAccounts.conflicts.length;
+      console.warn("[SYNC] conflicting records, this device's copy kept:", {
+        transactions: mergedTransactions.conflicts,
+        accounts: mergedAccounts.conflicts,
+      });
+      toast({
+        title: `${n} record${n === 1 ? "" : "s"} changed on another device`,
+        description: "This device's version was kept. Check those entries if the figures look off.",
+      });
+    }
+
+    // Balances are always recomputed from whatever the merge produced.
+    const { accounts, transactions } = computeLedger(mergedAccounts.merged, mergedTransactions.merged);
+    setAccounts(accounts);
+    setTransactions(transactions);
+    return { accounts, transactions };
+  };
+
+  const recalculateData = (updatedAccounts: Account[], updatedTransactions: Transaction[]) => {
+    // All balance arithmetic lives in @/lib/balance: integer paise so a
+    // thousand rows cannot drift, and a deterministic order so entries sharing
+    // a date always produce the same running balance. This used to sort on
+    // date alone and add floating point rupees in place.
+    const { accounts: finalAccounts, transactions: finalTransactions } =
+      computeLedger(updatedAccounts, updatedTransactions);
+
+    updatedTransactions = finalTransactions;
 
     setAccounts(finalAccounts);
     setTransactions(updatedTransactions);
@@ -2620,9 +2778,9 @@ export default function RupeeLedger() {
       expenses,
       recurringTemplates,
       receipts,
-      businessProfile,
-      subscription,
-      securitySettings
+      businessProfile
+      // No `subscription` (licence key) and no `securitySettings` (app-lock PIN):
+      // a file the user downloads and stores somewhere must never hold credentials.
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -2672,6 +2830,38 @@ export default function RupeeLedger() {
     }
   };
 
+  /**
+   * Applies a dated snapshot chosen from the cloud recovery history.
+   *
+   * Only reached after the preview dialog has been confirmed, so this does not
+   * ask again. Balances are recomputed from the restored entries rather than
+   * taken from the snapshot, since a snapshot written before the balance fix
+   * may carry figures that never agreed with its own rows.
+   */
+  const applyRestoredSnapshot = (payload: any) => {
+    const restoredAccounts: Account[] = Array.isArray(payload?.accounts) ? payload.accounts : [];
+    const restoredTransactions: Transaction[] = Array.isArray(payload?.transactions) ? payload.transactions : [];
+
+    if (payload?.businessProfile) setBusinessProfile(payload.businessProfile);
+    // `subscription` and `securitySettings` in a snapshot are IGNORED, including in
+    // older snapshots that still carry them: a stored file must not be able to set
+    // the plan, the licence key or the app-lock PIN.
+    if (Array.isArray(payload?.clients)) setClients(payload.clients);
+    if (Array.isArray(payload?.inventory)) setInventory(payload.inventory);
+    if (Array.isArray(payload?.invoices)) setInvoices(payload.invoices);
+    if (Array.isArray(payload?.expenses)) setExpenses(payload.expenses);
+    if (Array.isArray(payload?.recurringTemplates)) setRecurringTemplates(payload.recurringTemplates);
+    if (Array.isArray(payload?.receipts)) setReceipts(payload.receipts);
+
+    // Recomputes balances, writes to this device, and pushes to the cloud.
+    recalculateData(restoredAccounts, restoredTransactions);
+
+    toast({
+      title: "Backup restored",
+      description: `${restoredTransactions.length.toLocaleString("en-IN")} entries across ${restoredAccounts.length} account${restoredAccounts.length === 1 ? "" : "s"} are now on this device.`,
+    });
+  };
+
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2690,12 +2880,13 @@ export default function RupeeLedger() {
           if (parsed.recurringTemplates) setRecurringTemplates(parsed.recurringTemplates);
           if (parsed.receipts) setReceipts(parsed.receipts);
           if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile);
-          if (parsed.subscription) setSubscription(parsed.subscription);
-          if (parsed.securitySettings) setSecuritySettings(parsed.securitySettings);
+          // `subscription` and `securitySettings` are never read from a file, so a
+          // hand-edited backup cannot grant a plan or switch the app lock off.
+          // (Older exports may still contain them; they are simply ignored.)
 
-          toast({ 
-            title: "Backup Restored Successfully", 
-            description: `Imported ${parsed.accounts.length} accounts, transactions, and system configuration.` 
+          toast({
+            title: "Backup Restored Successfully",
+            description: `Imported ${parsed.accounts.length} accounts, transactions, and business records. Your plan and app lock are not part of a backup file and were left as they are.`
           });
         } else {
           throw new Error("Invalid backup file format. Must contain accounts and transactions arrays.");
@@ -2824,13 +3015,13 @@ export default function RupeeLedger() {
     return (
       <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-sand-950 text-sand-50">
         <div className="flex flex-col items-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/20">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-teal-500/20">
             <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
           </div>
           <p className="text-sm font-medium text-sand-400">Loading RupeeLedger…</p>
           {/* A determinate-looking sliver reads as progress; a pulsing block reads as a stall. */}
           <div className="mt-4 h-0.5 w-32 overflow-hidden rounded-full bg-sand-800">
-            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
+            <div className="h-full w-1/3 animate-[shimmer_1.2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-teal-500 to-transparent" />
           </div>
         </div>
       </div>
@@ -2848,7 +3039,7 @@ export default function RupeeLedger() {
           className="pointer-events-none fixed inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(60rem 40rem at 50% -10%, hsl(var(--brand-700) / 0.28), transparent 60%), radial-gradient(40rem 30rem at 90% 110%, hsl(var(--gold-700) / 0.18), transparent 60%)",
+              "radial-gradient(60rem 40rem at 50% -10%, hsl(var(--brand-700) / 0.28), transparent 60%), radial-gradient(40rem 30rem at 90% 110%, hsl(var(--teal-700) / 0.18), transparent 60%)",
           }}
         />
         <Toaster />
@@ -2856,7 +3047,7 @@ export default function RupeeLedger() {
 
           {/* Brand Logo Header */}
           <div className="flex flex-col items-center space-y-2 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-gold-500/25">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg ring-1 ring-teal-500/25">
               <span className="text-3xl font-extrabold text-primary-foreground">₹</span>
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">RupeeLedger</h1>
@@ -2957,7 +3148,7 @@ export default function RupeeLedger() {
                     {generatedOtp && (
                       <div className="bg-sand-800 rounded-lg p-3 text-center">
                         <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
-                        <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{generatedOtp}</p>
+                        <p className="text-2xl font-mono font-bold text-warning tracking-widest">{generatedOtp}</p>
                       </div>
                     )}
                     <Input
@@ -3013,7 +3204,7 @@ export default function RupeeLedger() {
                       type="button"
                       onClick={handleSendWhatsappOTP}
                       disabled={whatsappOtpLoading}
-                      className="w-full h-11 bg-green-600 hover:bg-green-500 text-white font-bold"
+                      className="w-full h-11 bg-credit hover:bg-credit text-white font-bold"
                     >
                       {whatsappOtpLoading ? 'Sending...' : 'Send WhatsApp OTP'}
                     </Button>
@@ -3024,7 +3215,7 @@ export default function RupeeLedger() {
                     {whatsappGeneratedOtp && (
                       <div className="bg-sand-800 rounded-lg p-3 text-center">
                         <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
-                        <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{whatsappGeneratedOtp}</p>
+                        <p className="text-2xl font-mono font-bold text-warning tracking-widest">{whatsappGeneratedOtp}</p>
                       </div>
                     )}
                     <Input
@@ -3049,7 +3240,7 @@ export default function RupeeLedger() {
                         type="button"
                         onClick={handleVerifyWhatsappOTP}
                         disabled={whatsappOtpLoading}
-                        className="flex-1 h-11 bg-green-600 hover:bg-green-500 text-white font-bold"
+                        className="flex-1 h-11 bg-credit hover:bg-credit text-white font-bold"
                       >
                         {whatsappOtpLoading ? 'Verifying...' : 'Verify & Access'}
                       </Button>
@@ -3181,9 +3372,9 @@ export default function RupeeLedger() {
       {/* Guest Account Upgrade Modal */}
       {showGuestUpgradeModal && (
         <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-sand-900 border border-amber-500/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-sm bg-sand-900 border border-warning/30 rounded-2xl shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center space-y-2">
-              <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+              <div className="h-14 w-14 rounded-full bg-warning/10 border border-warning/30 flex items-center justify-center">
                 <span className="text-2xl">🔒</span>
               </div>
               <h2 className="text-lg font-bold text-white">Account Upgrade Required</h2>
@@ -3207,7 +3398,7 @@ export default function RupeeLedger() {
                 <Button
                   onClick={handleSendGuestUpgradeOtp}
                   disabled={guestUpgradeLoading}
-                  className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold"
+                  className="w-full h-11 bg-warning hover:bg-warning text-black font-bold"
                 >
                   {guestUpgradeLoading ? 'Sending...' : 'Send OTP & Link Account'}
                 </Button>
@@ -3218,7 +3409,7 @@ export default function RupeeLedger() {
                 {guestUpgradeDevOtp && (
                   <div className="bg-sand-800 rounded-lg p-3 text-center">
                     <p className="text-[10px] text-sand-400 mb-1">Demo OTP</p>
-                    <p className="text-2xl font-mono font-bold text-amber-400 tracking-widest">{guestUpgradeDevOtp}</p>
+                    <p className="text-2xl font-mono font-bold text-warning tracking-widest">{guestUpgradeDevOtp}</p>
                   </div>
                 )}
                 <Label className="text-xs text-sand-300">Enter 6-Digit OTP</Label>
@@ -3234,7 +3425,7 @@ export default function RupeeLedger() {
                 />
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => { setGuestUpgradeOtpSent(false); setGuestUpgradeOtp(''); }} className="flex-1 h-11 bg-transparent border-sand-700 hover:text-white text-xs">Back</Button>
-                  <Button onClick={handleVerifyGuestUpgrade} disabled={guestUpgradeLoading} className="flex-1 h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                  <Button onClick={handleVerifyGuestUpgrade} disabled={guestUpgradeLoading} className="flex-1 h-11 bg-warning hover:bg-warning text-black font-bold">
                     {guestUpgradeLoading ? 'Linking...' : 'Verify & Link'}
                   </Button>
                 </div>
@@ -3324,10 +3515,10 @@ export default function RupeeLedger() {
     return (
       <div className="fixed inset-0 z-[15000] flex flex-col items-center justify-center bg-sand-950 text-sand-100 animate-in fade-in duration-300">
         <Toaster />
-        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-6 bg-sand-900 border border-red-500/20 rounded-3xl shadow-2xl">
+        <div className="w-full max-w-md p-8 flex flex-col items-center text-center space-y-6 bg-sand-900 border border-destructive/30/20 rounded-3xl shadow-2xl">
           {/* Logo / Expiry Icon */}
           <div className="flex flex-col items-center space-y-3">
-            <div className="h-16 w-16 bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/30">
+            <div className="h-16 w-16 bg-destructive/10/10 rounded-2xl flex items-center justify-center border border-destructive/30/30">
               <span className="text-3xl">⚠️</span>
             </div>
             <div>
@@ -3345,7 +3536,7 @@ export default function RupeeLedger() {
               </div>
               <div className="flex justify-between items-center text-sm py-1">
                 <span className="text-sand-300">Annual Pro License</span>
-                <span className="font-bold text-amber-400">₹1,999 / year</span>
+                <span className="font-bold text-warning">₹1,999 / year</span>
               </div>
             </div>
 
@@ -3358,7 +3549,7 @@ export default function RupeeLedger() {
               </Button>
               <Button 
                 onClick={() => handleBuyLicenseKey("annual")}
-                className="h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold"
+                className="h-11 bg-warning hover:bg-warning text-black font-bold"
               >
                 Buy Annual
               </Button>
@@ -3387,7 +3578,7 @@ export default function RupeeLedger() {
           <div className="w-full pt-4 border-t border-sand-800 text-sand-400 space-y-1">
             <p className="text-[10px] font-bold tracking-widest uppercase text-sand-500">Support & Inquiries</p>
             <p className="text-xs font-semibold text-sand-300">Owner: L.ASHOK KUMAR, COIMBATORE</p>
-            <p className="text-xs">Mobile: <a href="tel:+919791335351" className="text-amber-400 font-bold hover:underline">9791335351</a></p>
+            <p className="text-xs">Mobile: <a href="tel:+919791335351" className="text-warning font-bold hover:underline">9791335351</a></p>
           </div>
 
           <div className="w-full pt-2">
@@ -3546,7 +3737,7 @@ export default function RupeeLedger() {
                                 : "text-foreground/75 hover:bg-surface-2 hover:text-foreground",
                             )}
                           >
-                            {on && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-gold-500" aria-hidden />}
+                            {on && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-teal-500" aria-hidden />}
                             <Icon className="h-4 w-4 shrink-0" />
                             {item.label}
                           </button>
@@ -3571,7 +3762,7 @@ export default function RupeeLedger() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{user.name}</p>
                         <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5">
-                          <span className={cn("h-1.5 w-1.5 rounded-full", user.authMethod === "guest" ? "bg-gold-500" : "bg-credit")} aria-hidden />
+                          <span className={cn("h-1.5 w-1.5 rounded-full", user.authMethod === "guest" ? "bg-teal-500" : "bg-credit")} aria-hidden />
                           {user.authMethod === "guest" ? "Saved on this device" : "Synced to cloud"}
                         </p>
                       </div>
@@ -3645,21 +3836,21 @@ export default function RupeeLedger() {
                     <h3 className="text-sm font-medium khata-muted">Net position</h3>
                     <span className="text-xs khata-muted">{accounts.length} {accounts.length === 1 ? "ledger" : "ledgers"}</span>
                   </div>
-                  <CurrencyDisplay amount={totalBalance} className="font-headline text-4xl md:text-[2.75rem] leading-tight mt-2 text-gold-50 break-all" />
+                  <CurrencyDisplay amount={totalBalance} className="font-headline text-4xl md:text-[2.75rem] leading-tight mt-2 text-teal-50 break-all" />
                   <div className="khata-rule my-5" />
                   <dl className="space-y-2.5 text-sm mt-auto">
                     <div className="flex items-center justify-between">
                       <dt className="flex items-center gap-2 khata-muted"><ArrowUpRight className="h-4 w-4" /> Came in today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.credit} className="text-gold-50" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.credit} className="text-teal-50" /></dd>
                     </div>
                     <div className="flex items-center justify-between">
                       <dt className="flex items-center gap-2 khata-muted"><ArrowDownLeft className="h-4 w-4" /> Went out today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.debit} className="text-gold-50" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.debit} className="text-teal-50" /></dd>
                     </div>
                     <div className="khata-rule opacity-60" />
                     <div className="flex items-center justify-between">
                       <dt className="khata-muted">Net today</dt>
-                      <dd><CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign className="text-gold-200" /></dd>
+                      <dd><CurrencyDisplay amount={todayStats.credit - todayStats.debit} showSign className="text-teal-200" /></dd>
                     </div>
                   </dl>
                 </section>
@@ -3950,7 +4141,7 @@ export default function RupeeLedger() {
                                   </TableCell>
                                   <TableCell className="text-right">
                                     {t.type === "Credit" ? (
-                                      <span className="text-green-600 font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
+                                      <span className="text-credit font-semibold">+<CurrencyDisplay amount={t.amount} /></span>
                                     ) : <span className="text-muted-foreground">-</span>}
                                   </TableCell>
                                   <TableCell className="text-right">
@@ -4051,7 +4242,7 @@ export default function RupeeLedger() {
                 <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80 bg-sand-50/50">
                   <CardHeader className="py-4">
                     <CardDescription className="text-xs uppercase font-bold text-sand-500">6-Month Total Inflow</CardDescription>
-                    <CardTitle className="premium-heading text-2xl text-green-600 font-bold">
+                    <CardTitle className="premium-heading text-2xl text-credit font-bold">
                       <CurrencyDisplay amount={analyticsData.reduce((sum, item) => sum + item.income, 0)} />
                     </CardTitle>
                   </CardHeader>
@@ -4089,24 +4280,25 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Net Cash Flow Trend</h3>
                     <p className="text-xs text-muted-foreground">Monthly net savings (Inflow - Outflow) over the last 6 months</p>
                   </div>
-                  <div className="h-[300px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[300px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={analyticsData}>
                           <defs>
                             <linearGradient id="colorNetFlow" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--gold-500))" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="hsl(var(--gold-500))" stopOpacity={0.0}/>
+                              <stop offset="5%" stopColor="hsl(var(--teal-500))" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="hsl(var(--teal-500))" stopOpacity={0.0}/>
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Net Cash Flow"]}
                           />
-                          <Area type="monotone" dataKey="net" stroke="hsl(var(--gold-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
+                          <Area type="monotone" dataKey="net" stroke="hsl(var(--teal-500))" strokeWidth={3} fillOpacity={1} fill="url(#colorNetFlow)" />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
@@ -4123,7 +4315,7 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Inflow vs Outflow</h3>
                     <p className="text-xs text-muted-foreground">Side-by-side comparison of total Credits and total Debits</p>
                   </div>
-                  <div className="h-[280px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[280px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsData} margin={{ left: -10 }}>
@@ -4131,7 +4323,8 @@ export default function RupeeLedger() {
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => `₹${Number(value).toLocaleString("en-IN")}`}
                           />
                           <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
@@ -4153,7 +4346,7 @@ export default function RupeeLedger() {
                     <h3 className="font-headline text-lg font-semibold text-foreground">Monthly Expenses Trend</h3>
                     <p className="text-xs text-muted-foreground">Detailed view of total Outflows (Debits)</p>
                   </div>
-                  <div className="h-[280px] w-full pt-4">
+                  <div className="h-[220px] sm:h-[280px] w-full pt-4">
                     {analyticsData.some(d => d.income > 0 || d.expenses > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={analyticsData}>
@@ -4167,7 +4360,8 @@ export default function RupeeLedger() {
                           <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                           <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
                           <Tooltip 
-                            contentStyle={{ backgroundColor: "#0f172a", borderRadius: "8px", border: "none", color: "#f8fafc" }}
+                            contentStyle={{ background: "hsl(var(--popover))", borderRadius: "8px", border: "1px solid hsl(var(--border))", color: "hsl(var(--popover-foreground))", fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
                             formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Total Outflow"]}
                           />
                           <Area type="monotone" dataKey="expenses" stroke="hsl(var(--debit))" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
@@ -4253,7 +4447,7 @@ export default function RupeeLedger() {
                               {user.email && <p className="text-sm text-sand-500 font-mono">{user.email}</p>}
                               {user.phone && <p className="text-sm text-sand-500 font-mono">+91 {user.phone}</p>}
                               <div className="flex items-center gap-1.5 mt-1">
-                                <span className={`h-2 w-2 rounded-full ${user.authMethod === 'guest' ? 'bg-amber-500' : 'bg-green-500'}`} />
+                                <span className={`h-2 w-2 rounded-full ${user.authMethod === 'guest' ? 'bg-warning' : 'bg-credit'}`} />
                                 <span className="text-xs font-semibold text-sand-600 capitalize">
                                   Auth Profile: {user.authMethod} Mode
                                 </span>
@@ -4506,7 +4700,7 @@ export default function RupeeLedger() {
                         <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
                           <p className="text-[10px] uppercase font-bold text-primary/80">License Tier</p>
                           <p className="text-lg font-bold mt-1 text-sand-800">{subscription.plan}</p>
-                          <span className="inline-block mt-2 px-2.5 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 rounded-full">
+                          <span className="inline-block mt-2 px-2.5 py-0.5 text-[10px] font-semibold bg-credit-subtle text-credit rounded-full">
                             {subscription.status.toUpperCase()}
                           </span>
                         </div>
@@ -4585,7 +4779,7 @@ export default function RupeeLedger() {
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className="h-7 text-[10px] bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                                className="h-7 text-[10px] bg-white text-brand-700 border-brand-200 hover:bg-brand-50"
                                 onClick={() => {
                                   const element = document.createElement("a");
                                   const fileText = `RupeeLedger Pro License Key Backup\n` +
@@ -4680,7 +4874,7 @@ export default function RupeeLedger() {
                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                           item.status === 'used' 
                                             ? 'bg-sand-100 text-sand-600' 
-                                            : 'bg-green-100 text-green-800'
+                                            : 'bg-credit-subtle text-credit'
                                         }`}>
                                           {item.status.toUpperCase()}
                                         </span>
@@ -4715,7 +4909,7 @@ export default function RupeeLedger() {
                   <Card className="glass-card premium-glow premium-heading-card shadow-sm border-sand-200/80">
                     <CardHeader>
                       <CardTitle className="premium-heading text-primary flex items-center gap-2">
-                        <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="h-5 w-5 text-credit" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                         WhatsApp API Settings
@@ -4756,7 +4950,7 @@ export default function RupeeLedger() {
                           <p className="font-semibold text-sm">Automatic Cloud Backup</p>
                           <p className="text-xs text-muted-foreground">
                             {user && user.authMethod !== 'guest' 
-                              ? "Automatically sync ledger changes to Firebase secure cloud storage." 
+                              ? "Keeps a dated copy of your ledger off this device, taken once a day." 
                               : "Not available in Guest Mode. Log in to enable secure cloud backups."}
                           </p>
                         </div>
@@ -4780,7 +4974,7 @@ export default function RupeeLedger() {
                         <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
                           <div className="space-y-0.5 max-w-[70%]">
                             <p className="font-semibold text-sm">Force Cloud Sync</p>
-                            <p className="text-xs text-muted-foreground">Manually upload all local accounts and records to Firestore.</p>
+                            <p className="text-xs text-muted-foreground">Upload this device's accounts and entries to the cloud right now.</p>
                           </div>
                           <Button onClick={handleCloudBackupNow} size="sm" variant="default" className="shrink-0">
                             Backup Now
@@ -4788,13 +4982,25 @@ export default function RupeeLedger() {
                         </div>
                       )}
 
+                      <BackupRestore
+                        scopedUserId={(user ? user.id : "guest_local") + "_" + activeBranchId}
+                        getToken={getAuthToken}
+                        accounts={accounts}
+                        transactions={transactions}
+                        onRestore={applyRestoredSnapshot}
+                        lastCloudBackupAt={localStorage.getItem(CLOUD_BACKUP_AT_KEY)}
+                        lastCloudBackupError={localStorage.getItem(CLOUD_BACKUP_ERROR_KEY)}
+                        localSlotCount={localBackupSlotCount}
+                        enabled={!!user && user.authMethod !== "guest" && cloudBackupEnabled}
+                      />
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-muted/30 rounded-lg border gap-4">
                         <div>
-                          <p className="font-semibold text-sm">Daily Auto-Backup</p>
-                          <p className="text-xs text-muted-foreground">Restore your data from the most recent automatic daily snapshot.</p>
+                          <p className="font-semibold text-sm">Restore today's device copy</p>
+                          <p className="text-xs text-muted-foreground">Falls back to the snapshot held in this browser, for when you are offline.</p>
                         </div>
-                        <Button onClick={handleRestoreAutoBackup} size="sm" variant="outline" className="shrink-0 text-amber-600 border-amber-200 hover:bg-amber-50">
-                          Restore Auto-Backup
+                        <Button onClick={handleRestoreAutoBackup} size="sm" variant="outline" className="shrink-0">
+                          Restore from device
                         </Button>
                       </div>
 
@@ -4846,7 +5052,7 @@ export default function RupeeLedger() {
                               <p className="text-sand-500 font-semibold">Sync Status</p>
                               <p className="font-semibold mt-0.5">
                                 {user && user.authMethod !== 'guest' ? (
-                                  <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-bold">Cloud Synced</span>
+                                  <span className="text-credit bg-credit-subtle px-2 py-0.5 rounded border border-credit/30 font-bold">Cloud Synced</span>
                                 ) : (
                                   <span className="text-sand-500 bg-sand-100 px-2 py-0.5 rounded border border-sand-200 font-bold font-mono">Guest Local</span>
                                 )}
@@ -4878,7 +5084,7 @@ export default function RupeeLedger() {
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Privacy Status</span>
-                            <span className="text-green-600 font-bold">Encapsulated</span>
+                            <span className="text-credit font-bold">Encapsulated</span>
                           </div>
                           <div className="flex justify-between text-sm border-b pb-1">
                             <span className="text-muted-foreground font-medium">Owner / Support</span>
@@ -4921,7 +5127,7 @@ export default function RupeeLedger() {
                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                           item.status === 'used' 
                                             ? 'bg-sand-100 text-sand-600' 
-                                            : 'bg-green-100 text-green-800'
+                                            : 'bg-credit-subtle text-credit'
                                         }`}>
                                           {item.status.toUpperCase()}
                                         </span>
@@ -4963,7 +5169,7 @@ export default function RupeeLedger() {
                           <div>
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sand-800">WhatsApp Integration</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
+                              <span className="bg-warning-subtle text-warning text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
                             <p className="text-sm text-sand-600 mb-4">Automatically send GST invoices, receipts, and payment reminders directly to your clients via WhatsApp Business API.</p>
                           </div>
@@ -4974,7 +5180,7 @@ export default function RupeeLedger() {
                           <div>
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sand-800">API Access</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
+                              <span className="bg-warning-subtle text-warning text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
                             <p className="text-sm text-sand-600 mb-4">Generate API keys to connect RupeeLedger data with your own internal tools, dashboards, or external e-commerce platforms.</p>
                           </div>
@@ -4985,7 +5191,7 @@ export default function RupeeLedger() {
                           <div>
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sand-800">Custom Branding</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
+                              <span className="bg-warning-subtle text-warning text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
                             <p className="text-sm text-sand-600 mb-4">Remove RupeeLedger watermarks and apply your own custom color themes and domain to all client-facing portals.</p>
                           </div>
@@ -4996,7 +5202,7 @@ export default function RupeeLedger() {
                           <div>
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-bold text-sand-800">Dedicated Account Manager</h4>
-                              <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
+                              <span className="bg-warning-subtle text-warning text-xs px-2 py-0.5 rounded font-bold">Yearly</span>
                             </div>
                             <p className="text-sm text-sand-600 mb-4">Get priority WhatsApp and phone support with a dedicated accounting expert assigned to your business.</p>
                           </div>
@@ -5311,7 +5517,7 @@ export default function RupeeLedger() {
       <Dialog open={!!boughtKey} onOpenChange={(open) => !open && setBoughtKey(null)}>
         <DialogContent className="glass-card max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-green-600 flex items-center gap-2">
+            <DialogTitle className="text-credit flex items-center gap-2">
               <CheckCircle className="h-5 w-5" />
               Payment Successful!
             </DialogTitle>

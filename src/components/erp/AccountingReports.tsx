@@ -72,7 +72,7 @@ export const AccountingReports: React.FC<AccountingReportsProps> = ({ transactio
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground font-medium">Closing Balance</p>
-                <p className="text-2xl font-bold text-green-600">₹{totalCashBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+                <p className="text-2xl font-bold text-credit">₹{totalCashBalance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
               </div>
             </CardHeader>
             <CardContent>
@@ -83,8 +83,8 @@ export const AccountingReports: React.FC<AccountingReportsProps> = ({ transactio
                       <th className="px-4 py-3 font-medium">Date</th>
                       <th className="px-4 py-3 font-medium">Description</th>
                       <th className="px-4 py-3 font-medium">Account</th>
-                      <th className="px-4 py-3 font-medium text-right text-green-600">In (Credit)</th>
-                      <th className="px-4 py-3 font-medium text-right text-red-600">Out (Debit)</th>
+                      <th className="px-4 py-3 font-medium text-right text-credit">In (Credit)</th>
+                      <th className="px-4 py-3 font-medium text-right text-debit">Out (Debit)</th>
                       <th className="px-4 py-3 font-medium text-right">Balance</th>
                     </tr>
                   </thead>
@@ -105,10 +105,10 @@ export const AccountingReports: React.FC<AccountingReportsProps> = ({ transactio
                             <td className="px-4 py-3 font-medium">
                               <Badge variant="outline">{acc?.name || 'Unknown'}</Badge>
                             </td>
-                            <td className="px-4 py-3 text-right text-green-600 font-medium">
+                            <td className="px-4 py-3 text-right text-credit font-medium">
                               {t.type === 'Credit' ? `+ ₹${t.amount.toLocaleString()}` : '-'}
                             </td>
-                            <td className="px-4 py-3 text-right text-red-600 font-medium">
+                            <td className="px-4 py-3 text-right text-debit font-medium">
                               {t.type === 'Debit' ? `- ₹${t.amount.toLocaleString()}` : '-'}
                             </td>
                             <td className="px-4 py-3 text-right font-bold">₹{t.balanceAfter.toLocaleString()}</td>
@@ -164,10 +164,10 @@ export const AccountingReports: React.FC<AccountingReportsProps> = ({ transactio
                         <tr key={acc.id} className="hover:bg-muted/30 transition-colors">
                           <td className="px-4 py-3 font-medium">{acc.name}</td>
                           <td className="px-4 py-3"><Badge variant="secondary">{acc.type}</Badge></td>
-                          <td className="px-4 py-3 text-right text-blue-700">
+                          <td className="px-4 py-3 text-right text-brand-700">
                             {acc.balance > 0 ? `₹${acc.balance.toLocaleString()}` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right text-amber-700">
+                          <td className="px-4 py-3 text-right text-warning">
                             {acc.balance < 0 ? `₹${Math.abs(acc.balance).toLocaleString()}` : '-'}
                           </td>
                         </tr>
@@ -177,14 +177,14 @@ export const AccountingReports: React.FC<AccountingReportsProps> = ({ transactio
                   <tfoot className="bg-muted/30 border-t font-bold">
                     <tr>
                       <td colSpan={2} className="px-4 py-3 text-right">Grand Total:</td>
-                      <td className="px-4 py-3 text-right text-blue-800">₹{totalDebits.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right text-amber-800">₹{totalCredits.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-brand-700">₹{totalDebits.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-warning">₹{totalCredits.toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
               {Math.abs(totalDebits - totalCredits) > 1 && (
-                <div className="mt-4 p-4 bg-red-50 text-red-800 rounded-lg border border-red-200 flex items-center gap-2">
+                <div className="mt-4 p-4 bg-debit-subtle text-destructive rounded-lg border border-debit/30 flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5" />
                   <strong>Warning:</strong> Trial balance is not tallying. Difference of ₹{Math.abs(totalDebits - totalCredits).toLocaleString()}. Check manual ledger entries.
                 </div>

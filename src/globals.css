@@ -18,44 +18,47 @@
        a deep navy against cool off-white, rather than the earlier red/gold.
        Ramp names are unchanged so existing utilities keep working. */
 
-    /* Navy. 700 is ShiftWise's #2B4A8B accent. */
-    --brand-50:  221 50% 97%;
-    --brand-100: 220 45% 92%;   /* #E2E8F4 accent-soft */
-    --brand-200: 220 44% 85%;
-    --brand-300: 221 48% 74%;   /* #93ACE8, the dark-mode accent */
-    --brand-400: 221 50% 60%;
-    --brand-500: 221 52% 48%;
-    --brand-600: 221 53% 42%;
-    --brand-700: 221 53% 36%;   /* primary -- #2B4A8B */
-    --brand-800: 221 50% 29%;
-    --brand-900: 221 45% 22%;
-    --brand-950: 221 39% 19%;   /* #1E2A44 */
+    /* Navy. 700 is the primary, #1B3A5F.
+       Text pairings were contrast-checked, not assumed: navy-700 on white
+       11.6:1, teal-700 on white 6.5:1, teal-300 on navy-950 10.7:1, ink on
+       white 17.9:1. WCAG AA wants 4.5:1. */
+    --brand-50:  216 63% 97%;
+    --brand-100: 214 60% 93%;
+    --brand-200: 214 55% 85%;
+    --brand-300: 214 51% 73%;
+    --brand-400: 216 46% 57%;
+    --brand-500: 218 48% 44%;
+    --brand-600: 218 52% 34%;
+    --brand-700: 213 56% 24%;   /* primary -- #1B3A5F */
+    --brand-800: 213 57% 19%;
+    --brand-900: 213 55% 15%;
+    --brand-950: 213 57% 10%;   /* #0B1828 */
 
-    /* Amber, carrying ShiftWise's warn role. 700 is #8E6210. */
-    --gold-50:  42 70% 96%;
-    --gold-100: 42 61% 89%;     /* #F4EAD2 warn-soft */
-    --gold-200: 41 62% 80%;
-    --gold-300: 40 69% 70%;
-    --gold-400: 40 69% 63%;     /* #E2B55E */
-    --gold-500: 40 72% 50%;
-    --gold-600: 39 78% 40%;
-    --gold-700: 39 80% 31%;     /* #8E6210 */
-    --gold-800: 38 78% 25%;
-    --gold-900: 37 72% 19%;
+    /* Teal, the one accent. 700 holds AA on white; 300 is the dark-mode face. */
+    --teal-50:  171 68% 96%;
+    --teal-100: 170 66% 90%;
+    --teal-200: 171 67% 78%;
+    --teal-300: 172 64% 62%;    /* #5FDCCB, accent on dark */
+    --teal-400: 172 62% 47%;
+    --teal-500: 173 78% 36%;
+    --teal-600: 174 82% 29%;
+    --teal-700: 175 81% 23%;    /* #0B6A62, accent on light */
+    --teal-800: 175 79% 19%;
+    --teal-900: 176 77% 14%;
 
-    /* Cool neutrals. Off-white rather than paper, and the greys carry a
-       slight blue bias so they sit with the navy instead of fighting it. */
-    --sand-50:  75 14% 95%;     /* #F2F3EF page ground */
-    --sand-100: 80 14% 91%;     /* #EAECE6 raised surface */
-    --sand-200: 87 11% 83%;     /* #D5D9D0 hairline */
-    --sand-300: 90 8% 72%;
-    --sand-400: 215 12% 55%;
-    --sand-500: 215 12% 40%;    /* #5A6472 secondary ink */
-    --sand-600: 215 14% 32%;
-    --sand-700: 215 19% 23%;    /* #303946 dark hairline */
-    --sand-800: 215 21% 17%;    /* #232B36 */
-    --sand-900: 213 30% 13%;    /* #17202B primary ink */
-    --sand-950: 216 23% 9%;     /* #11151B dark ground */
+    /* Neutrals biased toward the navy, so greys never read muddy beside it.
+       50 is pure white: the page ground is white, not off-white. */
+    --sand-50:  0 0% 100%;      /* page ground -- white */
+    --sand-100: 214 40% 97%;    /* raised surface */
+    --sand-200: 214 28% 91%;    /* hairline */
+    --sand-300: 214 20% 82%;
+    --sand-400: 215 16% 62%;
+    --sand-500: 215 16% 46%;    /* secondary ink */
+    --sand-600: 215 20% 34%;
+    --sand-700: 213 30% 24%;
+    --sand-800: 213 40% 16%;
+    --sand-900: 213 50% 11%;    /* primary ink */
+    --sand-950: 213 57% 7%;     /* deepest dark ground */
 
     /* --- Semantic surface tokens ---------------------------------------- */
     --background: var(--sand-50);
@@ -72,13 +75,14 @@
     --popover-foreground: var(--sand-900);
 
     --primary: var(--brand-700);
-    --primary-foreground: 43 74% 96%;
-    --secondary: var(--gold-100);
-    --secondary-foreground: var(--brand-800);
+    --primary-foreground: 0 0% 100%;      /* white on navy, 11.6:1 */
+    --secondary: var(--teal-100);
+    --secondary-foreground: var(--teal-900);
     --muted: var(--sand-100);
     --muted-foreground: var(--sand-500);
-    --accent: var(--gold-500);
-    --accent-foreground: var(--sand-900);
+    /* teal-600 rather than 500: it carries white text at AA, 500 does not. */
+    --accent: var(--teal-600);
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 46%;
     --destructive-foreground: 0 0% 100%;
 
@@ -99,6 +103,13 @@
     --debit-foreground: 16 50% 97%;
     --debit-subtle: 16 57% 91%;   /* #F5E2DB */
 
+    /* Caution: pending sync, unconfirmed entries, anything needing attention
+       but not an error. Amber is the one warm note in an otherwise cool
+       palette, which is what makes it read as a flag. */
+    --warning: 35 85% 32%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 40 80% 93%;
+
     /* --- Elevation -------------------------------------------------------
        Cool-tinted shadows, matching ShiftWise's rgba(20,28,40,.18): a shadow
        biased toward the navy ground rather than neutral black. */
@@ -118,7 +129,7 @@
     --dur-slow: 320ms;
 
     --chart-1: var(--brand-600);
-    --chart-2: var(--gold-500);
+    --chart-2: var(--teal-500);
     --chart-3: 152 45% 38%;
     --chart-4: 200 55% 42%;
     --chart-5: 28 65% 50%;
@@ -128,39 +139,46 @@
     --background: var(--sand-950);
     --foreground: var(--sand-50);
 
-    /* Surfaces get lighter as they come forward, the opposite of light mode. */
-    --surface-1: 24 10% 11%;
-    --surface-2: 24 9% 15%;
-    --surface-3: 24 8% 19%;
+    /* Surfaces lift as they come forward, the opposite of light mode, and all
+       carry the navy hue so nothing reads as warm grey beside the brand. */
+    --surface-1: 213 45% 11%;
+    --surface-2: 213 38% 15%;
+    --surface-3: 213 32% 19%;
 
-    --card: 24 10% 11%;
+    --card: 213 45% 11%;
     --card-foreground: var(--sand-50);
-    --popover: 24 10% 13%;
+    --popover: 213 42% 13%;
     --popover-foreground: var(--sand-50);
 
-    /* Deep red goes muddy on charcoal, so primary lifts a step. */
-    --primary: var(--brand-500);
-    --primary-foreground: 0 0% 100%;
-    --secondary: var(--gold-900);
-    --secondary-foreground: var(--gold-100);
-    --muted: 24 8% 17%;
+    /* A navy this deep disappears against the ground, so primary lifts to the
+       400 step and takes dark text rather than white. */
+    --primary: var(--brand-400);
+    --primary-foreground: 213 57% 10%;
+    --secondary: var(--teal-900);
+    --secondary-foreground: var(--teal-100);
+    --muted: 213 32% 17%;
     --muted-foreground: var(--sand-400);
-    --accent: var(--gold-400);
-    --accent-foreground: var(--sand-950);
-    --destructive: 0 70% 55%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: var(--teal-300);            /* 10.7:1 on the dark ground */
+    --accent-foreground: 213 57% 10%;
+    --destructive: 0 70% 62%;
+    --destructive-foreground: 213 57% 10%;
 
-    --border: 24 8% 22%;
-    --input: 24 8% 24%;
-    --ring: var(--brand-400);
+    --border: 213 28% 22%;
+    --input: 213 26% 26%;
+    --ring: var(--teal-300);
 
-    /* ShiftWise lifts good/bad on dark: #6FC697 and #E88C74. */
-    --credit: 148 43% 61%;
-    --credit-foreground: 150 45% 9%;
-    --credit-subtle: 150 25% 16%;
-    --debit: 12 72% 68%;
-    --debit-foreground: 12 50% 10%;
-    --debit-subtle: 12 30% 18%;
+    /* Money keeps its own hues on dark, lifted so they stay legible against
+       the navy ground rather than sinking into it. */
+    --credit: 158 55% 58%;
+    --credit-foreground: 158 60% 9%;
+    --credit-subtle: 158 35% 16%;
+    --debit: 4 80% 70%;
+    --debit-foreground: 4 60% 10%;
+    --debit-subtle: 4 35% 19%;
+
+    --warning: 40 85% 62%;
+    --warning-foreground: 35 70% 10%;
+    --warning-subtle: 38 40% 18%;
 
     /* Shadows barely read on dark surfaces; lean on the ring instead. */
     --shadow-color: 0 0% 0%;
@@ -255,7 +273,7 @@
   }
   .dark .glass-card {
     background: hsl(var(--surface-2) / 0.7);
-    border-color: hsl(var(--gold-500) / 0.12);
+    border-color: hsl(var(--teal-500) / 0.12);
   }
 
   .premium-glow {
@@ -263,7 +281,7 @@
                 box-shadow var(--dur-base) var(--ease-out-quint);
   }
   .premium-glow:hover {
-    box-shadow: var(--shadow-lg), 0 0 0 1px hsl(var(--gold-500) / 0.35);
+    box-shadow: var(--shadow-lg), 0 0 0 1px hsl(var(--teal-500) / 0.35);
     transform: translateY(-2px);
   }
 
@@ -281,11 +299,11 @@
   /* Gold foil, replacing the purple-to-orange gradient. */
   .metallic-text {
     background: linear-gradient(100deg,
-      hsl(var(--gold-700)) 0%,
-      hsl(var(--gold-400)) 35%,
-      hsl(var(--gold-200)) 50%,
-      hsl(var(--gold-500)) 65%,
-      hsl(var(--gold-700)) 100%);
+      hsl(var(--teal-700)) 0%,
+      hsl(var(--teal-400)) 35%,
+      hsl(var(--teal-200)) 50%,
+      hsl(var(--teal-500)) 65%,
+      hsl(var(--teal-700)) 100%);
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -295,7 +313,7 @@
   }
 
   .text-gradient-brand {
-    background: linear-gradient(120deg, hsl(var(--brand-700)), hsl(var(--brand-500)) 60%, hsl(var(--gold-600)));
+    background: linear-gradient(120deg, hsl(var(--brand-700)), hsl(var(--brand-500)) 60%, hsl(var(--teal-600)));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -310,7 +328,7 @@
      --------------------------------------------------------------------- */
   .khata-cover {
     position: relative;
-    color: hsl(var(--gold-50));
+    color: hsl(var(--teal-50));
     background-color: hsl(var(--brand-800));
     background-image:
       repeating-linear-gradient(45deg, hsl(0 0% 100% / 0.025) 0 1px, transparent 1px 4px),
@@ -318,7 +336,7 @@
       radial-gradient(120% 90% at 85% 0%, hsl(var(--brand-600)) 0%, transparent 55%),
       linear-gradient(160deg, hsl(var(--brand-700)), hsl(var(--brand-900)));
     box-shadow:
-      inset 0 0 0 1px hsl(var(--gold-400) / 0.18),
+      inset 0 0 0 1px hsl(var(--teal-400) / 0.18),
       inset 0 1px 0 hsl(0 0% 100% / 0.08),
       var(--shadow-lg);
     overflow: hidden;
@@ -331,18 +349,18 @@
     inset: 0 auto 0 0;
     width: 22px;
     background:
-      repeating-linear-gradient(180deg, hsl(var(--gold-300) / 0.55) 0 6px, transparent 6px 12px) 15px 0 / 1.5px 100% no-repeat,
+      repeating-linear-gradient(180deg, hsl(var(--teal-300) / 0.55) 0 6px, transparent 6px 12px) 15px 0 / 1.5px 100% no-repeat,
       linear-gradient(90deg, hsl(0 0% 0% / 0.28), hsl(0 0% 0% / 0.08) 70%, transparent);
     z-index: -1;
   }
   .khata-cover .khata-rule {
     height: 1px;
-    background: linear-gradient(90deg, hsl(var(--gold-400) / 0.7), hsl(var(--gold-400) / 0.15));
+    background: linear-gradient(90deg, hsl(var(--teal-400) / 0.7), hsl(var(--teal-400) / 0.15));
   }
-  .khata-cover .khata-muted { color: hsl(var(--gold-100) / 0.72); }
+  .khata-cover .khata-muted { color: hsl(var(--teal-100) / 0.72); }
   .dark .khata-cover {
     background-color: hsl(var(--brand-900));
-    box-shadow: inset 0 0 0 1px hsl(var(--gold-400) / 0.22), var(--shadow-lg);
+    box-shadow: inset 0 0 0 1px hsl(var(--teal-400) / 0.22), var(--shadow-lg);
   }
 
   /* Glassy app chrome for the sticky header and tab bar. */
@@ -358,7 +376,7 @@
 
   /* Hairline rule echoing a ledger's ruled lines. */
   .rule-gold {
-    background-image: linear-gradient(90deg, transparent, hsl(var(--gold-500) / 0.5), transparent);
+    background-image: linear-gradient(90deg, transparent, hsl(var(--teal-500) / 0.5), transparent);
     height: 1px;
   }
 }
@@ -382,9 +400,9 @@
   left: 0;
   width: 0%;
   height: 3px;
-  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--gold-500)));
+  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--teal-500)));
   z-index: 10005;
-  box-shadow: 0 0 12px hsl(var(--gold-500) / 0.4);
+  box-shadow: 0 0 12px hsl(var(--teal-500) / 0.4);
   transition: width 0.1s ease-out;
 }
 
@@ -404,7 +422,7 @@
   transform: translateX(-50%) scaleX(0);
   width: 40px;
   height: 2px;
-  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--gold-500)));
+  background: linear-gradient(90deg, hsl(var(--brand-700)), hsl(var(--teal-500)));
   transition: transform var(--dur-slow) var(--ease-out-quint);
   transform-origin: center;
 }
@@ -432,7 +450,7 @@
 }
 
 .shape-1 { width: 200px; height: 200px; top: 10%; left: 5%;  background: hsl(var(--brand-700) / 0.025); animation-delay: 0s; }
-.shape-2 { width: 150px; height: 150px; top: 60%; right: 10%; background: hsl(var(--gold-500) / 0.03); border-color: hsl(var(--gold-500) / 0.14); animation-delay: -4s; }
+.shape-2 { width: 150px; height: 150px; top: 60%; right: 10%; background: hsl(var(--teal-500) / 0.03); border-color: hsl(var(--teal-500) / 0.14); animation-delay: -4s; }
 .shape-3 { width: 300px; height: 300px; bottom: -5%; left: 50%; background: hsl(var(--brand-700) / 0.02); border-radius: 50%; animation-delay: -8s; }
 
 @keyframes float3D {

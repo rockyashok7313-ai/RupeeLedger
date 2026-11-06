@@ -349,7 +349,7 @@ export function OrderForm({ type, token, initialData, onClose, onSaved }: OrderF
                     {rowGrand.toFixed(2)}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => removeLine(l.id)} disabled={lines.length === 1} className="h-8 w-8 text-red-500">
+                    <Button variant="ghost" size="icon" onClick={() => removeLine(l.id)} disabled={lines.length === 1} className="h-8 w-8 text-destructive">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>

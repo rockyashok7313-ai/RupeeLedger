@@ -202,10 +202,10 @@ export function MasterDataModule({ title, type, idField, fields, token }: Master
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="icon" onClick={() => handleOpenModal(item)}>
-                          <Pencil className="h-4 w-4 text-blue-600" />
+                          <Pencil className="h-4 w-4 text-brand-700" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(item[idField])}>
-                          <Trash2 className="h-4 w-4 text-red-600" />
+                          <Trash2 className="h-4 w-4 text-debit" />
                         </Button>
                       </div>
                     </TableCell>
@@ -227,7 +227,7 @@ export function MasterDataModule({ title, type, idField, fields, token }: Master
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {fields.map(f => (
                 <div key={f.key} className="space-y-2">
-                  <Label>{f.label} {f.required && <span className="text-red-500">*</span>}</Label>
+                  <Label>{f.label} {f.required && <span className="text-destructive">*</span>}</Label>
                   {f.type === 'select' && f.options ? (
                     <select 
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"

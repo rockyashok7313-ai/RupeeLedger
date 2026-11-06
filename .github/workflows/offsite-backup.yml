@@ -1,0 +1,128 @@
+# Nightly encrypted off-site backup. Setup and restore: docs/OFFSITE_BACKUP.md
+#
+# What it does: reads every business table from Supabase, encrypts the result
+# with the PUBLIC key in BACKUP_AGE_RECIPIENT (so this job cannot read its own
+# backups), and uploads the encrypted file to a private bucket you own.
+#
+# What it deliberately does NOT do:
+#   - Upload workflow artifacts. This repository is public; artifacts would put
+#     the (encrypted) backup where any GitHub user can download it.
+#   - Print per-table row counts. Public-repo logs are public.
+#   - Succeed without a destination. A backup that goes nowhere fails the run.
+#
+# Scheduled workflows run only from the DEFAULT branch, and GitHub switches off
+# schedules in a public repository after 60 days without repository activity.
+# Do not rely on the schedule alone: set BACKUP_HEALTHCHECK_URL (see the docs) so
+# you are emailed if a night is missed for any reason, including that one.
+
+name: Off-site backup
+
+on:
+  schedule:
+    - cron: '30 20 * * *' # 20:30 UTC = 02:00 India time
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offsite-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
+
+    steps:
+      # Fail with the NAMES of anything missing, before touching the database.
+      - name: Check configuration
+        shell: bash
+        run: |
+          missing=()
+          for v in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BACKUP_AGE_RECIPIENT \
+                   BACKUP_S3_ENDPOINT BACKUP_S3_BUCKET BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY; do
+            [ -n "${!v}" ] || missing+=("$v")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}. See docs/OFFSITE_BACKUP.md, step 3."
+            exit 1
+          fi
+          case "$BACKUP_AGE_RECIPIENT" in
+            age1*) ;;
+            AGE-SECRET-KEY*) echo "::error::BACKUP_AGE_RECIPIENT holds a PRIVATE key. Replace it with the public age1... key and treat the private key as exposed."; exit 1 ;;
+            *) echo "::error::BACKUP_AGE_RECIPIENT is not an age public key (age1...)."; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      # --ignore-scripts and no Chromium download: the backup needs neither.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+
+      - name: Create encrypted backup
+        run: node scripts/backup/backup.ts --out-dir backups-out
+
+      - name: Upload to the private bucket
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # Cloudflare R2 / Backblaze B2 do not accept the newer default checksum headers.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(backups-out/*.json.gz.age)
+          manifests=(backups-out/*.manifest.json)
+          [ ${#files[@]} -eq 1 ] || { echo "::error::Expected exactly one backup file, found ${#files[@]}."; exit 1; }
+          [ ${#manifests[@]} -eq 1 ] || { echo "::error::Expected exactly one manifest, found ${#manifests[@]}."; exit 1; }
+
+          put() { aws s3 cp "$1" "s3://${BACKUP_S3_BUCKET}/$2" --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors; }
+
+          put "${files[0]}"     "daily/$(basename "${files[0]}")"
+          put "${manifests[0]}" "daily/$(basename "${manifests[0]}")"
+          # Keep the first backup of each month separately, so a lifecycle rule can
+          # expire daily/ quickly while monthly/ is kept for a year.
+          if [ "$(date -u +%d)" = "01" ]; then
+            put "${files[0]}"     "monthly/$(basename "${files[0]}")"
+            put "${manifests[0]}" "monthly/$(basename "${manifests[0]}")"
+          fi
+          echo "Uploaded $(basename "${files[0]}") ($(stat -c%s "${files[0]}") bytes)."
+
+      # Optional dead-man's switch (healthchecks.io or similar): pinged only after
+      # a verified upload, so silence means "no good backup", whatever the cause.
+      - name: Report success
+        if: success()
+        shell: bash
+        run: |
+          [ -n "${BACKUP_HEALTHCHECK_URL}" ] || { echo "No BACKUP_HEALTHCHECK_URL set; skipping."; exit 0; }
+          curl -fsS -m 15 --retry 3 -o /dev/null "${BACKUP_HEALTHCHECK_URL}"
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        run: |
+          [ -n "${BACKUP_HEALTHCHECK_URL}" ] || exit 0
+          curl -fsS -m 15 --retry 3 -o /dev/null "${BACKUP_HEALTHCHECK_URL}/fail" || true

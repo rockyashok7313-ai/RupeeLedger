@@ -85,7 +85,7 @@ export function ReportPrint({
         </div>
       </div>
 
-      <div className="flex-1 min-h-[600px] border border-slate-200 rounded-lg overflow-hidden bg-slate-100 relative">
+      <div className="flex-1 min-h-[600px] border border-sand-200 rounded-lg overflow-hidden bg-sand-100 relative">
         <iframe
           ref={iframeRef}
           srcDoc={htmlContent}

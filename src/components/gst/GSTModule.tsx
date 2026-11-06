@@ -86,7 +86,7 @@ export function GSTModule({
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                 isActive 
                   ? 'bg-primary text-primary-foreground shadow-sm' 
-                  : 'text-foreground/80 hover:bg-blue-50 hover:text-blue-700'
+                  : 'text-foreground/80 hover:bg-brand-50 hover:text-brand-700'
               }`}
             >
               <Icon className="h-4 w-4" />

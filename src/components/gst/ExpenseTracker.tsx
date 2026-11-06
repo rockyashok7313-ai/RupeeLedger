@@ -141,11 +141,11 @@ export function ExpenseTracker({ expenses = [], setExpenses }: Props) {
                       <div className="text-xs text-muted-foreground mt-0.5">{exp.category} {exp.gstin && `• GSTIN: ${exp.gstin}`}</div>
                     </td>
                     <td className="p-3 text-right font-medium">₹{exp.amount.toFixed(2)}</td>
-                    <td className="p-3 text-right text-green-600 font-medium">
+                    <td className="p-3 text-right text-credit font-medium">
                       +₹{(exp.cgst + exp.sgst + exp.igst).toFixed(2)}
                     </td>
                     <td className="p-3 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(exp.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(exp.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>

@@ -157,12 +157,12 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
               className="flex space-x-4 p-1 bg-muted rounded-lg"
             >
               <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-md shadow-sm border border-border w-full justify-center">
-                <RadioGroupItem value="Credit" id="r1" className="text-green-600" />
-                <Label htmlFor="r1" className="font-semibold text-green-700 cursor-pointer">IN (+)</Label>
+                <RadioGroupItem value="Credit" id="r1" className="text-credit" />
+                <Label htmlFor="r1" className="font-semibold text-credit cursor-pointer">IN (+)</Label>
               </div>
               <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-md shadow-sm border border-border w-full justify-center">
-                <RadioGroupItem value="Debit" id="r2" className="text-red-600" />
-                <Label htmlFor="r2" className="font-semibold text-red-700 cursor-pointer">OUT (-)</Label>
+                <RadioGroupItem value="Debit" id="r2" className="text-debit" />
+                <Label htmlFor="r2" className="font-semibold text-debit cursor-pointer">OUT (-)</Label>
               </div>
             </RadioGroup>
           </div>
@@ -189,7 +189,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
                 size="sm"
                 onClick={handleSuggest}
                 disabled={isSuggesting || !amount}
-                className="h-8 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                className="h-8 text-xs text-brand-700 hover:text-brand-700 hover:bg-brand-50"
               >
                 {isSuggesting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
                 AI Suggest
@@ -204,7 +204,7 @@ export function TransactionForm({ accounts, defaultAccountId, defaultGstEnabled,
             />
           </div>
 
-          <Button type="submit" className="w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 shadow-md">
+          <Button type="submit" className="w-full bg-gradient-to-r from-primary to-brand-600 hover:from-primary/90 hover:to-brand-700 shadow-md">
             Save Entry
           </Button>
         </form>

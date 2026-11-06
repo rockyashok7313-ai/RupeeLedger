@@ -66,6 +66,11 @@ export default {
           foreground: 'hsl(var(--credit-foreground))',
           subtle: 'hsl(var(--credit-subtle))',
         },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+          subtle: 'hsl(var(--warning-subtle))',
+        },
         debit: {
           DEFAULT: 'hsl(var(--debit))',
           foreground: 'hsl(var(--debit-foreground))',
@@ -77,11 +82,11 @@ export default {
           600: 'hsl(var(--brand-600))', 700: 'hsl(var(--brand-700))', 800: 'hsl(var(--brand-800))',
           900: 'hsl(var(--brand-900))', 950: 'hsl(var(--brand-950))',
         },
-        gold: {
-          50: 'hsl(var(--gold-50))', 100: 'hsl(var(--gold-100))', 200: 'hsl(var(--gold-200))',
-          300: 'hsl(var(--gold-300))', 400: 'hsl(var(--gold-400))', 500: 'hsl(var(--gold-500))',
-          600: 'hsl(var(--gold-600))', 700: 'hsl(var(--gold-700))', 800: 'hsl(var(--gold-800))',
-          900: 'hsl(var(--gold-900))',
+        teal: {
+          50: 'hsl(var(--teal-50))', 100: 'hsl(var(--teal-100))', 200: 'hsl(var(--teal-200))',
+          300: 'hsl(var(--teal-300))', 400: 'hsl(var(--teal-400))', 500: 'hsl(var(--teal-500))',
+          600: 'hsl(var(--teal-600))', 700: 'hsl(var(--teal-700))', 800: 'hsl(var(--teal-800))',
+          900: 'hsl(var(--teal-900))',
         },
         sand: {
           50: 'hsl(var(--sand-50))', 100: 'hsl(var(--sand-100))', 200: 'hsl(var(--sand-200))',

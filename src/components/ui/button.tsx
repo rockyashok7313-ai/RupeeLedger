@@ -26,7 +26,7 @@ const buttonVariants = cva(
         outline:
           "border border-input bg-background shadow-xs hover:border-accent/60 hover:bg-secondary hover:text-secondary-foreground",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-gold-200",
+          "bg-secondary text-secondary-foreground hover:bg-teal-200",
         ghost: "hover:bg-muted hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline active:translate-y-0",
         // Reserved for the single most important action on a screen.
