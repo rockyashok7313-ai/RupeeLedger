@@ -131,9 +131,9 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Outward Supplies (Sales) */}
-        <Card className="border-blue-200 bg-blue-50/30">
+        <Card className="border-brand-200 bg-brand-50/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-900 flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-brand-900 flex items-center justify-between">
               Outward Supplies (Sales)
               <FileText className="h-4 w-4 text-primary" />
             </CardTitle>
@@ -142,46 +142,46 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
             <div className="text-2xl font-bold text-foreground">₹{stats.sales.total.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1 space-y-1">
               <div className="flex justify-between"><span>Taxable:</span> <span>₹{stats.sales.taxableAmount.toFixed(2)}</span></div>
-              <div className="flex justify-between text-blue-700"><span>CGST Collected:</span> <span>₹{stats.sales.cgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-blue-700"><span>SGST Collected:</span> <span>₹{stats.sales.sgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-blue-700"><span>IGST Collected:</span> <span>₹{stats.sales.igst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-brand-700"><span>CGST Collected:</span> <span>₹{stats.sales.cgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-brand-700"><span>SGST Collected:</span> <span>₹{stats.sales.sgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-brand-700"><span>IGST Collected:</span> <span>₹{stats.sales.igst.toFixed(2)}</span></div>
             </div>
           </CardContent>
         </Card>
 
         {/* Input Tax Credit */}
-        <Card className="border-emerald-200 bg-emerald-50/30">
+        <Card className="border-credit/30 bg-credit-subtle/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-900 flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-credit flex items-center justify-between">
               Input Tax Credit (ITC)
-              <Calculator className="h-4 w-4 text-emerald-600" />
+              <Calculator className="h-4 w-4 text-credit" />
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">₹{(stats.itc.cgst + stats.itc.sgst + stats.itc.igst).toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1 space-y-1">
-              <div className="flex justify-between text-emerald-700"><span>CGST Available:</span> <span>₹{stats.itc.cgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-emerald-700"><span>SGST Available:</span> <span>₹{stats.itc.sgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-emerald-700"><span>IGST Available:</span> <span>₹{stats.itc.igst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-credit"><span>CGST Available:</span> <span>₹{stats.itc.cgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-credit"><span>SGST Available:</span> <span>₹{stats.itc.sgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-credit"><span>IGST Available:</span> <span>₹{stats.itc.igst.toFixed(2)}</span></div>
               <div className="flex justify-between pt-1 border-t text-muted-foreground"><span>Based on Expenses logged</span></div>
             </div>
           </CardContent>
         </Card>
 
         {/* Net Payable */}
-        <Card className="border-amber-200 bg-amber-50/30">
+        <Card className="border-warning/30 bg-warning-subtle/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-amber-900 flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-warning flex items-center justify-between">
               Net Tax Payable
-              <Info className="h-4 w-4 text-amber-600" />
+              <Info className="h-4 w-4 text-warning" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">₹{(stats.payable.cgst + stats.payable.sgst + stats.payable.igst).toFixed(2)}</div>
+            <div className="text-2xl font-bold text-warning">₹{(stats.payable.cgst + stats.payable.sgst + stats.payable.igst).toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1 space-y-1">
-              <div className="flex justify-between text-amber-700"><span>CGST Payable:</span> <span>₹{stats.payable.cgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-amber-700"><span>SGST Payable:</span> <span>₹{stats.payable.sgst.toFixed(2)}</span></div>
-              <div className="flex justify-between text-amber-700"><span>IGST Payable:</span> <span>₹{stats.payable.igst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-warning"><span>CGST Payable:</span> <span>₹{stats.payable.cgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-warning"><span>SGST Payable:</span> <span>₹{stats.payable.sgst.toFixed(2)}</span></div>
+              <div className="flex justify-between text-warning"><span>IGST Payable:</span> <span>₹{stats.payable.igst.toFixed(2)}</span></div>
               <div className="flex justify-between pt-1 border-t text-muted-foreground"><span>Formula: Collected - ITC</span></div>
             </div>
           </CardContent>
@@ -197,7 +197,7 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
             <CardDescription>Export outward supplies for the GST offline utility</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => handleDownloadJSON('GSTR-1')} variant="outline" className="w-full justify-start text-blue-700 border-blue-200 hover:bg-blue-50">
+            <Button onClick={() => handleDownloadJSON('GSTR-1')} variant="outline" className="w-full justify-start text-brand-700 border-brand-200 hover:bg-brand-50">
               <Download className="h-4 w-4 mr-2" /> Download GSTR-1 JSON
             </Button>
           </CardContent>
@@ -211,7 +211,7 @@ export function GSTReturns({ invoices = [], expenses = [], businessProfile }: Pr
             <CardDescription>Export monthly summary return data</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => handleDownloadJSON('GSTR-3B')} variant="outline" className="w-full justify-start text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+            <Button onClick={() => handleDownloadJSON('GSTR-3B')} variant="outline" className="w-full justify-start text-credit border-credit/30 hover:bg-credit-subtle">
               <Download className="h-4 w-4 mr-2" /> Download GSTR-3B JSON
             </Button>
           </CardContent>

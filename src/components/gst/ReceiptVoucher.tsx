@@ -175,9 +175,9 @@ export function ReceiptVoucher({ receipts = [], setReceipts, clients = [], invoi
                     <td className="p-3 text-foreground/80">{new Date(rec.date).toLocaleDateString()}</td>
                     <td className="p-3 font-medium">{rec.invoiceId}</td>
                     <td className="p-3 text-foreground/80">{rec.paymentMethod}</td>
-                    <td className="p-3 text-right font-medium text-green-600">₹{rec.amount.toFixed(2)}</td>
+                    <td className="p-3 text-right font-medium text-credit">₹{rec.amount.toFixed(2)}</td>
                     <td className="p-3 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(rec.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(rec.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>

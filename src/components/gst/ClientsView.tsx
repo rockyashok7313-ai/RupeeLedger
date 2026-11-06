@@ -133,10 +133,10 @@ export function ClientsView({ clients = [], setClients }: Props) {
                     <td className="p-3 font-medium">{client.name}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        client.type === 'vendor' ? 'bg-purple-100 text-purple-700' :
-                        client.type === 'agent' ? 'bg-emerald-100 text-emerald-700' :
-                        client.type === 'both' ? 'bg-indigo-100 text-indigo-700' :
-                        'bg-blue-100 text-blue-700'
+                        client.type === 'vendor' ? 'bg-brand-100 text-brand-700' :
+                        client.type === 'agent' ? 'bg-credit-subtle text-credit' :
+                        client.type === 'both' ? 'bg-teal-100 text-teal-700' :
+                        'bg-brand-100 text-brand-700'
                       }`}>
                         {client.type === 'vendor' ? 'Vendor' : client.type === 'agent' ? 'Agent' : client.type === 'both' ? 'Both' : 'Client'}
                       </span>
@@ -145,7 +145,7 @@ export function ClientsView({ clients = [], setClients }: Props) {
                     <td className="p-3 text-muted-foreground">{client.phone || '-'}</td>
                     <td className="p-3 text-muted-foreground truncate max-w-[200px]">{client.address || '-'}</td>
                     <td className="p-3 text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>

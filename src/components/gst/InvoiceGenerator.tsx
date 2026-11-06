@@ -712,7 +712,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                       type="button" 
                       variant="outline" 
                       size="icon" 
-                      className="h-10 w-10 shrink-0 border-blue-200 hover:border-blue-300"
+                      className="h-10 w-10 shrink-0 border-brand-200 hover:border-brand-200"
                       onClick={() => handleOpenAddItemDialog(index)}
                       title="Quick Add New Item to Catalog"
                     >
@@ -747,7 +747,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                 <Label className="text-xs">GST %</Label>
                 <Input type="number" value={item.taxPercent || ''} onChange={(e) => handleItemChange(index, 'taxPercent', parseFloat(e.target.value))} />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-10 w-10">
+              <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle h-10 w-10">
                 <Trash className="h-4 w-4" />
               </Button>
             </div>
@@ -789,7 +789,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
                 <div className="flex justify-between"><span>Roundoff:</span> <span>₹{calculatedTotals.roundoff.toFixed(2)}</span></div>
               )}
               <div className="flex justify-between font-bold text-lg pt-2 border-t mt-2">
-                <span>Net Amount (Total):</span> <span className="text-green-600">₹{calculatedTotals.total.toFixed(2)}</span>
+                <span>Net Amount (Total):</span> <span className="text-credit">₹{calculatedTotals.total.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -825,7 +825,7 @@ export function InvoiceGenerator({ businessProfile, clients, inventory, invoices
           <Button variant="outline" onClick={handleSaveRecurring} title="Save this as a monthly recurring template">
             Save as Recurring
           </Button>
-          <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleSaveInvoice}>
+          <Button className="bg-credit hover:bg-credit text-white" onClick={handleSaveInvoice}>
             <CheckCircle2 className="h-4 w-4 mr-2" /> Save Invoice & Preview
           </Button>
         </div>

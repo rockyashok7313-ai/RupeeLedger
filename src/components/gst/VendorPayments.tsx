@@ -148,9 +148,9 @@ export function VendorPayments({ accounts, transactions, setTransactions, client
                       <td className="p-3 font-medium">{vendor?.name || 'Unknown Vendor'}</td>
                       <td className="p-3">{account?.name || 'Unknown Account'}</td>
                       <td className="p-3 text-muted-foreground">{payment.description}</td>
-                      <td className="p-3 text-right font-medium text-red-600">₹{payment.amount.toLocaleString()}</td>
+                      <td className="p-3 text-right font-medium text-debit">₹{payment.amount.toLocaleString()}</td>
                       <td className="p-3 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(payment.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(payment.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>

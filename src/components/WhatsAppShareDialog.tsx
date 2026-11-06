@@ -130,7 +130,7 @@ export function WhatsAppShareDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px] border border-slate-800 bg-slate-950/95 text-slate-100 backdrop-blur-md rounded-2xl shadow-2xl">
+      <DialogContent className="sm:max-w-[500px] border border-sand-800 bg-sand-950/95 text-sand-100 backdrop-blur-md rounded-2xl shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
             <MessageSquare className="h-5 w-5 text-green-500" />
@@ -144,7 +144,7 @@ export function WhatsAppShareDialog({
         <div className="space-y-4 py-4 text-sm">
           {/* Phone Number Field */}
           <div className="space-y-1">
-            <Label htmlFor="whatsapp-phone" className="text-xs font-semibold text-slate-300">
+            <Label htmlFor="whatsapp-phone" className="text-xs font-semibold text-sand-300">
               Recipient WhatsApp Number
             </Label>
             <Input
@@ -153,13 +153,13 @@ export function WhatsAppShareDialog({
               placeholder="e.g., +91 9876543210 or 9876543210"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="bg-slate-900 border-slate-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1"
+              className="bg-sand-900 border-sand-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1"
             />
           </div>
 
           {/* Message Content Field */}
           <div className="space-y-1">
-            <Label htmlFor="whatsapp-text" className="text-xs font-semibold text-slate-300">
+            <Label htmlFor="whatsapp-text" className="text-xs font-semibold text-sand-300">
               Message Content
             </Label>
             <Textarea
@@ -168,13 +168,13 @@ export function WhatsAppShareDialog({
               placeholder="Type your message here..."
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="bg-slate-900 border-slate-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1"
+              className="bg-sand-900 border-sand-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1"
             />
           </div>
 
           {/* Optional Document URL Field */}
           <div className="space-y-1">
-            <Label htmlFor="whatsapp-doc" className="text-xs font-semibold text-slate-300">
+            <Label htmlFor="whatsapp-doc" className="text-xs font-semibold text-sand-300">
               Document / PDF Link (Optional)
             </Label>
             <Input
@@ -183,7 +183,7 @@ export function WhatsAppShareDialog({
               placeholder="https://example.com/invoice.pdf"
               value={docUrl}
               onChange={(e) => setDocUrl(e.target.value)}
-              className="bg-slate-900 border-slate-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1 text-xs"
+              className="bg-sand-900 border-sand-800 text-white rounded-lg focus:ring-green-500 focus:border-green-500 focus-visible:ring-offset-0 focus-visible:ring-1 text-xs"
             />
             <p className="text-[10px] text-muted-foreground">
               Will send as an interactive document message if WASender API is used.
@@ -196,7 +196,7 @@ export function WhatsAppShareDialog({
             type="button"
             variant="outline"
             onClick={handleWebShare}
-            className="flex-1 sm:flex-none border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg"
+            className="flex-1 sm:flex-none border-sand-800 bg-sand-900 text-sand-300 hover:bg-sand-800 hover:text-white rounded-lg"
           >
             <Globe className="mr-2 h-4 w-4 text-sky-400" />
             WhatsApp Web
@@ -205,7 +205,7 @@ export function WhatsAppShareDialog({
             type="button"
             disabled={isSending}
             onClick={handleApiSend}
-            className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/25"
+            className="flex-1 sm:flex-none bg-credit hover:bg-credit text-white rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/25"
           >
             {isSending ? (
               <>

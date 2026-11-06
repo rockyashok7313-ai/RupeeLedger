@@ -64,7 +64,7 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white/50 backdrop-blur-sm border p-4 rounded-xl shadow-sm flex-none">
         <div className="w-full max-w-sm">
-          <label className="text-xs font-medium text-gray-500 mb-1 block">Select Invoice to Preview</label>
+          <label className="text-xs font-medium text-sand-500 mb-1 block">Select Invoice to Preview</label>
           <select 
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={selectedInvoiceId}
@@ -80,13 +80,13 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
         </div>
         
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button onClick={handleWhatsAppShare} variant="outline" className="flex-1 sm:flex-none border-green-200 text-green-700 hover:bg-green-50" disabled={!invoice}>
+          <Button onClick={handleWhatsAppShare} variant="outline" className="flex-1 sm:flex-none border-credit/30 text-credit hover:bg-credit-subtle" disabled={!invoice}>
             WhatsApp
           </Button>
           <Button onClick={handleEmailShare} variant="outline" className="flex-1 sm:flex-none" disabled={!invoice}>
             Email
           </Button>
-          <Button onClick={handleDownloadPDF} variant="outline" className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50" disabled={!invoice}>
+          <Button onClick={handleDownloadPDF} variant="outline" className="flex-1 sm:flex-none border-brand-200 text-brand-700 hover:bg-brand-50" disabled={!invoice}>
             <FileDown className="h-4 w-4 mr-2" /> Download PDF
           </Button>
           <Button onClick={handlePrint} variant="default" className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground font-bold" disabled={!invoice}>
@@ -95,14 +95,14 @@ export function InvoicePreview({ businessProfile, invoices = [] }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-[600px] border border-slate-200 rounded-lg overflow-hidden bg-slate-100 relative">
+      <div className="flex-1 min-h-[600px] border border-sand-200 rounded-lg overflow-hidden bg-sand-100 relative">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
         )}
         {!invoice ? (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+          <div className="absolute inset-0 flex items-center justify-center text-sand-500">
             Please create an invoice first.
           </div>
         ) : (

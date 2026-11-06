@@ -227,8 +227,8 @@ export function DailyReport({
         <div className="flex flex-wrap gap-4 items-end justify-between">
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-semibold text-slate-500">Report Scope</Label>
-              <div className="flex items-center border rounded-md p-0.5 bg-slate-50 border-slate-200 h-9.5">
+              <Label className="text-xs font-semibold text-sand-500">Report Scope</Label>
+              <div className="flex items-center border rounded-md p-0.5 bg-sand-50 border-sand-200 h-9.5">
                 <Button
                   type="button"
                   variant={reportMode === 'daily' ? 'secondary' : 'ghost'}
@@ -251,12 +251,12 @@ export function DailyReport({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-semibold text-slate-500">Select Ledger</Label>
+              <Label className="text-xs font-semibold text-sand-500">Select Ledger</Label>
               <Select 
                 value={selectedReportAccountId} 
                 onValueChange={setSelectedReportAccountId}
               >
-                <SelectTrigger className="w-[180px] bg-background border-slate-200 h-9">
+                <SelectTrigger className="w-[180px] bg-background border-sand-200 h-9">
                   <SelectValue placeholder="All Accounts" />
                 </SelectTrigger>
                 <SelectContent>
@@ -270,7 +270,7 @@ export function DailyReport({
 
             {reportMode === 'daily' ? (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="report-date" className="text-xs font-semibold text-slate-500">Report Date (DD-MM-YYYY)</Label>
+                <Label htmlFor="report-date" className="text-xs font-semibold text-sand-500">Report Date (DD-MM-YYYY)</Label>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="relative flex items-center">
                     <Input
@@ -279,12 +279,12 @@ export function DailyReport({
                       placeholder="e.g. 16-06-2026"
                       value={dateInput}
                       onChange={(e) => setDateInput(e.target.value)}
-                      className="w-[180px] bg-background border-slate-200 pr-10 h-9"
+                      className="w-[180px] bg-background border-sand-200 pr-10 h-9"
                     />
                     <div className="absolute right-0">
                       <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                         <PopoverTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-500 hover:text-slate-900">
+                          <Button variant="ghost" size="icon" className="h-9 w-9 text-sand-500 hover:text-sand-900">
                             <CalendarIcon className="h-4 w-4" />
                           </Button>
                         </PopoverTrigger>
@@ -307,7 +307,7 @@ export function DailyReport({
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-1 border rounded-md p-0.5 bg-slate-50 border-slate-200">
+                  <div className="flex items-center gap-1 border rounded-md p-0.5 bg-sand-50 border-sand-200">
                     <Button
                       type="button"
                       variant="ghost"
@@ -317,7 +317,7 @@ export function DailyReport({
                     >
                       <ChevronLeft className="h-3.5 w-3.5" /> Previous
                     </Button>
-                    <div className="h-4 w-[1px] bg-slate-200" />
+                    <div className="h-4 w-[1px] bg-sand-200" />
                     <Button
                       type="button"
                       variant="ghost"
@@ -327,7 +327,7 @@ export function DailyReport({
                     >
                       Today
                     </Button>
-                    <div className="h-4 w-[1px] bg-slate-200" />
+                    <div className="h-4 w-[1px] bg-sand-200" />
                     <Button
                       type="button"
                       variant="ghost"
@@ -343,12 +343,12 @@ export function DailyReport({
             ) : (
               <div className="flex items-center gap-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold text-slate-500">Select Month</Label>
+                  <Label className="text-xs font-semibold text-sand-500">Select Month</Label>
                   <Select 
                     value={selectedMonth.toString()} 
                     onValueChange={(val) => setSelectedMonth(parseInt(val))}
                   >
-                    <SelectTrigger className="w-[140px] bg-background border-slate-200 h-9">
+                    <SelectTrigger className="w-[140px] bg-background border-sand-200 h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -362,12 +362,12 @@ export function DailyReport({
                 </div>
                 
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold text-slate-500">Year</Label>
+                  <Label className="text-xs font-semibold text-sand-500">Year</Label>
                   <Select 
                     value={selectedYear.toString()} 
                     onValueChange={(val) => setSelectedYear(parseInt(val))}
                   >
-                    <SelectTrigger className="w-[100px] bg-background border-slate-200 h-9">
+                    <SelectTrigger className="w-[100px] bg-background border-sand-200 h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -398,9 +398,9 @@ export function DailyReport({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 pt-2 bg-slate-100">
+      <div className="flex-1 overflow-y-auto p-6 pt-2 bg-sand-100">
         {isExporting ? (
-          <div className="flex items-center justify-center h-full text-slate-500">
+          <div className="flex items-center justify-center h-full text-sand-500">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
             Generating report...
           </div>
@@ -408,15 +408,15 @@ export function DailyReport({
           <iframe
             ref={iframeRef}
             srcDoc={htmlContent}
-            className="w-full h-full bg-white border border-slate-200 rounded shadow-sm"
+            className="w-full h-full bg-white border border-sand-200 rounded shadow-sm"
             title="Ledger Report Preview"
             sandbox="allow-same-origin allow-scripts allow-modals"
           />
         )}
       </div>
       
-      <div className="flex-none p-4 border-t mt-auto flex justify-end no-print bg-slate-50 border-slate-200/80 rounded-b-lg">
-        <Button onClick={onClose} variant="outline" className="h-9 px-6 font-semibold bg-white text-slate-700 hover:bg-slate-50">
+      <div className="flex-none p-4 border-t mt-auto flex justify-end no-print bg-sand-50 border-sand-200/80 rounded-b-lg">
+        <Button onClick={onClose} variant="outline" className="h-9 px-6 font-semibold bg-white text-sand-700 hover:bg-sand-50">
           Close Report
         </Button>
       </div>

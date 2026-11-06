@@ -64,7 +64,7 @@ export function VoucherPrint({
         <Button onClick={handlePrint} className="flex-1 sm:flex-none">
           <Printer className="mr-2 h-4 w-4" /> Print
         </Button>
-        <Button onClick={handleDownloadPDF} disabled={isExporting} variant="outline" className="flex-1 sm:flex-none border-blue-200 text-blue-700 hover:bg-blue-50">
+        <Button onClick={handleDownloadPDF} disabled={isExporting} variant="outline" className="flex-1 sm:flex-none border-brand-200 text-brand-700 hover:bg-brand-50">
           {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} 
           Save PDF
         </Button>
@@ -81,7 +81,7 @@ export function VoucherPrint({
         title="Share Voucher via WhatsApp"
       />
 
-      <div className="flex-1 min-h-[600px] border border-slate-200 rounded-lg overflow-hidden bg-slate-100 relative">
+      <div className="flex-1 min-h-[600px] border border-sand-200 rounded-lg overflow-hidden bg-sand-100 relative">
         <iframe
           ref={iframeRef}
           srcDoc={htmlContent}

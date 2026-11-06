@@ -244,11 +244,11 @@ export function TransactionModule({ title, type, token }: TransactionModuleProps
 
                     return (
                       <TableRow key={idx}>
-                        <TableCell className="font-medium text-blue-600">{item[idField]}</TableCell>
+                        <TableCell className="font-medium text-brand-700">{item[idField]}</TableCell>
                         <TableCell>{format(new Date(item.date), 'dd-MMM-yyyy')}</TableCell>
                         <TableCell>{partyName}</TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                          <span className="px-2 py-1 rounded-full text-xs font-semibold bg-brand-100 text-brand-700">
                             {item.status || 'Draft'}
                           </span>
                         </TableCell>
@@ -266,7 +266,7 @@ export function TransactionModule({ title, type, token }: TransactionModuleProps
                             <Printer className="h-4 w-4 text-foreground/80" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(item)}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
                       </TableRow>

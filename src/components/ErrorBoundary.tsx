@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
       return (
-        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+        <div className="p-4 bg-destructive/10 border border-destructive/30 text-debit rounded-md">
           <h2 className="font-bold mb-2">Something went wrong</h2>
           <pre className="text-xs overflow-auto">{this.state.error?.message}</pre>
         </div>

@@ -66,7 +66,7 @@ export const InvoicePrintout = React.forwardRef<HTMLDivElement, PrintInvoiceProp
               
               <div className="flex justify-between items-start mb-2 pt-4 px-4">
                 <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 rounded-full border-2 border-red-500 text-red-500 flex items-center justify-center font-bold text-3xl overflow-hidden mt-1 bg-white">
+                  <div className="w-16 h-16 rounded-full border-2 border-destructive/30 text-destructive flex items-center justify-center font-bold text-3xl overflow-hidden mt-1 bg-white">
                     {company?.company_name?.[0] || 'S'}
                   </div>
                   <div>

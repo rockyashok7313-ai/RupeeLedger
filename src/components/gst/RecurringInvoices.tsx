@@ -100,16 +100,16 @@ export function RecurringInvoices({ recurringTemplates = [], setRecurringTemplat
                     <td className="p-3">{new Date(template.nextRun).toLocaleDateString()}</td>
                     <td className="p-3">
                       {template.active ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-credit-subtle text-credit">Active</span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-muted text-foreground/80">Paused</span>
                       )}
                     </td>
                     <td className="p-3 text-right flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleToggleActive(template.id)} className={template.active ? 'text-amber-600 hover:bg-amber-50' : 'text-green-600 hover:bg-green-50'}>
+                      <Button variant="ghost" size="icon" onClick={() => handleToggleActive(template.id)} className={template.active ? 'text-warning hover:bg-warning-subtle' : 'text-credit hover:bg-credit-subtle'}>
                         {template.active ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(template.id)} className="text-destructive hover:text-destructive/80 hover:bg-debit-subtle">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>

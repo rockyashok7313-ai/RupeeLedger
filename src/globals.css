@@ -103,6 +103,13 @@
     --debit-foreground: 16 50% 97%;
     --debit-subtle: 16 57% 91%;   /* #F5E2DB */
 
+    /* Caution: pending sync, unconfirmed entries, anything needing attention
+       but not an error. Amber is the one warm note in an otherwise cool
+       palette, which is what makes it read as a flag. */
+    --warning: 35 85% 32%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 40 80% 93%;
+
     /* --- Elevation -------------------------------------------------------
        Cool-tinted shadows, matching ShiftWise's rgba(20,28,40,.18): a shadow
        biased toward the navy ground rather than neutral black. */
@@ -160,13 +167,18 @@
     --input: 213 26% 26%;
     --ring: var(--teal-300);
 
-    /* ShiftWise lifts good/bad on dark: #6FC697 and #E88C74. */
-    --credit: 148 43% 61%;
-    --credit-foreground: 150 45% 9%;
-    --credit-subtle: 150 25% 16%;
-    --debit: 12 72% 68%;
-    --debit-foreground: 12 50% 10%;
-    --debit-subtle: 12 30% 18%;
+    /* Money keeps its own hues on dark, lifted so they stay legible against
+       the navy ground rather than sinking into it. */
+    --credit: 158 55% 58%;
+    --credit-foreground: 158 60% 9%;
+    --credit-subtle: 158 35% 16%;
+    --debit: 4 80% 70%;
+    --debit-foreground: 4 60% 10%;
+    --debit-subtle: 4 35% 19%;
+
+    --warning: 40 85% 62%;
+    --warning-foreground: 35 70% 10%;
+    --warning-subtle: 38 40% 18%;
 
     /* Shadows barely read on dark surfaces; lean on the ring instead. */
     --shadow-color: 0 0% 0%;

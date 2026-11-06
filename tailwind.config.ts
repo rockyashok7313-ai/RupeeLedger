@@ -66,6 +66,11 @@ export default {
           foreground: 'hsl(var(--credit-foreground))',
           subtle: 'hsl(var(--credit-subtle))',
         },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+          subtle: 'hsl(var(--warning-subtle))',
+        },
         debit: {
           DEFAULT: 'hsl(var(--debit))',
           foreground: 'hsl(var(--debit-foreground))',
