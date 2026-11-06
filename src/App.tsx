@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
+import { computeLedger, auditBalances } from "@/lib/balance";
 import { supabase } from "@/lib/supabase";
 // Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
@@ -632,6 +633,38 @@ export default function RupeeLedger() {
 
     return () => observer.disconnect();
   }, []);
+
+  /**
+   * Repair balances that disagree with the transactions.
+   *
+   * Balances are derived, but they are also cached on the account and on each
+   * row. Every load path -- local storage, a server pull, a restored backup --
+   * previously set them straight from whatever was stored, so a balance written
+   * while the client held an incomplete set of transactions stayed wrong until
+   * the next edit happened to recompute it.
+   *
+   * This runs after any load and quietly puts them right. It settles in one
+   * pass: once recomputed, nothing disagrees and the effect returns early.
+   */
+  useEffect(() => {
+    if (!isLoaded || accounts.length === 0) return;
+
+    const drift = auditBalances(accounts, transactions);
+    const { accounts: fixedAccounts, transactions: fixedTransactions } =
+      computeLedger(accounts, transactions);
+
+    // computeLedger reorders, so compare by id rather than by position.
+    const runningBefore = new Map(transactions.map(t => [t.id, t.balanceAfter]));
+    const runningChanged = fixedTransactions.some(t => runningBefore.get(t.id) !== t.balanceAfter);
+
+    if (drift.length === 0 && !runningChanged) return;
+
+    if (drift.length > 0) {
+      console.warn('[BALANCE] stored balances disagreed with the ledger; recomputed from entries', drift);
+    }
+    setAccounts(fixedAccounts);
+    setTransactions(fixedTransactions);
+  }, [isLoaded, accounts, transactions]);
 
   // Daily Auto-Backup to LocalStorage
   useEffect(() => {
@@ -2340,25 +2373,14 @@ export default function RupeeLedger() {
 
   // Recalculate helper
   const recalculateData = (updatedAccounts: Account[], updatedTransactions: Transaction[]) => {
-    const finalAccounts = updatedAccounts.map(acc => {
-      const accTransactions = updatedTransactions
-        .filter(t => t.accountId === acc.id)
-        .sort((a, b) => a.date - b.date);
+    // All balance arithmetic lives in @/lib/balance: integer paise so a
+    // thousand rows cannot drift, and a deterministic order so entries sharing
+    // a date always produce the same running balance. This used to sort on
+    // date alone and add floating point rupees in place.
+    const { accounts: finalAccounts, transactions: finalTransactions } =
+      computeLedger(updatedAccounts, updatedTransactions);
 
-      let runningBalance = acc.initialBalance;
-      const recalculateTxs = accTransactions.map(t => {
-        runningBalance = t.type === 'Credit' ? runningBalance + t.amount : runningBalance - t.amount;
-        return { ...t, balanceAfter: runningBalance };
-      });
-
-      // Update the transaction pool for this account
-      updatedTransactions = [
-        ...updatedTransactions.filter(t => t.accountId !== acc.id),
-        ...recalculateTxs
-      ];
-
-      return { ...acc, currentBalance: runningBalance };
-    });
+    updatedTransactions = finalTransactions;
 
     setAccounts(finalAccounts);
     setTransactions(updatedTransactions);
