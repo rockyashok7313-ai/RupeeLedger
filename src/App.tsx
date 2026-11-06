@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { computeLedger, auditBalances } from "@/lib/balance";
+import { mergeById, assessCloudPayload } from "@/lib/sync-merge";
 import { supabase } from "@/lib/supabase";
 // Removed Firestore imports to migrate fully to Supabase
 import { AccountCard } from "@/components/AccountCard";
@@ -886,8 +887,7 @@ export default function RupeeLedger() {
             }
           }
 
-          setAccounts(fetchedAccounts);
-          setTransactions(fetchedTxs);
+          applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
           await fetchGeneratedKeys(supabaseUser.id);
 
           const profile: UserProfile = {
@@ -998,8 +998,7 @@ export default function RupeeLedger() {
                         shouldLock = true;
                       }
                     }
-                    setAccounts(syncData.accounts || []);
-                    setTransactions(syncData.transactions || []);
+                    applyCloudLedger(syncData.accounts, syncData.transactions, accounts, transactions);
                     if (syncData.clients) setClients(syncData.clients);
                     if (syncData.inventory) setInventory(syncData.inventory);
                     if (syncData.invoices) setInvoices(syncData.invoices);
@@ -1373,8 +1372,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(phoneId);
         setUser(phoneUser);
         setShowLogin(false);
@@ -1518,8 +1516,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(phoneId);
         setUser(whatsappUser);
         setShowLogin(false);
@@ -1663,8 +1660,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(emailId);
         }
-        setAccounts(fetchedAccounts);
-        setTransactions(fetchedTxs);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
         await fetchGeneratedKeys(emailId);
         setUser(emailUser);
         setShowLogin(false);
@@ -2444,6 +2440,61 @@ export default function RupeeLedger() {
   }, [isLocked, pinInput, securitySettings.hashedPinCode, securitySettings.pinCode]);
 
   // Recalculate helper
+  /**
+   * Apply a cloud pull to the device without letting it destroy anything.
+   *
+   * Load paths used to assign the response straight into state, so an empty or
+   * truncated read replaced a good ledger with a worse one. This checks the
+   * response looks complete, then merges by id rather than overwriting, so an
+   * entry made offline or missed by the read survives. Disagreements on the
+   * same id keep the device's copy and are surfaced instead of being dropped.
+   *
+   * Returns the data actually applied so callers can keep using it.
+   */
+  const applyCloudLedger = (
+    cloudAccounts: Account[] | undefined,
+    cloudTransactions: Transaction[] | undefined,
+    localAccounts: Account[],
+    localTransactions: Transaction[],
+  ): { accounts: Account[]; transactions: Transaction[] } => {
+    const incomingAccounts = Array.isArray(cloudAccounts) ? cloudAccounts : [];
+    const incomingTransactions = Array.isArray(cloudTransactions) ? cloudTransactions : [];
+
+    const verdict = assessCloudPayload(localTransactions.length, incomingTransactions.length);
+    if (!verdict.usable) {
+      console.warn("[SYNC] ignoring cloud response:", verdict.reason);
+      toast({
+        title: "Kept this device's records",
+        description: verdict.reason,
+      });
+      const { accounts: a, transactions: t } = computeLedger(localAccounts, localTransactions);
+      setAccounts(a);
+      setTransactions(t);
+      return { accounts: a, transactions: t };
+    }
+
+    const mergedAccounts = mergeById(localAccounts, incomingAccounts);
+    const mergedTransactions = mergeById(localTransactions, incomingTransactions);
+
+    if (mergedTransactions.conflicts.length > 0 || mergedAccounts.conflicts.length > 0) {
+      const n = mergedTransactions.conflicts.length + mergedAccounts.conflicts.length;
+      console.warn("[SYNC] conflicting records, this device's copy kept:", {
+        transactions: mergedTransactions.conflicts,
+        accounts: mergedAccounts.conflicts,
+      });
+      toast({
+        title: `${n} record${n === 1 ? "" : "s"} changed on another device`,
+        description: "This device's version was kept. Check those entries if the figures look off.",
+      });
+    }
+
+    // Balances are always recomputed from whatever the merge produced.
+    const { accounts, transactions } = computeLedger(mergedAccounts.merged, mergedTransactions.merged);
+    setAccounts(accounts);
+    setTransactions(transactions);
+    return { accounts, transactions };
+  };
+
   const recalculateData = (updatedAccounts: Account[], updatedTransactions: Transaction[]) => {
     // All balance arithmetic lives in @/lib/balance: integer paise so a
     // thousand rows cannot drift, and a deterministic order so entries sharing
