@@ -1,6 +1,7 @@
 import { NextResponse } from '../../../next-response.ts';
 import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
+import { stripCredentials } from '../../../utils/backup-payload.ts';
 import { z } from 'zod';
 
 const backupSchema = z.object({
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
       if (!row) {
         return NextResponse.json({ error: 'That backup was not found.' }, { status: 404 });
       }
-      return NextResponse.json({ backup: row });
+      // An older snapshot may still carry a licence key or PIN; never hand those back.
+      return NextResponse.json({ backup: { ...row, payload: stripCredentials(row.payload) } });
     }
 
     // --- snapshot ---------------------------------------------------------
@@ -122,8 +124,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nothing to back up.' }, { status: 400 });
     }
 
-    const accountCount = Array.isArray(data.accounts) ? data.accounts.length : 0;
-    const transactionCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
+    // Snapshots hold business records only. Strip credentials the client may still send.
+    const clean = stripCredentials(data);
+    const accountCount = Array.isArray(clean.accounts) ? clean.accounts.length : 0;
+    const transactionCount = Array.isArray(clean.transactions) ? clean.transactions.length : 0;
 
     // An empty ledger is almost always a client that has not finished loading.
     // Writing it would spend the day's slot on nothing and, worse, offer an
@@ -132,7 +136,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ skipped: true, reason: 'Ledger is empty; nothing worth snapshotting.' });
     }
 
-    const serialized = JSON.stringify(data);
+    const serialized = JSON.stringify(clean);
     const takenOn = new Date().toISOString().slice(0, 10);
 
     const { data: saved, error } = await supabase
@@ -142,7 +146,7 @@ export async function POST(request: Request) {
           user_id: ownerId,
           branchId,
           taken_on: takenOn,
-          payload: data,
+          payload: clean,
           account_count: accountCount,
           transaction_count: transactionCount,
           byte_size: serialized.length,

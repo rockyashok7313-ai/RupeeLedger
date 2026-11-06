@@ -38906,6 +38906,17 @@ var route_exports9 = {};
 __export(route_exports9, {
   POST: () => POST9
 });
+
+// backend/utils/backup-payload.ts
+var CREDENTIAL_KEYS = ["subscription", "securitySettings"];
+function stripCredentials(payload) {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const copy = { ...payload };
+  for (const key2 of CREDENTIAL_KEYS) delete copy[key2];
+  return copy;
+}
+
+// backend/routes/ledger/backup/route.ts
 var backupSchema = z.object({
   userId: z.string().trim().min(1, "userId is required."),
   action: z.enum(["snapshot", "list", "restore"]),
@@ -38972,24 +38983,25 @@ async function POST9(request) {
       if (!row) {
         return NextResponse.json({ error: "That backup was not found." }, { status: 404 });
       }
-      return NextResponse.json({ backup: row });
+      return NextResponse.json({ backup: { ...row, payload: stripCredentials(row.payload) } });
     }
     if (!data || typeof data !== "object") {
       return NextResponse.json({ error: "Nothing to back up." }, { status: 400 });
     }
-    const accountCount = Array.isArray(data.accounts) ? data.accounts.length : 0;
-    const transactionCount = Array.isArray(data.transactions) ? data.transactions.length : 0;
+    const clean = stripCredentials(data);
+    const accountCount = Array.isArray(clean.accounts) ? clean.accounts.length : 0;
+    const transactionCount = Array.isArray(clean.transactions) ? clean.transactions.length : 0;
     if (accountCount === 0 && transactionCount === 0) {
       return NextResponse.json({ skipped: true, reason: "Ledger is empty; nothing worth snapshotting." });
     }
-    const serialized = JSON.stringify(data);
+    const serialized = JSON.stringify(clean);
     const takenOn = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const { data: saved, error } = await supabase2.from("ledger_backups").upsert(
       {
         user_id: ownerId,
         branchId,
         taken_on: takenOn,
-        payload: data,
+        payload: clean,
         account_count: accountCount,
         transaction_count: transactionCount,
         byte_size: serialized.length,

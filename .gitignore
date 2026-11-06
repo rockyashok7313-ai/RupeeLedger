@@ -63,3 +63,9 @@ recent_logs*.json
 
 # One-off MongoDB->Supabase migration workspace (contains credentials)
 .migration/
+
+# Off-site backups: output is encrypted, but keep it and any private key out of git regardless
+backups-out/
+*.key
+rupeeledger-backup-key*
+rupeeledger-*.json.gz.age

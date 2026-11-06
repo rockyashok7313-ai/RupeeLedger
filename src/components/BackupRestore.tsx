@@ -171,10 +171,10 @@ export function BackupRestore({
 
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
-              {!enabled ? "Cloud backup is off"
-                : lastCloudBackupError ? "Last cloud backup failed"
-                : lastOk ? "Cloud backup is working"
-                : "No cloud backup yet"}
+              {!enabled ? "Daily cloud snapshots are off"
+                : lastCloudBackupError ? "Last cloud snapshot failed"
+                : lastOk ? "Daily cloud snapshot is working"
+                : "No cloud snapshot yet"}
             </p>
 
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -203,6 +203,42 @@ export function BackupRestore({
           )}
         </div>
       </div>
+
+      {/* ---- What protects what -------------------------------------------- */}
+      {/* Plain statements of what each layer does NOT cover, so none of them is mistaken for a full backup. */}
+      <details className="rounded-lg border">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+          How your data is protected
+        </summary>
+        <dl className="space-y-3 border-t px-4 py-3 text-xs">
+          <div>
+            <dt className="font-semibold">This device</dt>
+            <dd className="text-muted-foreground">
+              The working copy. It is lost if you clear site data or change browser. Not a backup.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Cloud sync</dt>
+            <dd className="text-muted-foreground">
+              Keeps your devices in step. It copies mistakes too: a wrong entry or a deletion appears everywhere. Not a backup.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Daily cloud snapshots (the list below)</dt>
+            <dd className="text-muted-foreground">
+              One per day for 14 days, so you can undo a bad edit. They are stored in the same cloud database as your
+              live data, so they do not protect against losing that database.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold">Encrypted off-site backup</dt>
+            <dd className="text-muted-foreground">
+              A nightly copy kept outside this app&apos;s servers, readable only with a private key. It is set up by whoever
+              runs the server and its status is not shown here, so ask them to confirm it is running.
+            </dd>
+          </div>
+        </dl>
+      </details>
 
       {/* ---- Recovery history ---------------------------------------------- */}
       {enabled && (

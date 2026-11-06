@@ -718,8 +718,9 @@ export default function RupeeLedger() {
       recurringTemplates,
       receipts,
       businessProfile,
-      subscription,
-      securitySettings,
+      // Deliberately no `subscription` (carries the licence key) and no
+      // `securitySettings` (carries the app-lock PIN). Backups hold business
+      // records only; credentials are never copied into them.
     };
 
     // --- local, rotating ---------------------------------------------------
@@ -2777,9 +2778,9 @@ export default function RupeeLedger() {
       expenses,
       recurringTemplates,
       receipts,
-      businessProfile,
-      subscription,
-      securitySettings
+      businessProfile
+      // No `subscription` (licence key) and no `securitySettings` (app-lock PIN):
+      // a file the user downloads and stores somewhere must never hold credentials.
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -2842,8 +2843,9 @@ export default function RupeeLedger() {
     const restoredTransactions: Transaction[] = Array.isArray(payload?.transactions) ? payload.transactions : [];
 
     if (payload?.businessProfile) setBusinessProfile(payload.businessProfile);
-    if (payload?.subscription) setSubscription(getMergedSubscription(payload.subscription));
-    if (payload?.securitySettings) setSecuritySettings(payload.securitySettings);
+    // `subscription` and `securitySettings` in a snapshot are IGNORED, including in
+    // older snapshots that still carry them: a stored file must not be able to set
+    // the plan, the licence key or the app-lock PIN.
     if (Array.isArray(payload?.clients)) setClients(payload.clients);
     if (Array.isArray(payload?.inventory)) setInventory(payload.inventory);
     if (Array.isArray(payload?.invoices)) setInvoices(payload.invoices);
@@ -2878,12 +2880,13 @@ export default function RupeeLedger() {
           if (parsed.recurringTemplates) setRecurringTemplates(parsed.recurringTemplates);
           if (parsed.receipts) setReceipts(parsed.receipts);
           if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile);
-          if (parsed.subscription) setSubscription(parsed.subscription);
-          if (parsed.securitySettings) setSecuritySettings(parsed.securitySettings);
+          // `subscription` and `securitySettings` are never read from a file, so a
+          // hand-edited backup cannot grant a plan or switch the app lock off.
+          // (Older exports may still contain them; they are simply ignored.)
 
-          toast({ 
-            title: "Backup Restored Successfully", 
-            description: `Imported ${parsed.accounts.length} accounts, transactions, and system configuration.` 
+          toast({
+            title: "Backup Restored Successfully",
+            description: `Imported ${parsed.accounts.length} accounts, transactions, and business records. Your plan and app lock are not part of a backup file and were left as they are.`
           });
         } else {
           throw new Error("Invalid backup file format. Must contain accounts and transactions arrays.");
