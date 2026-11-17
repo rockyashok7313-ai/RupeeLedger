@@ -1,3 +1,4 @@
+import { splitLedgerScope as splitBranch } from '../../../utils/ledger-scope.ts';
 import { NextResponse } from '../../../next-response.ts';
 import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
@@ -20,13 +21,7 @@ const KEEP_DAYS = 14;
  * Callers fold the branch into the id ("<owner>_hq"), the same shape
  * /api/ledger/sync receives. Storage keys on (user_id, branchId).
  */
-function splitBranch(userId: string): { ownerId: string; branchId: string } {
-  const idx = userId.lastIndexOf('_');
-  if (idx > 0) {
-    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
-  }
-  return { ownerId: userId, branchId: 'hq' };
-}
+
 
 const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
 const normalizePhone = (str: string) => str.replace(/\D/g, '').slice(-10);

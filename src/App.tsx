@@ -35,6 +35,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Subscription, SecuritySettings, UserProfile, Client, InventoryItem, Invoice, Expense, RecurringTemplate, Receipt } from "@/lib/types";
 import { computeLedger, auditBalances } from "@/lib/balance";
+import { readDeviceLedger, preserveDeviceLedger, deviceBranches } from "@/lib/device-ledger";
 import { mergeById, assessCloudPayload } from "@/lib/sync-merge";
 import { BackupRestore } from "@/components/BackupRestore";
 import { supabase } from "@/lib/supabase";
@@ -160,7 +161,8 @@ async function pushSyncToCloud(
     invoices?: Invoice[],
     expenses?: Expense[],
     recurringTemplates?: RecurringTemplate[],
-    receipts?: Receipt[]
+    receipts?: Receipt[],
+    deletions?: { deletedAccountIds?: string[]; deletedTransactionIds?: string[] },
 ) {
   try {
     // The server route is the only writer. It authenticates the caller, checks
@@ -187,6 +189,7 @@ async function pushSyncToCloud(
         expenses,
         recurringTemplates,
         receipts,
+        ...deletions,
         action: 'push'
       })
     });
@@ -559,10 +562,10 @@ export default function RupeeLedger() {
 
   const loadLocalStorageData = async (guestUserId: string = "guest_local") => {
     let savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}_${activeBranchId}`);
-    if (!savedAccounts) savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
+    if (!savedAccounts && activeBranchId === "hq") savedAccounts = localStorage.getItem(`rupee_ledger_accounts_${guestUserId}`);
     
     let savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}_${activeBranchId}`);
-    if (!savedTransactions) savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
+    if (!savedTransactions && activeBranchId === "hq") savedTransactions = localStorage.getItem(`rupee_ledger_transactions_${guestUserId}`);
     
     // Backward compatibility fallback for completely old local guest keys
     if (!savedAccounts && guestUserId === "guest_local" && activeBranchId === "hq") {
@@ -579,17 +582,17 @@ export default function RupeeLedger() {
     else setTransactions([]);
 
     let savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}_${activeBranchId}`);
-    if (!savedClients) savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
+    if (!savedClients && activeBranchId === "hq") savedClients = localStorage.getItem(`rupee_ledger_clients_${guestUserId}`);
     let savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}_${activeBranchId}`);
-    if (!savedInventory) savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
+    if (!savedInventory && activeBranchId === "hq") savedInventory = localStorage.getItem(`rupee_ledger_inventory_${guestUserId}`);
     let savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}_${activeBranchId}`);
-    if (!savedInvoices) savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
+    if (!savedInvoices && activeBranchId === "hq") savedInvoices = localStorage.getItem(`rupee_ledger_invoices_${guestUserId}`);
     let savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}_${activeBranchId}`);
-    if (!savedExpenses) savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
+    if (!savedExpenses && activeBranchId === "hq") savedExpenses = localStorage.getItem(`rupee_ledger_expenses_${guestUserId}`);
     let savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}_${activeBranchId}`);
-    if (!savedRecurring) savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
+    if (!savedRecurring && activeBranchId === "hq") savedRecurring = localStorage.getItem(`rupee_ledger_recurring_${guestUserId}`);
     let savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}_${activeBranchId}`);
-    if (!savedReceipts) savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
+    if (!savedReceipts && activeBranchId === "hq") savedReceipts = localStorage.getItem(`rupee_ledger_receipts_${guestUserId}`);
 
     if (savedClients) setClients(JSON.parse(savedClients)); else setClients([]);
     if (savedInventory) setInventory(JSON.parse(savedInventory)); else setInventory([]);
@@ -882,12 +885,9 @@ export default function RupeeLedger() {
 
           // Auto-migration check: If cloud database is empty, check for local data
           if (fetchedAccounts.length === 0 && fetchedTxs.length === 0) {
-            const guestAccs = localStorage.getItem(`rupee_ledger_accounts_${supabaseUser.id}`) ||
-                              localStorage.getItem("rupee_ledger_accounts_guest_local") || 
-                              localStorage.getItem("rupee_ledger_accounts_");
-            const guestTxs = localStorage.getItem(`rupee_ledger_transactions_${supabaseUser.id}`) ||
-                              localStorage.getItem("rupee_ledger_transactions_guest_local") || 
-                              localStorage.getItem("rupee_ledger_transactions_");
+            const ownDevice = readDeviceLedger(localStorage, supabaseUser.id, activeBranchId);
+            const guestAccs = JSON.stringify(ownDevice.accounts);
+            const guestTxs = JSON.stringify(ownDevice.transactions);
             
             if (guestAccs || guestTxs) {
               const parsedAccs: Account[] = guestAccs ? JSON.parse(guestAccs) : [];
@@ -904,7 +904,7 @@ export default function RupeeLedger() {
             }
           }
 
-          applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
+          applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions, supabaseUser.id);
           await fetchGeneratedKeys(supabaseUser.id);
 
           const profile: UserProfile = {
@@ -1015,7 +1015,7 @@ export default function RupeeLedger() {
                         shouldLock = true;
                       }
                     }
-                    applyCloudLedger(syncData.accounts, syncData.transactions, accounts, transactions);
+                    applyCloudLedger(syncData.accounts, syncData.transactions, accounts, transactions, parsed.id);
                     if (syncData.clients) setClients(syncData.clients);
                     if (syncData.inventory) setInventory(syncData.inventory);
                     if (syncData.invoices) setInvoices(syncData.invoices);
@@ -1202,6 +1202,7 @@ export default function RupeeLedger() {
 
   useEffect(() => {
     if (isLoaded) {
+      try { preserveDeviceLedger(localStorage, user?.id || 'guest_local', activeBranchId); } catch { /* retain live records if snapshot storage is full */ }
       const storageSuffix = (user ? user.id : "guest_local") + "_" + activeBranchId;
       localStorage.setItem(`rupee_ledger_accounts_${storageSuffix}`, JSON.stringify(accounts));
       localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(transactions));
@@ -1426,7 +1427,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions, phoneId);
         await fetchGeneratedKeys(phoneId);
         setUser(phoneUser);
         setShowLogin(false);
@@ -1570,7 +1571,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(phoneId);
         }
-        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions, phoneId);
         await fetchGeneratedKeys(phoneId);
         setUser(whatsappUser);
         setShowLogin(false);
@@ -1714,7 +1715,7 @@ export default function RupeeLedger() {
         } else {
           await loadLocalStorageData(emailId);
         }
-        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions);
+        applyCloudLedger(fetchedAccounts, fetchedTxs, accounts, transactions, emailId);
         await fetchGeneratedKeys(emailId);
         setUser(emailUser);
         setShowLogin(false);
@@ -2510,7 +2511,14 @@ export default function RupeeLedger() {
     cloudTransactions: Transaction[] | undefined,
     localAccounts: Account[],
     localTransactions: Transaction[],
+    ownerId: string,
   ): { accounts: Account[]; transactions: Transaction[] } => {
+    const device = readDeviceLedger(localStorage, ownerId, activeBranchId);
+    if (user?.id !== ownerId) { localAccounts = []; localTransactions = []; }
+    try { preserveDeviceLedger(localStorage, ownerId, activeBranchId); } catch { /* retain live scoped copy */ }
+    // Auth observers capture mount-time arrays; use the durable scoped copy.
+    localAccounts = mergeById(device.accounts, localAccounts).merged;
+    localTransactions = mergeById(device.transactions, localTransactions).merged;
     const incomingAccounts = Array.isArray(cloudAccounts) ? cloudAccounts : [];
     const incomingTransactions = Array.isArray(cloudTransactions) ? cloudTransactions : [];
 
@@ -2566,8 +2574,9 @@ export default function RupeeLedger() {
     localStorage.setItem(`rupee_ledger_transactions_${storageSuffix}`, JSON.stringify(updatedTransactions));
 
     if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      pushSyncToCloud(user.id, finalAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
+      pushSyncToCloud(user.id, finalAccounts, updatedTransactions, businessProfile, subscription, securitySettings, undefined, undefined, undefined, undefined, undefined, undefined, { deletedAccountIds: accounts.filter(a => !finalAccounts.some(n => n.id === a.id)).map(a => a.id), deletedTransactionIds: transactions.filter(t => !updatedTransactions.some(n => n.id === t.id)).map(t => t.id) }).catch(err => {
         console.error("Supabase batch sync error:", err);
+        toast({ title: 'Entries saved on this device', description: 'Cloud sync failed. Keep this device copy and retry Backup Now in Settings when connected.', variant: 'destructive' });
       });
     }
   };
@@ -2624,7 +2633,7 @@ export default function RupeeLedger() {
     const updatedTransactions = transactions.filter(t => t.accountId !== accountToDelete);
     
     if (user && user.authMethod !== 'guest' && cloudBackupEnabled) {
-      pushSyncToCloud(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings).catch(err => {
+      pushSyncToCloud(user.id, updatedAccounts, updatedTransactions, businessProfile, subscription, securitySettings, undefined, undefined, undefined, undefined, undefined, undefined, { deletedAccountIds: [accountToDelete], deletedTransactionIds: transactions.filter(t => t.accountId === accountToDelete).map(t => t.id) }).catch(err => {
         console.error("Supabase account deletion sync error:", err);
         // We do not toast here since it's background, or we could toast a warning.
       });
@@ -2776,7 +2785,7 @@ export default function RupeeLedger() {
   const handleClearAllData = async () => {
     if (user && user.authMethod !== 'guest') {
       try {
-        await pushSyncToCloud(user.id, [], [], businessProfile, subscription, securitySettings);
+        await pushSyncToCloud(user.id, [], [], businessProfile, subscription, securitySettings, undefined, undefined, undefined, undefined, undefined, undefined, { deletedAccountIds: accounts.map(a => a.id), deletedTransactionIds: transactions.map(t => t.id) });
       } catch (err) {
         console.error("Supabase clear all data error:", err);
         toast({ title: "Cloud Clear Failed", description: "Could not clear all records from cloud.", variant: "destructive" });
@@ -3635,6 +3644,12 @@ export default function RupeeLedger() {
     );
   }
 
+  const knownBranches = businessProfile.branches || [{ id: 'hq', name: 'HQ / Main Branch' }];
+  const visibleBranches = [...knownBranches];
+  for (const id of deviceBranches(localStorage, user?.id || 'guest_local')) {
+    if (!visibleBranches.some(b => b.id === id)) visibleBranches.push({ id, name: id === 'hq' ? 'HQ / Main Branch' : `Device branch ${id.slice(7)}` });
+  }
+  if (!visibleBranches.some(b => b.id === activeBranchId)) visibleBranches.push({ id: activeBranchId, name: `Current branch (${activeBranchId})` });
   const branchSelect = (
       <Select value={activeBranchId} onValueChange={(val) => {
         if (val === 'new_branch') {
@@ -3661,7 +3676,7 @@ export default function RupeeLedger() {
           </div>
         </SelectTrigger>
         <SelectContent>
-          {(businessProfile.branches || [{id: 'hq', name: 'HQ / Main Branch'}]).map(b => (
+          {visibleBranches.map(b => (
             <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
           ))}
           <SelectItem value="new_branch" className="text-primary font-semibold">+ Add New Branch</SelectItem>

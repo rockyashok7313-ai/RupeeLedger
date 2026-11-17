@@ -1,3 +1,5 @@
+import { readLedgerRows } from '../../../utils/read-ledger-rows.ts';
+import { splitLedgerScope as splitBranch } from '../../../utils/ledger-scope.ts';
 import { NextResponse } from '../../../next-response.ts';
 import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-admin.ts';
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
@@ -10,6 +12,8 @@ const syncSchema = z.object({
   action: z.enum(['pull', 'push', 'expense-save', 'expense-delete']),
   expense: expenseRecordSchema.optional(),
   originalExpense: expenseRecordSchema.optional(),
+  deletedAccountIds: z.array(z.string()).max(100000).optional(),
+  deletedTransactionIds: z.array(z.string()).max(100000).optional(),
   accounts: z.array(z.any()).optional(),
   transactions: z.array(z.any()).optional(),
   businessProfile: z.any().optional(),
@@ -56,13 +60,7 @@ const mapSettings = (row: any | null) =>
  * (user_id, branchId) instead, which is the shape src/lib/supabaseSync.ts reads
  * and writes -- both paths target the same rows, so they must agree.
  */
-function splitBranch(userId: string): { ownerId: string; branchId: string } {
-  const idx = userId.lastIndexOf('_');
-  if (idx > 0) {
-    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
-  }
-  return { ownerId: userId, branchId: 'hq' };
-}
+
 
 /**
  * Replace the stored set for a table with `dataArray`: delete rows the client no
@@ -74,10 +72,22 @@ async function syncArray(
   table: string,
   dataArray: any[] | undefined,
   ownerId: string,
-  branchId: string
+  branchId: string,
+  explicitDeletedIds: string[] = [],
 ) {
   if (!dataArray || !Array.isArray(dataArray)) return;
 
+  if (table === 'accounts' || table === 'transactions') {
+    if (explicitDeletedIds.length) {
+      const { error } = await supabase.from(table).delete().eq('user_id', ownerId).eq('branchId', branchId).in('id', explicitDeletedIds);
+      if (error) throw error;
+    }
+    if (dataArray.length) {
+      const { error } = await supabase.from(table).upsert(dataArray.map(item => ({ ...item, user_id: ownerId, branchId })), { onConflict: 'id' });
+      if (error) throw error;
+    }
+    return;
+  }
   const activeIds = dataArray.map(item => item.id).filter(id => id !== undefined && id !== null);
 
   if (activeIds.length === 0) {
@@ -168,7 +178,7 @@ export async function POST(request: Request) {
     }
 
     // Verify that the token owner is the one requested (or it's the admin, or phone matches)
-    const baseUserId = userId.includes('_') ? userId.substring(0, userId.lastIndexOf('_')) : userId;
+    const baseUserId = splitBranch(userId).ownerId;
     const isOwner = decodedToken.uid === userId || decodedToken.uid === baseUserId;
 
     const normalizeString = (str: string) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -230,16 +240,19 @@ export async function POST(request: Request) {
         supabase.from('business_profiles').select('*').eq('user_id', ownerId).maybeSingle(),
         supabase.from('subscriptions').select('*').eq('user_id', ownerId).maybeSingle(),
         supabase.from('security_settings').select('*').eq('user_id', ownerId).maybeSingle(),
-        supabase.from(TABLES.accounts).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.transactions).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.clients).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.inventory).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.invoices).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.expenses).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.recurringTemplates).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
-        supabase.from(TABLES.receipts).select('*').eq('user_id', ownerId).eq('branchId', branchId).limit(SYNC_ROW_LIMIT),
+        readLedgerRows(supabase, TABLES.accounts, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.transactions, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.clients, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.inventory, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.invoices, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.expenses, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.recurringTemplates, ownerId, branchId).then(data => ({ data })),
+        readLedgerRows(supabase, TABLES.receipts, ownerId, branchId).then(data => ({ data })),
       ]);
 
+      for (const result of [profileRes, subscriptionRes, securityRes]) {
+        if (result.error) throw new Error('Could not load cloud settings. Device records were kept.');
+      }
       const profile = profileRes.data;
 
       return NextResponse.json({
@@ -249,7 +262,7 @@ export async function POST(request: Request) {
         expenses: mapRows(expensesRes.data),
         recurringTemplates: mapRows(recurringRes.data),
         receipts: mapRows(receiptsRes.data),
-        exists: !!profile,
+        exists: !!profile || accountsRes.data.length > 0 || transactionsRes.data.length > 0 || expensesRes.data.length > 0,
         businessProfile: mapSettings(profile),
         subscription: mapSettings(subscriptionRes.data),
         securitySettings: mapSettings(securityRes.data),
@@ -285,8 +298,8 @@ export async function POST(request: Request) {
       }
 
       // 2. Replace the stored collections with what the client pushed
-      await syncArray(supabase, TABLES.accounts, accounts, ownerId, branchId);
-      await syncArray(supabase, TABLES.transactions, transactions, ownerId, branchId);
+      await syncArray(supabase, TABLES.transactions, transactions, ownerId, branchId, parsed.data.deletedTransactionIds);
+      await syncArray(supabase, TABLES.accounts, accounts, ownerId, branchId, parsed.data.deletedAccountIds);
       await syncArray(supabase, TABLES.clients, clients, ownerId, branchId);
       await syncArray(supabase, TABLES.inventory, inventory, ownerId, branchId);
       await syncArray(supabase, TABLES.invoices, invoices, ownerId, branchId);

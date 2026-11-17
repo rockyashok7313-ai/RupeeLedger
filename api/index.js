@@ -55900,6 +55900,32 @@ __export(route_exports8, {
   POST: () => POST8
 });
 
+// backend/utils/read-ledger-rows.ts
+async function readLedgerRows(db, table, owner, branch) {
+  const rows = [];
+  let expected;
+  while (true) {
+    const { data, error: error63, count } = await db.from(table).select("*", { count: "exact" }).eq("user_id", owner).eq("branchId", branch).order("id").range(rows.length, rows.length + 499);
+    if (error63 || count === null || !Array.isArray(data)) throw new Error(`Could not load all ${table} records. Device records were kept.`);
+    if (expected === void 0) expected = count;
+    if (count !== expected) throw new Error(`${table} changed during loading. Retry to get a complete copy.`);
+    if (!data.length && rows.length !== expected) throw new Error(`Incomplete ${table} response. Device records were kept.`);
+    rows.push(...data);
+    if (rows.length === expected) return rows;
+    if (rows.length > expected) throw new Error(`Inconsistent ${table} response. Retry loading.`);
+  }
+}
+
+// backend/utils/ledger-scope.ts
+function splitLedgerScope(value) {
+  const custom2 = value.match(/^(.*)_(branch_\d+)$/);
+  if (custom2?.[1]) return { ownerId: custom2[1], branchId: custom2[2] };
+  if (value.endsWith("_hq")) return { ownerId: value.slice(0, -3), branchId: "hq" };
+  const separator = value.lastIndexOf("_");
+  if (separator > 0) return { ownerId: value.slice(0, separator), branchId: value.slice(separator + 1) };
+  return { ownerId: value, branchId: "hq" };
+}
+
 // backend/utils/expense-mutation.ts
 var expenseRecordSchema = external_exports.object({
   id: external_exports.string().min(1).max(200),
@@ -55947,6 +55973,8 @@ var syncSchema = external_exports.object({
   action: external_exports.enum(["pull", "push", "expense-save", "expense-delete"]),
   expense: expenseRecordSchema.optional(),
   originalExpense: expenseRecordSchema.optional(),
+  deletedAccountIds: external_exports.array(external_exports.string()).max(1e5).optional(),
+  deletedTransactionIds: external_exports.array(external_exports.string()).max(1e5).optional(),
   accounts: external_exports.array(external_exports.any()).optional(),
   transactions: external_exports.array(external_exports.any()).optional(),
   businessProfile: external_exports.any().optional(),
@@ -55959,7 +55987,6 @@ var syncSchema = external_exports.object({
   recurringTemplates: external_exports.array(external_exports.any()).optional(),
   receipts: external_exports.array(external_exports.any()).optional()
 });
-var SYNC_ROW_LIMIT = 1e5;
 var TABLES = {
   accounts: "accounts",
   transactions: "transactions",
@@ -55972,15 +55999,19 @@ var TABLES = {
 };
 var mapRows = (rows) => (rows || []).map(({ user_id, branchId, ...rest }) => rest);
 var mapSettings = (row) => row ? (({ user_id, updated_at, ...rest }) => rest)(row) : null;
-function splitBranch(userId) {
-  const idx = userId.lastIndexOf("_");
-  if (idx > 0) {
-    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
-  }
-  return { ownerId: userId, branchId: "hq" };
-}
-async function syncArray(supabase2, table, dataArray, ownerId, branchId) {
+async function syncArray(supabase2, table, dataArray, ownerId, branchId, explicitDeletedIds = []) {
   if (!dataArray || !Array.isArray(dataArray)) return;
+  if (table === "accounts" || table === "transactions") {
+    if (explicitDeletedIds.length) {
+      const { error: error63 } = await supabase2.from(table).delete().eq("user_id", ownerId).eq("branchId", branchId).in("id", explicitDeletedIds);
+      if (error63) throw error63;
+    }
+    if (dataArray.length) {
+      const { error: error63 } = await supabase2.from(table).upsert(dataArray.map((item) => ({ ...item, user_id: ownerId, branchId })), { onConflict: "id" });
+      if (error63) throw error63;
+    }
+    return;
+  }
   const activeIds = dataArray.map((item) => item.id).filter((id) => id !== void 0 && id !== null);
   if (activeIds.length === 0) {
     const { error: error63 } = await supabase2.from(table).delete().eq("user_id", ownerId).eq("branchId", branchId);
@@ -56034,7 +56065,7 @@ async function POST8(request) {
     if (!decodedToken) {
       return NextResponse.json({ error: "Unauthorized: Invalid token" }, { status: 401 });
     }
-    const baseUserId = userId.includes("_") ? userId.substring(0, userId.lastIndexOf("_")) : userId;
+    const baseUserId = splitLedgerScope(userId).ownerId;
     const isOwner = decodedToken.uid === userId || decodedToken.uid === baseUserId;
     const normalizeString3 = (str) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
     const normalizePhone3 = (str) => str.replace(/\D/g, "").slice(-10);
@@ -56054,7 +56085,7 @@ async function POST8(request) {
       return NextResponse.json({ isOfflineFallback: true });
     }
     const supabase2 = getSupabaseAdmin();
-    const { ownerId, branchId } = splitBranch(userId);
+    const { ownerId, branchId } = splitLedgerScope(userId);
     if (action === "expense-save" || action === "expense-delete") {
       const { expense, originalExpense } = parsed.data;
       if (!expense || action === "expense-delete" && !originalExpense) {
@@ -56084,15 +56115,18 @@ async function POST8(request) {
         supabase2.from("business_profiles").select("*").eq("user_id", ownerId).maybeSingle(),
         supabase2.from("subscriptions").select("*").eq("user_id", ownerId).maybeSingle(),
         supabase2.from("security_settings").select("*").eq("user_id", ownerId).maybeSingle(),
-        supabase2.from(TABLES.accounts).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.transactions).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.clients).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.inventory).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.invoices).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.expenses).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.recurringTemplates).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT),
-        supabase2.from(TABLES.receipts).select("*").eq("user_id", ownerId).eq("branchId", branchId).limit(SYNC_ROW_LIMIT)
+        readLedgerRows(supabase2, TABLES.accounts, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.transactions, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.clients, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.inventory, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.invoices, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.expenses, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.recurringTemplates, ownerId, branchId).then((data) => ({ data })),
+        readLedgerRows(supabase2, TABLES.receipts, ownerId, branchId).then((data) => ({ data }))
       ]);
+      for (const result of [profileRes, subscriptionRes, securityRes]) {
+        if (result.error) throw new Error("Could not load cloud settings. Device records were kept.");
+      }
       const profile = profileRes.data;
       return NextResponse.json({
         clients: mapRows(clientsRes.data),
@@ -56101,7 +56135,7 @@ async function POST8(request) {
         expenses: mapRows(expensesRes.data),
         recurringTemplates: mapRows(recurringRes.data),
         receipts: mapRows(receiptsRes.data),
-        exists: !!profile,
+        exists: !!profile || accountsRes.data.length > 0 || transactionsRes.data.length > 0 || expensesRes.data.length > 0,
         businessProfile: mapSettings(profile),
         subscription: mapSettings(subscriptionRes.data),
         securitySettings: mapSettings(securityRes.data),
@@ -56123,8 +56157,8 @@ async function POST8(request) {
         const { error: error63 } = await supabase2.from("security_settings").upsert({ user_id: ownerId, ...securitySettings, updated_at: updatedAt }, { onConflict: "user_id" });
         if (error63) throw error63;
       }
-      await syncArray(supabase2, TABLES.accounts, accounts, ownerId, branchId);
-      await syncArray(supabase2, TABLES.transactions, transactions, ownerId, branchId);
+      await syncArray(supabase2, TABLES.transactions, transactions, ownerId, branchId, parsed.data.deletedTransactionIds);
+      await syncArray(supabase2, TABLES.accounts, accounts, ownerId, branchId, parsed.data.deletedAccountIds);
       await syncArray(supabase2, TABLES.clients, clients, ownerId, branchId);
       await syncArray(supabase2, TABLES.inventory, inventory, ownerId, branchId);
       await syncArray(supabase2, TABLES.invoices, invoices, ownerId, branchId);
@@ -56165,13 +56199,6 @@ var backupSchema = external_exports.object({
   backupId: external_exports.number().int().positive().optional()
 });
 var KEEP_DAYS = 14;
-function splitBranch2(userId) {
-  const idx = userId.lastIndexOf("_");
-  if (idx > 0) {
-    return { ownerId: userId.substring(0, idx), branchId: userId.substring(idx + 1) };
-  }
-  return { ownerId: userId, branchId: "hq" };
-}
 var normalizeString2 = (str) => str.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
 var normalizePhone2 = (str) => str.replace(/\D/g, "").slice(-10);
 function isOwnerOf2(decoded, userId, baseUserId) {
@@ -56200,7 +56227,7 @@ async function POST9(request) {
     if (!decoded) {
       return NextResponse.json({ error: "Unauthorized: Invalid token" }, { status: 401 });
     }
-    const { ownerId, branchId } = splitBranch2(userId);
+    const { ownerId, branchId } = splitLedgerScope(userId);
     if (!checkIsAdmin(decoded) && !isOwnerOf2(decoded, userId, ownerId)) {
       return NextResponse.json({ error: "Forbidden: These backups belong to another account." }, { status: 403 });
     }
