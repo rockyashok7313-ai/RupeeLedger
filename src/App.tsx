@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { 
   Plus, 
   ArrowUpRight, 
@@ -9,6 +9,7 @@ import {
   History, 
   Settings as SettingsIcon,
   FileText,
+  Receipt as ExpenseIcon,
   Printer,
   Pencil,
   Trash2,
@@ -83,6 +84,7 @@ import { CashflowStrip } from "@/components/shell/CashflowStrip";
 import { ReportPrint } from "@/components/ReportPrint";
 import { DailyReport } from "@/components/DailyReport";
 const GSTModule = lazy(() => import("@/components/gst/GSTModule").then(m => ({ default: m.GSTModule })));
+const ExpenseTracker = lazy(() => import("@/components/gst/ExpenseTracker").then(m => ({ default: m.ExpenseTracker })));
 const ErpHub = lazy(() => import("@/components/erp/ErpHub").then(m => ({ default: m.ErpHub })));
 
 /** How many days of local auto-backup to keep on this device. */
@@ -213,7 +215,7 @@ export const getDerivedTier = (sub: Subscription): "FREE" | "MONTHLY" | "YEARLY"
   return "MONTHLY";
 };
 
-const APP_TABS = ["dashboard", "ledger", "analytics", "gst", "erp", "settings"] as const;
+const APP_TABS = ["dashboard", "expenses", "ledger", "analytics", "gst", "erp", "settings"] as const;
 type AppTab = (typeof APP_TABS)[number];
 
 function readTabFromUrl(): AppTab {
@@ -245,6 +247,7 @@ const NAV_GROUPS: {
     label: "Money",
     items: [
       { label: "Today", tab: "dashboard", icon: LayoutDashboard, keywords: "home dashboard overview" },
+      { label: "Expenses", tab: "expenses", icon: ExpenseIcon, keywords: "spend purchases vendor categories gst expenses" },
       { label: "Ledgers", tab: "ledger", icon: History, keywords: "accounts statement khata" },
       { label: "Cash flow", tab: "analytics", icon: TrendingUp, keywords: "analytics charts income expense" },
       { label: "Daily report", tab: null, icon: CalendarDays, keywords: "day book print" },
@@ -261,6 +264,7 @@ const NAV_GROUPS: {
 
 const TAB_TITLES: Record<AppTab, string> = {
   dashboard: "Today",
+  expenses: "Expenses",
   ledger: "Ledgers",
   analytics: "Cash flow",
   gst: "GST & invoices",
@@ -1236,6 +1240,43 @@ export default function RupeeLedger() {
       }
     }
   }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, businessProfile, subscription, securitySettings, user, isLoaded, cloudBackupEnabled]);
+
+  // Expense mutations are independent of the legacy whole-ledger sync. A
+  // partial local expense list must never instruct the server to delete rows.
+  const expenseScope = `${user?.id || 'guest_local'}_${activeBranchId}`;
+  const expenseContext = useRef({ scope: expenseScope, expenses });
+  expenseContext.current = { scope: expenseScope, expenses };
+  const expenseWriteInFlight = useRef(false);
+  const expenseCloudEnabled = !!user && user.authMethod !== 'guest' && cloudBackupEnabled;
+  const expenseStorageLabel = expenseCloudEnabled ? 'Cloud saves require a connection' : 'Expenses saved on this device';
+  const commitExpense = async (expense: Expense, original: Expense | undefined, removing: boolean) => {
+    if (!isLoaded) throw new Error('Your records are still loading. Please try again shortly.');
+    if (expenseWriteInFlight.current) throw new Error('An expense is already being saved. Please wait.');
+    const scope = expenseScope;
+    expenseWriteInFlight.current = true;
+    try {
+      if (expenseCloudEnabled) {
+        const token = await getAuthToken();
+        if (!token) throw new Error('Sign in again before saving to the cloud. Your draft is retained.');
+        const response = await fetch('/api/ledger/sync', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ userId: scope, action: removing ? 'expense-delete' : 'expense-save', expense, originalExpense: original }),
+          signal: AbortSignal.timeout(20000),
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.success || result.isOfflineFallback) throw new Error(result?.error || 'Cloud save was not confirmed. Your draft is retained; please retry.');
+      }
+      if (expenseContext.current.scope !== scope) throw new Error('Your account or branch changed. Open the original branch to review the saved expense.');
+      const current = expenseContext.current.expenses;
+      const next = removing ? current.filter(e => e.id !== expense.id) : current.some(e => e.id === expense.id) ? current.map(e => e.id === expense.id ? expense : e) : [...current, expense];
+      try { localStorage.setItem(`rupee_ledger_expenses_${scope}`, JSON.stringify(next)); }
+      catch { throw new Error(expenseCloudEnabled ? 'Saved to cloud, but this device is out of storage. Free space and reload to retrieve the expense.' : 'This device could not save the expense. Free browser storage and retry; your draft is retained.'); }
+      expenseContext.current = { scope, expenses: next };
+      setExpenses(next);
+    } finally { expenseWriteInFlight.current = false; }
+  };
+  const saveExpense = (expense: Expense, original?: Expense) => commitExpense(expense, original, false);
+  const deleteExpense = (expense: Expense) => commitExpense(expense, expense, true);
 
   // User Authentication Logic
   const handleGuestLogin = () => {
@@ -4378,6 +4419,13 @@ export default function RupeeLedger() {
             </div>
           )}
 
+          {activeTab === "expenses" && (
+            <ErrorBoundary><Suspense fallback={<ModuleLoading />}>
+              <ExpenseTracker expenses={expenses} onSave={saveExpense} onDelete={deleteExpense}
+                businessName={businessProfile.companyName} storageLabel={expenseStorageLabel} />
+            </Suspense></ErrorBoundary>
+          )}
+
           {activeTab === "gst" && (
             <div className="animate-in fade-in slide-in-from-right-2 duration-500 pb-12">
               <ErrorBoundary>
@@ -4393,6 +4441,9 @@ export default function RupeeLedger() {
                   setInvoices={setInvoices}
                   expenses={expenses}
                   setExpenses={setExpenses}
+                  onSaveExpense={saveExpense}
+                  onDeleteExpense={deleteExpense}
+                  expenseStorageLabel={expenseStorageLabel}
                   recurringTemplates={recurringTemplates}
                   setRecurringTemplates={setRecurringTemplates}
                   receipts={receipts}

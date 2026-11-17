@@ -20,6 +20,9 @@ interface Props {
   inventory: InventoryItem[]; setInventory: (i: InventoryItem[]) => void;
   invoices: Invoice[]; setInvoices: (i: Invoice[]) => void;
   expenses: Expense[]; setExpenses: (e: Expense[]) => void;
+  onSaveExpense?: (expense: Expense, original?: Expense) => Promise<void>;
+  onDeleteExpense?: (expense: Expense) => Promise<void>;
+  expenseStorageLabel?: string;
   recurringTemplates: RecurringTemplate[]; setRecurringTemplates: (r: RecurringTemplate[]) => void;
   receipts: Receipt[]; setReceipts: (r: Receipt[]) => void;
   accounts?: import('@/lib/types').Account[];
@@ -33,6 +36,7 @@ export function GSTModule({
   inventory, setInventory,
   invoices, setInvoices,
   expenses, setExpenses,
+  onSaveExpense, onDeleteExpense, expenseStorageLabel,
   recurringTemplates, setRecurringTemplates,
   receipts, setReceipts,
   accounts = [],
@@ -102,7 +106,7 @@ export function GSTModule({
         {activeTab === 'preview' && <InvoicePreview businessProfile={businessProfile} invoices={invoices} />}
         {activeTab === 'clients' && <ClientsView clients={clients} setClients={setClients} />}
         {activeTab === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} />}
-        {activeTab === 'expenses' && <ExpenseTracker expenses={expenses} setExpenses={setExpenses} />}
+        {activeTab === 'expenses' && <ExpenseTracker expenses={expenses} setExpenses={setExpenses} onSave={onSaveExpense} onDelete={onDeleteExpense} businessName={businessProfile.companyName} storageLabel={expenseStorageLabel} />}
         {activeTab === 'vendor_payments' && <VendorPayments accounts={accounts} transactions={transactions} setTransactions={setTransactions} clients={clients} />}
         {activeTab === 'recurring' && <RecurringInvoices recurringTemplates={recurringTemplates} setRecurringTemplates={setRecurringTemplates} />}
         {activeTab === 'receipts' && <ReceiptVoucher receipts={receipts} setReceipts={setReceipts} clients={clients} invoices={invoices} />}

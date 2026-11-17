@@ -92,7 +92,7 @@ export async function POST(request: Request) {
 
     const parsedBody = postKeySchema.safeParse(rawBody);
     if (!parsedBody.success) {
-      const errorMsg = parsedBody.error.errors.map(e => e.message).join(', ');
+      const errorMsg = parsedBody.error.issues.map(e => e.message).join(', ');
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
     const { key, durationDays, createdBy } = parsedBody.data;
@@ -142,7 +142,7 @@ export async function PUT(request: Request) {
 
     const parsedBody = putKeySchema.safeParse(rawBody);
     if (!parsedBody.success) {
-      const errorMsg = parsedBody.error.errors.map(e => e.message).join(', ');
+      const errorMsg = parsedBody.error.issues.map(e => e.message).join(', ');
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
     const { key, userId, deviceId } = parsedBody.data;

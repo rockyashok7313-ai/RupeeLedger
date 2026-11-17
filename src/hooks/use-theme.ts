@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 export type ThemeMode = "light" | "dark" | "system";
 
 const STORAGE_KEY = "rupee_ledger_theme";
-const THEME_COLORS = { light: "#8f1d1d", dark: "#1a1613" };
+const THEME_COLORS = { light: "#142d49", dark: "#0b1828" };
 
 function readStored(): ThemeMode {
   try {

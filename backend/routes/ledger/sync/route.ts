@@ -3,10 +3,13 @@ import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { expenseRecordSchema, mutateExpense, ExpenseConflict } from '../../../utils/expense-mutation.ts';
 
 const syncSchema = z.object({
   userId: z.string().trim().min(1, 'userId is required.'),
-  action: z.enum(['pull', 'push']),
+  action: z.enum(['pull', 'push', 'expense-save', 'expense-delete']),
+  expense: expenseRecordSchema.optional(),
+  originalExpense: expenseRecordSchema.optional(),
   accounts: z.array(z.any()).optional(),
   transactions: z.array(z.any()).optional(),
   businessProfile: z.any().optional(),
@@ -134,7 +137,7 @@ export async function POST(request: Request) {
     // Zod Schema Validation
     const parsed = syncSchema.safeParse(rawBody);
     if (!parsed.success) {
-      const errorMsg = parsed.error.errors.map(e => e.message).join(', ');
+      const errorMsg = parsed.error.issues.map(e => e.message).join(', ');
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
@@ -196,6 +199,19 @@ export async function POST(request: Request) {
 
     // Storage is keyed on (user_id, branchId), matching src/lib/supabaseSync.ts.
     const { ownerId, branchId } = splitBranch(userId);
+
+    if (action === 'expense-save' || action === 'expense-delete') {
+      const { expense, originalExpense } = parsed.data;
+      if (!expense || (action === 'expense-delete' && !originalExpense)) {
+        return NextResponse.json({ error: 'The expense and original record are required.' }, { status: 400 });
+      }
+      try {
+        await mutateExpense(supabase, ownerId, branchId, action, expense, originalExpense);
+        return NextResponse.json({ success: true });
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : 'Expense could not be saved.' }, { status: error instanceof ExpenseConflict ? 409 : 503 });
+      }
+    }
 
     if (action === 'pull') {
       const [

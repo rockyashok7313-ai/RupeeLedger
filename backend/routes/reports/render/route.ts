@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const result = RenderRequestSchema.safeParse(body);
     
     if (!result.success) {
-      return new Response(JSON.stringify({ error: 'Invalid request', details: result.error.errors }), {
+      return new Response(JSON.stringify({ error: 'Invalid request', details: result.error.issues }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });

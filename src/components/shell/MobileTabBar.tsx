@@ -1,7 +1,7 @@
-import { Boxes, FileText, History, LayoutDashboard, Search } from "lucide-react";
+import { Boxes, FileText, History, LayoutDashboard, Search, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Tab = "dashboard" | "ledger" | "analytics" | "gst" | "erp" | "settings";
+type Tab = "dashboard" | "expenses" | "ledger" | "analytics" | "gst" | "erp" | "settings";
 
 interface Props {
   active: Tab;
@@ -11,6 +11,7 @@ interface Props {
 
 const ITEMS: { tab: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { tab: "dashboard", label: "Today", icon: LayoutDashboard },
+  { tab: "expenses", label: "Expenses", icon: Receipt },
   { tab: "ledger", label: "Ledgers", icon: History },
   { tab: "gst", label: "GST", icon: FileText },
   { tab: "erp", label: "Stock", icon: Boxes },
@@ -24,7 +25,7 @@ export function MobileTabBar({ active, onChange, onSearch }: Props) {
       className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-card/90 backdrop-blur-xl no-print"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {ITEMS.map(({ tab, label, icon: Icon }) => {
           const on = active === tab;
           return (

@@ -84,7 +84,7 @@ export function ReportsView({ invoices = [], expenses = [], clients = [], transa
 
     return { totalRevenue, pendingReceivables, overdueCount, monthlyRevenue, monthlyExpenses, totalExpenses, topClients, aging, maxMonthRev };
 
-  }, [invoices]);
+  }, [invoices, expenses]);
 
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

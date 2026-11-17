@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const rawBody = await request.json();
     const parsed = whatsappSendSchema.safeParse(rawBody);
     if (!parsed.success) {
-      const errorMsg = parsed.error.errors.map(e => e.message).join(', ');
+      const errorMsg = parsed.error.issues.map(e => e.message).join(', ');
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
     

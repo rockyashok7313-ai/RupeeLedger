@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'RupeeLedger Pro',
         short_name: 'RupeeLedger',
         description: 'Daily cash ledger, GST invoicing and stock for Indian businesses',
-        theme_color: '#8f1d1d',
-        background_color: '#faf8f5',
+        theme_color: '#142d49',
+        background_color: '#ffffff',
         display: 'standalone',
         icons: [
           {

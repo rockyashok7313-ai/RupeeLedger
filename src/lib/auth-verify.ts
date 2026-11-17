@@ -2,7 +2,8 @@
  * Utility for verifying Supabase JWT Tokens securely using the Supabase Client.
  */
 
-import crypto from 'crypto';
+import { verifyAppToken } from './app-token.ts';
+export { signAppToken, verifyAppToken } from './app-token.ts';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wxgzbfjosxficpeczgvj.supabase.co';
@@ -43,33 +44,6 @@ export function extractToken(request: Request): string | null {
     return null;
   }
   return authHeader.split('Bearer ')[1];
-}
-
-const SECRET = process.env.APP_TOKEN_SECRET || process.env.RAZORPAY_WEBHOOK_SECRET || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'default-secret-key';
-
-export function signAppToken(userId: string): string {
-  const hmac = crypto.createHmac('sha256', SECRET);
-  hmac.update(userId);
-  const sig = hmac.digest('hex');
-  return `${userId}.${sig}`;
-}
-
-export function verifyAppToken(token: string): { uid: string; email?: string; phone_number?: string } | null {
-  const [userId, sig] = token.split('.');
-  if (!userId || !sig) return null;
-  const hmac = crypto.createHmac('sha256', SECRET);
-  hmac.update(userId);
-  const expectedSig = hmac.digest('hex');
-  if (sig === expectedSig) {
-    if (userId.startsWith('p_')) {
-      return { uid: userId, phone_number: userId.replace('p_', '') };
-    }
-    if (userId.startsWith('e_')) {
-      return { uid: userId, email: userId.replace('e_', '') };
-    }
-    return { uid: userId };
-  }
-  return null;
 }
 
 export function checkIsAdmin(decodedToken: { uid: string; email?: string; phone_number?: string } | null): boolean {

@@ -1,11 +1,11 @@
 {
   "name": "RupeeLedger Pro",
   "short_name": "RupeeLedger",
-  "description": "Advanced Indian Payroll & Ledger Management",
+  "description": "Business expenses, ledgers, GST invoicing and stock management",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#db2777",
+  "background_color": "#ffffff",
+  "theme_color": "#142d49",
   "icons": [
     {
       "src": "/pwa-192x192.png",
