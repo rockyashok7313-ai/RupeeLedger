@@ -14050,15 +14050,16 @@ function signingSecret() {
 function signAppToken(userId) {
   const secret = signingSecret();
   if (!secret) throw new Error("App sign-in is not configured. Set a private APP_TOKEN_SECRET of at least 32 characters.");
-  if (!userId || userId.includes(".")) throw new Error("Invalid app user identifier.");
+  if (!userId) throw new Error("Invalid app user identifier.");
   return `${userId}.${import_node_crypto.default.createHmac("sha256", secret).update(userId).digest("hex")}`;
 }
 function verifyAppToken(token) {
   const secret = signingSecret();
   if (!secret) return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [userId, signature] = parts;
+  const delimiter2 = token.lastIndexOf(".");
+  if (delimiter2 < 1) return null;
+  const userId = token.slice(0, delimiter2);
+  const signature = token.slice(delimiter2 + 1);
   if (!userId || !/^[a-f0-9]{64}$/.test(signature)) return null;
   const expected = import_node_crypto.default.createHmac("sha256", secret).update(userId).digest();
   if (!import_node_crypto.default.timingSafeEqual(Buffer.from(signature, "hex"), expected)) return null;
@@ -21941,7 +21942,7 @@ var supabaseUrl = process.env.VITE_SUPABASE_URL || "https://wxgzbfjosxficpeczgvj
 var supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_Xu8aNJh9hn2xk9Pop5x5mw_4iTy38We";
 var supabase = createClient(supabaseUrl, supabaseAnonKey);
 async function verifyIdToken(idToken) {
-  if (idToken.includes(".") && idToken.split(".").length === 2) {
+  if (idToken.includes(".")) {
     const verified = verifyAppToken(idToken);
     if (verified) return verified;
   }

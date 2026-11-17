@@ -8,16 +8,17 @@ function signingSecret(): string | null {
 export function signAppToken(userId: string): string {
   const secret = signingSecret();
   if (!secret) throw new Error('App sign-in is not configured. Set a private APP_TOKEN_SECRET of at least 32 characters.');
-  if (!userId || userId.includes('.')) throw new Error('Invalid app user identifier.');
+  if (!userId) throw new Error('Invalid app user identifier.');
   return `${userId}.${crypto.createHmac('sha256', secret).update(userId).digest('hex')}`;
 }
 
 export function verifyAppToken(token: string): { uid: string; email?: string; phone_number?: string } | null {
   const secret = signingSecret();
   if (!secret) return null;
-  const parts = token.split('.');
-  if (parts.length !== 2) return null;
-  const [userId, signature] = parts;
+  const delimiter = token.lastIndexOf('.');
+  if (delimiter < 1) return null;
+  const userId = token.slice(0, delimiter);
+  const signature = token.slice(delimiter + 1);
   if (!userId || !/^[a-f0-9]{64}$/.test(signature)) return null;
   const expected = crypto.createHmac('sha256', secret).update(userId).digest();
   if (!crypto.timingSafeEqual(Buffer.from(signature, 'hex'), expected)) return null;

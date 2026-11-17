@@ -12,7 +12,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function verifyIdToken(idToken: string): Promise<{ uid: string; email?: string; phone_number?: string } | null> {
   // If it's our custom HMAC token (format: userId.signature)
-  if (idToken.includes('.') && idToken.split('.').length === 2) {
+  if (idToken.includes('.')) {
     const verified = verifyAppToken(idToken);
     if (verified) return verified;
   }

@@ -14,8 +14,8 @@ test('custom sign-in requires a private dedicated secret and rejects public/defa
     assert.equal(verifyAppToken(forged), null);
     assert.throws(() => signAppToken('victim'));
     process.env.APP_TOKEN_SECRET = crypto.randomBytes(32).toString('hex');
-    const token = signAppToken('e_client@example.com'.replaceAll('.', '_'));
-    assert.ok(verifyAppToken(token));
+    const token = signAppToken('e_client@example.com');
+    assert.deepEqual(verifyAppToken(token), { uid: 'e_client@example.com', email: 'client@example.com' });
     assert.equal(verifyAppToken(token + '.extra'), null);
     assert.equal(verifyAppToken(token.replace('e_client', 'e_other')), null);
     assert.equal(verifyAppToken('victim.invalid'), null);
