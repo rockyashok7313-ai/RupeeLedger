@@ -4,6 +4,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from '../../../utils/supabase-
 import { verifyIdToken, extractToken, checkIsAdmin } from '../../../../src/lib/auth-verify.ts';
 import { stripCredentials } from '../../../utils/backup-payload.ts';
 import { z } from 'zod';
+import { completeBackup } from '../../../utils/complete-backup.ts';
 
 const backupSchema = z.object({
   userId: z.string().trim().min(1, 'userId is required.'),
@@ -120,19 +121,19 @@ export async function POST(request: Request) {
     }
 
     // Snapshots hold business records only. Strip credentials the client may still send.
-    const clean = stripCredentials(data);
+    const clean = await completeBackup(supabase, ownerId, branchId, data);
     const accountCount = Array.isArray(clean.accounts) ? clean.accounts.length : 0;
     const transactionCount = Array.isArray(clean.transactions) ? clean.transactions.length : 0;
 
     // An empty ledger is almost always a client that has not finished loading.
     // Writing it would spend the day's slot on nothing and, worse, offer an
     // empty snapshot as a restore point.
-    if (accountCount === 0 && transactionCount === 0) {
+    if (!['accounts', 'transactions', 'clients', 'inventory', 'invoices', 'expenses', 'recurringTemplates', 'receipts'].some(key => Array.isArray(clean[key]) && clean[key].length > 0)) {
       return NextResponse.json({ skipped: true, reason: 'Ledger is empty; nothing worth snapshotting.' });
     }
 
     const serialized = JSON.stringify(clean);
-    const takenOn = new Date().toISOString().slice(0, 10);
+    const takenOn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
     const { data: saved, error } = await supabase
       .from('ledger_backups')
@@ -144,14 +145,23 @@ export async function POST(request: Request) {
           payload: clean,
           account_count: accountCount,
           transaction_count: transactionCount,
-          byte_size: serialized.length,
+          byte_size: Buffer.byteLength(serialized, 'utf8'),
           created_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,branchId,taken_on' },
       )
-      .select('id, taken_on, account_count, transaction_count, byte_size')
+      .select('id, taken_on, created_at, account_count, transaction_count, byte_size')
       .maybeSingle();
     if (error) throw error;
+
+    if (!saved?.id) throw new Error('The database did not confirm the backup.');
+    const { data: verified, error: verifyError } = await supabase.from('ledger_backups')
+      .select('id, payload, account_count, transaction_count').eq('id', saved.id)
+      .eq('user_id', ownerId).eq('branchId', branchId).maybeSingle();
+    if (verifyError || !verified || JSON.stringify(verified.payload) !== JSON.stringify(clean)) {
+      // JSONB normalizes property order; compare stable values below instead.
+      if (verifyError || !verified || stableJson(verified.payload) !== stableJson(clean)) throw new Error('Backup read-back verification failed. Retry Backup Now.');
+    }
 
     // Trim history. A failure here is not worth failing the snapshot over.
     const { error: pruneError } = await supabase.rpc('prune_ledger_backups', {
@@ -161,9 +171,15 @@ export async function POST(request: Request) {
     });
     if (pruneError) console.error('[BACKUP] prune failed:', pruneError);
 
-    return NextResponse.json({ backup: saved, keepDays: KEEP_DAYS });
+    return NextResponse.json({ backup: saved, keepDays: KEEP_DAYS, verified: true });
   } catch (error) {
     console.error('Error in /api/ledger/backup:', error);
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not create or read the cloud backup. Your ledger is unchanged. Retry when connected.' }, { status: 500 });
   }
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableJson((value as Record<string, unknown>)[key])).join(',') + '}';
+  return JSON.stringify(value);
 }

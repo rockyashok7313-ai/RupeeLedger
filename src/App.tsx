@@ -37,6 +37,7 @@ import { Account, Transaction, AccountType, TransactionType, BusinessProfile, Su
 import { computeLedger, auditBalances } from "@/lib/balance";
 import { readDeviceLedger, preserveDeviceLedger, deviceBranches } from "@/lib/device-ledger";
 import { mergeById, assessCloudPayload } from "@/lib/sync-merge";
+import { saveCloudBackup } from "@/lib/cloud-backup";
 import { BackupRestore } from "@/components/BackupRestore";
 import { supabase } from "@/lib/supabase";
 // Removed Firestore imports to migrate fully to Supabase
@@ -491,6 +492,13 @@ export default function RupeeLedger() {
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [cloudBackupEnabled, setCloudBackupEnabled] = useState(true);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupRevision, setBackupRevision] = useState(0);
+  const backupInFlight = useRef(false);
+  const lastCloudPayload = useRef('');
+  const backupScope = `${user?.id || 'guest_local'}_${activeBranchId}`;
+  const cloudBackupAtKey = `${CLOUD_BACKUP_AT_KEY}_${backupScope}`;
+  const cloudBackupErrorKey = `${CLOUD_BACKUP_ERROR_KEY}_${backupScope}`;
   /** Days of local auto-backup held in this browser, shown in Settings. */
   const [localBackupSlotCount, setLocalBackupSlotCount] = useState(() => {
     // Read once on mount so Settings is accurate before today's backup runs.
@@ -710,85 +718,54 @@ export default function RupeeLedger() {
    * the last good snapshot actually was.
    */
   useEffect(() => {
-    if (!isLoaded || accounts.length === 0) return;
-
+    if (!isLoaded || ![accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts].some(rows => rows.length)) return;
     const today = new Date().toDateString();
-    if (localStorage.getItem("rupee_ledger_last_auto_backup_date") === today) return;
-
+    const localDateKey = `rupee_ledger_last_auto_backup_date_${backupScope}`;
+    const slotsKey = `${LOCAL_BACKUP_SLOTS_KEY}_${backupScope}`;
     const backupData = {
-      accounts,
-      transactions,
-      clients,
-      inventory,
-      invoices,
-      expenses,
-      recurringTemplates,
-      receipts,
-      businessProfile,
-      // Deliberately no `subscription` (carries the licence key) and no
-      // `securitySettings` (carries the app-lock PIN). Backups hold business
-      // records only; credentials are never copied into them.
+      accounts, transactions, clients, inventory, invoices, expenses,
+      recurringTemplates, receipts, businessProfile,
     };
-
-    // --- local, rotating ---------------------------------------------------
+    const serialized = JSON.stringify(backupData);
     try {
-      const serialized = JSON.stringify(backupData);
-      const slots: { date: string; data: string }[] = JSON.parse(
-        localStorage.getItem(LOCAL_BACKUP_SLOTS_KEY) || "[]",
-      );
-      const rotated = [{ date: today, data: serialized }, ...slots.filter(s => s.date !== today)]
-        .slice(0, LOCAL_BACKUP_SLOTS);
-
-      try {
-        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated));
-      } catch {
-        // Over quota with several days held. Keep today's and drop the rest --
-        // one recent backup beats none.
-        localStorage.setItem(LOCAL_BACKUP_SLOTS_KEY, JSON.stringify(rotated.slice(0, 1)));
-      }
-
-      // The single-slot key the older restore path reads. Kept in step so a
-      // client that has not reloaded still finds something.
-      localStorage.setItem("rupee_ledger_auto_backup_data", serialized);
-      localStorage.setItem("rupee_ledger_last_auto_backup_date", today);
+      const slots: { date: string; data: string }[] = JSON.parse(localStorage.getItem(slotsKey) || '[]');
+      // Keep today's local copy current, independently of cloud success.
+      const rotated = [{ date: today, data: serialized }, ...slots.filter(s => s.date !== today)].slice(0, LOCAL_BACKUP_SLOTS);
+      localStorage.setItem(slotsKey, JSON.stringify(rotated));
+      localStorage.setItem(localDateKey, today);
       setLocalBackupSlotCount(rotated.length);
-    } catch (e) {
-      console.error("Local auto-backup failed", e);
-      toast({
-        title: "Local backup failed",
-        description: "This device could not store today's backup. Your data is unchanged.",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: 'Local backup failed', description: 'This browser could not store a recovery copy. Export a backup file while connected.', variant: 'destructive' });
     }
-
-    // --- cloud -------------------------------------------------------------
-    if (!user || user.authMethod === "guest" || !cloudBackupEnabled) return;
-
-    (async () => {
+    if (!user || user.authMethod === 'guest' || !cloudBackupEnabled) return;
+    let stopped = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const signature = backupScope + serialized;
+    const run = async () => {
+      if (stopped || lastCloudPayload.current === signature) return;
+      if (backupInFlight.current) { timer = setTimeout(run, 5000); return; }
+      backupInFlight.current = true;
+      setBackupBusy(true);
       try {
-        const token = await getAuthToken();
-        const res = await fetch("/api/ledger/backup", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            userId: user.id + "_" + activeBranchId,
-            action: "snapshot",
-            data: backupData,
-          }),
-        });
-        if (!res.ok) throw new Error(`Cloud backup failed (${res.status}).`);
-        const body = await res.json().catch(() => null);
-        if (body?.isOfflineFallback) throw new Error("Cloud backup is not configured on the server.");
-        localStorage.setItem(CLOUD_BACKUP_AT_KEY, new Date().toISOString());
-      } catch (e: any) {
-        console.error("Cloud auto-backup failed", e);
-        localStorage.setItem(CLOUD_BACKUP_ERROR_KEY, e?.message || "Unknown error");
-      }
-    })();
-  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, isLoaded, user, cloudBackupEnabled, activeBranchId]);
+        const saved = await saveCloudBackup(backupScope, await getAuthToken(), backupData);
+        localStorage.setItem(cloudBackupAtKey, saved.created_at || new Date().toISOString());
+        localStorage.removeItem(cloudBackupErrorKey);
+        lastCloudPayload.current = signature;
+        if (!stopped) setBackupRevision(v => v + 1);
+      } catch (cause) {
+        localStorage.setItem(cloudBackupErrorKey, cause instanceof Error ? cause.message : 'Cloud backup failed. Retry Backup Now.');
+        if (!stopped) {
+          setBackupRevision(v => v + 1);
+          if (++attempts < 3) timer = setTimeout(run, attempts * 30000);
+        }
+      } finally { backupInFlight.current = false; setBackupBusy(false); }
+    };
+    const online = () => { attempts = 0; clearTimeout(timer); void run(); };
+    timer = setTimeout(run, 5000);
+    window.addEventListener('online', online);
+    return () => { stopped = true; clearTimeout(timer); window.removeEventListener('online', online); };
+  }, [accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, businessProfile, isLoaded, user?.id, user?.authMethod, cloudBackupEnabled, activeBranchId]);
 
   useEffect(() => {
     // 1. Setup Auth Observer
@@ -2805,17 +2782,26 @@ export default function RupeeLedger() {
 
   const handleCloudBackupNow = async () => {
     if (!user || user.authMethod === 'guest') {
-      toast({ title: "Guest Mode", description: "Please log in to backup to the cloud.", variant: "destructive" });
+      toast({ title: 'Sign in to back up', description: 'Guest records can be exported to a backup file.', variant: 'destructive' });
       return;
     }
-    toast({ title: "Backing up...", description: "Uploading database to Supabase." });
+    if (backupInFlight.current) return;
+    backupInFlight.current = true;
+    setBackupBusy(true);
     try {
-      await pushSyncToCloud(user.id, accounts, transactions, businessProfile, subscription, securitySettings);
-      toast({ title: "Backup Successful", description: "All data is securely saved in the cloud." });
-    } catch (err) {
-      console.error("Manual cloud backup error:", err);
-      toast({ title: "Backup Failed", description: "Failed to upload database to the cloud.", variant: "destructive" });
-    }
+      const payload = { accounts, transactions, clients, inventory, invoices, expenses, recurringTemplates, receipts, businessProfile };
+      const saved = await saveCloudBackup(backupScope, await getAuthToken(), payload);
+      localStorage.setItem(cloudBackupAtKey, saved.created_at || new Date().toISOString());
+      localStorage.removeItem(cloudBackupErrorKey);
+      lastCloudPayload.current = backupScope + JSON.stringify(payload);
+      setBackupRevision(v => v + 1);
+      toast({ title: 'Cloud backup verified', description: `${saved.transaction_count.toLocaleString('en-IN')} ledger entries across ${saved.account_count} accounts saved. The recovery history is updated.` });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Cloud backup was not confirmed. Retry when connected.';
+      localStorage.setItem(cloudBackupErrorKey, message);
+      setBackupRevision(v => v + 1);
+      toast({ title: 'Backup failed', description: message, variant: 'destructive' });
+    } finally { backupInFlight.current = false; setBackupBusy(false); }
   };
 
   const handleExportData = () => {
@@ -2843,7 +2829,7 @@ export default function RupeeLedger() {
 
 
   const handleRestoreAutoBackup = () => {
-    const backupDataString = localStorage.getItem("rupee_ledger_auto_backup_data");
+    const backupDataString = (() => { try { return JSON.parse(localStorage.getItem(`${LOCAL_BACKUP_SLOTS_KEY}_${backupScope}`) || "[]")[0]?.data || null; } catch { return null; } })();
     if (!backupDataString) {
       toast({ title: "No Auto-Backup Found", description: "There is no recent auto-backup available on this device.", variant: "destructive" });
       return;
@@ -5039,11 +5025,11 @@ export default function RupeeLedger() {
                       {user && user.authMethod !== 'guest' && (
                         <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
                           <div className="space-y-0.5 max-w-[70%]">
-                            <p className="font-semibold text-sm">Force Cloud Sync</p>
-                            <p className="text-xs text-muted-foreground">Upload this device's accounts and entries to the cloud right now.</p>
+                            <p className="font-semibold text-sm">Create a cloud backup</p>
+                            <p className="text-xs text-muted-foreground">Save and verify a recovery copy of all business records in this branch.</p>
                           </div>
-                          <Button onClick={handleCloudBackupNow} size="sm" variant="default" className="shrink-0">
-                            Backup Now
+                          <Button onClick={handleCloudBackupNow} disabled={backupBusy} size="sm" variant="default" className="shrink-0">
+                            {backupBusy ? "Verifying backup…" : "Backup Now"}
                           </Button>
                         </div>
                       )}
@@ -5054,8 +5040,9 @@ export default function RupeeLedger() {
                         accounts={accounts}
                         transactions={transactions}
                         onRestore={applyRestoredSnapshot}
-                        lastCloudBackupAt={localStorage.getItem(CLOUD_BACKUP_AT_KEY)}
-                        lastCloudBackupError={localStorage.getItem(CLOUD_BACKUP_ERROR_KEY)}
+                        lastCloudBackupAt={localStorage.getItem(cloudBackupAtKey)}
+                        lastCloudBackupError={localStorage.getItem(cloudBackupErrorKey)}
+                        refreshKey={backupRevision}
                         localSlotCount={localBackupSlotCount}
                         enabled={!!user && user.authMethod !== "guest" && cloudBackupEnabled}
                       />

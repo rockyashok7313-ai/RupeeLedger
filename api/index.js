@@ -56189,6 +56189,29 @@ function stripCredentials(payload) {
   return copy;
 }
 
+// backend/utils/complete-backup.ts
+var TABLES2 = { accounts: "accounts", transactions: "transactions", clients: "clients", inventory: "inventory", invoices: "invoices", expenses: "expenses", recurringTemplates: "recurring_templates", receipts: "receipts" };
+async function completeBackup(db, owner, branch, payload) {
+  const clean = stripCredentials(payload);
+  const entries = await Promise.all(Object.entries(TABLES2).map(async ([key2, table]) => {
+    const cloud = await readLedgerRows(db, table, owner, branch);
+    const combined = /* @__PURE__ */ new Map();
+    for (const row of cloud) {
+      const { user_id, branchId, ...record2 } = row;
+      combined.set(String(record2.id), record2);
+    }
+    const device = clean[key2];
+    if (device !== void 0 && !Array.isArray(device)) throw new Error(`Invalid ${key2} in backup. Your records are unchanged.`);
+    for (const row of device || []) {
+      if (!row || typeof row !== "object" || typeof row.id !== "string") throw new Error(`Invalid ${key2} record in backup.`);
+      const { user_id, branchId, ...record2 } = row;
+      combined.set(String(record2.id), record2);
+    }
+    return [key2, [...combined.values()]];
+  }));
+  return { ...clean, ...Object.fromEntries(entries) };
+}
+
 // backend/routes/ledger/backup/route.ts
 var backupSchema = external_exports.object({
   userId: external_exports.string().trim().min(1, "userId is required."),
@@ -56254,14 +56277,14 @@ async function POST9(request) {
     if (!data || typeof data !== "object") {
       return NextResponse.json({ error: "Nothing to back up." }, { status: 400 });
     }
-    const clean = stripCredentials(data);
+    const clean = await completeBackup(supabase2, ownerId, branchId, data);
     const accountCount = Array.isArray(clean.accounts) ? clean.accounts.length : 0;
     const transactionCount = Array.isArray(clean.transactions) ? clean.transactions.length : 0;
-    if (accountCount === 0 && transactionCount === 0) {
+    if (!["accounts", "transactions", "clients", "inventory", "invoices", "expenses", "recurringTemplates", "receipts"].some((key2) => Array.isArray(clean[key2]) && clean[key2].length > 0)) {
       return NextResponse.json({ skipped: true, reason: "Ledger is empty; nothing worth snapshotting." });
     }
     const serialized = JSON.stringify(clean);
-    const takenOn = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const takenOn = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(/* @__PURE__ */ new Date());
     const { data: saved, error: error63 } = await supabase2.from("ledger_backups").upsert(
       {
         user_id: ownerId,
@@ -56270,23 +56293,33 @@ async function POST9(request) {
         payload: clean,
         account_count: accountCount,
         transaction_count: transactionCount,
-        byte_size: serialized.length,
+        byte_size: Buffer.byteLength(serialized, "utf8"),
         created_at: (/* @__PURE__ */ new Date()).toISOString()
       },
       { onConflict: "user_id,branchId,taken_on" }
-    ).select("id, taken_on, account_count, transaction_count, byte_size").maybeSingle();
+    ).select("id, taken_on, created_at, account_count, transaction_count, byte_size").maybeSingle();
     if (error63) throw error63;
+    if (!saved?.id) throw new Error("The database did not confirm the backup.");
+    const { data: verified, error: verifyError } = await supabase2.from("ledger_backups").select("id, payload, account_count, transaction_count").eq("id", saved.id).eq("user_id", ownerId).eq("branchId", branchId).maybeSingle();
+    if (verifyError || !verified || JSON.stringify(verified.payload) !== JSON.stringify(clean)) {
+      if (verifyError || !verified || stableJson(verified.payload) !== stableJson(clean)) throw new Error("Backup read-back verification failed. Retry Backup Now.");
+    }
     const { error: pruneError } = await supabase2.rpc("prune_ledger_backups", {
       p_user_id: ownerId,
       p_branch_id: branchId,
       p_keep: KEEP_DAYS
     });
     if (pruneError) console.error("[BACKUP] prune failed:", pruneError);
-    return NextResponse.json({ backup: saved, keepDays: KEEP_DAYS });
+    return NextResponse.json({ backup: saved, keepDays: KEEP_DAYS, verified: true });
   } catch (error63) {
     console.error("Error in /api/ledger/backup:", error63);
-    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+    return NextResponse.json({ error: "Could not create or read the cloud backup. Your ledger is unchanged. Retry when connected." }, { status: 500 });
   }
+}
+function stableJson(value) {
+  if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.keys(value).sort().map((key2) => JSON.stringify(key2) + ":" + stableJson(value[key2])).join(",") + "}";
+  return JSON.stringify(value);
 }
 
 // backend/routes/razorpay/order/route.ts

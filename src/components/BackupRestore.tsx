@@ -49,6 +49,7 @@ interface BackupRestoreProps {
   /** How many days of local copies this device is holding. */
   localSlotCount: number;
   enabled: boolean;
+  refreshKey?: number;
 }
 
 const prettyBytes = (n: number) =>
@@ -62,7 +63,7 @@ const safeDate = (value: string | null): Date | null => {
 
 export function BackupRestore({
   scopedUserId, getToken, accounts, transactions, onRestore,
-  lastCloudBackupAt, lastCloudBackupError, localSlotCount, enabled,
+  lastCloudBackupAt, lastCloudBackupError, localSlotCount, enabled, refreshKey = 0,
 }: BackupRestoreProps) {
   const [history, setHistory] = useState<BackupSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -117,7 +118,7 @@ export function BackupRestore({
     }
   }, [call, enabled]);
 
-  useEffect(() => { void loadHistory(); }, [loadHistory]);
+  useEffect(() => { void loadHistory(); }, [loadHistory, refreshKey]);
 
   const openPreview = async (id: number) => {
     setOpening(id);
@@ -142,7 +143,7 @@ export function BackupRestore({
     }
   };
 
-  const lastOk = safeDate(lastCloudBackupAt);
+  const lastOk = safeDate(lastCloudBackupAt || history?.[0]?.created_at || null);
   const now = computeTotals(accounts, transactions);
 
   // Figures for the snapshot being previewed, so the comparison is like for like.
@@ -184,7 +185,7 @@ export function BackupRestore({
                   ? lastCloudBackupError
                   : lastOk
                     ? `Last uploaded ${formatDistanceToNow(lastOk, { addSuffix: true })}, on ${format(lastOk, "d MMM yyyy 'at' h:mm a")}.`
-                    : "Nothing has been uploaded from this device yet. One is taken automatically each day."}
+                    : "Nothing has been uploaded from this device yet. Automatic snapshots run after changes while this app is open."}
             </p>
 
             <p className="mt-2 flex items-center gap-1.5 text-2xs text-muted-foreground">
